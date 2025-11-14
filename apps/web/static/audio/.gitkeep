@@ -1,0 +1,14 @@
+# Audio Files
+# 
+# Audio files for the game:
+# 
+# - background-music.mp3 (background music, loops)
+# - game-start.wav (sound effect for game start)
+# - correct.wav (sound effect for correct answers)
+# - wrong.wav (sound effect for wrong answers)
+# - round-end.wav (sound effect for round end)
+# - game-end.wav (sound effect for game end)
+# - click.wav (sound effect for button clicks)
+# 
+# Note: Sound effects use .wav format, background music uses .mp3 format.
+

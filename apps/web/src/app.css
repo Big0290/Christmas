@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --christmas-red: #c41e3a;
+  --christmas-green: #0f8644;
+  --christmas-gold: #ffd700;
+}
+
+body {
+  @apply bg-gradient-to-br from-christmas-red via-christmas-green to-blue-900;
+  @apply min-h-screen text-white font-sans;
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-lg font-bold transition-all duration-200;
+    @apply active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-christmas-red hover:bg-red-700 text-white shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply btn bg-christmas-green hover:bg-green-700 text-white shadow-lg;
+  }
+
+  .card {
+    @apply bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-2xl;
+    @apply border border-white/20;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 rounded-lg bg-white/20 border-2 border-white/30;
+    @apply focus:border-christmas-gold focus:outline-none;
+    @apply text-white placeholder-white/60;
+  }
+}
+
+.snowflake {
+  position: fixed;
+  top: -10px;
+  color: white;
+  font-size: 1em;
+  user-select: none;
+  animation: snowfall linear infinite;
+  opacity: 0.8;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+  }
+}
