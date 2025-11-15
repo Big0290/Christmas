@@ -9,10 +9,11 @@ CREATE TABLE IF NOT EXISTS rooms (
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
   current_game VARCHAR(50),
   settings JSONB DEFAULT '{}',
-  is_active BOOLEAN DEFAULT TRUE,
-  INDEX idx_rooms_code (code),
-  INDEX idx_rooms_expires_at (expires_at)
+  is_active BOOLEAN DEFAULT TRUE
 );
+
+CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code);
+CREATE INDEX IF NOT EXISTS idx_rooms_expires_at ON rooms(expires_at);
 
 -- ============================================================================
 -- GAME SETTINGS TABLE
@@ -40,10 +41,11 @@ CREATE TABLE IF NOT EXISTS trivia_questions (
   category VARCHAR(100),
   image_url TEXT,
   set_id VARCHAR(100),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  INDEX idx_trivia_difficulty (difficulty),
-  INDEX idx_trivia_set_id (set_id)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_trivia_difficulty ON trivia_questions(difficulty);
+CREATE INDEX IF NOT EXISTS idx_trivia_set_id ON trivia_questions(set_id);
 
 -- ============================================================================
 -- PRICE ITEMS TABLE
@@ -56,10 +58,11 @@ CREATE TABLE IF NOT EXISTS price_items (
   image_url TEXT NOT NULL,
   category VARCHAR(100),
   set_id VARCHAR(100),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  INDEX idx_price_category (category),
-  INDEX idx_price_set_id (set_id)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_price_category ON price_items(category);
+CREATE INDEX IF NOT EXISTS idx_price_set_id ON price_items(set_id);
 
 -- ============================================================================
 -- EMOJI SETS TABLE
@@ -81,10 +84,11 @@ CREATE TABLE IF NOT EXISTS naughty_prompts (
   category VARCHAR(100),
   content_rating VARCHAR(20) DEFAULT 'pg',
   set_id VARCHAR(100),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  INDEX idx_prompts_rating (content_rating),
-  INDEX idx_prompts_set_id (set_id)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_prompts_rating ON naughty_prompts(content_rating);
+CREATE INDEX IF NOT EXISTS idx_prompts_set_id ON naughty_prompts(set_id);
 
 -- ============================================================================
 -- WORKSHOP UPGRADES TABLE
@@ -112,11 +116,12 @@ CREATE TABLE IF NOT EXISTS leaderboards (
   score INTEGER NOT NULL DEFAULT 0,
   rank INTEGER,
   completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  FOREIGN KEY (room_code) REFERENCES rooms(code) ON DELETE CASCADE,
-  INDEX idx_leaderboard_room (room_code),
-  INDEX idx_leaderboard_game (game_type),
-  INDEX idx_leaderboard_score (score DESC)
+  FOREIGN KEY (room_code) REFERENCES rooms(code) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_leaderboard_room ON leaderboards(room_code);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_game ON leaderboards(game_type);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_score ON leaderboards(score DESC);
 
 -- ============================================================================
 -- SEED DEFAULT DATA

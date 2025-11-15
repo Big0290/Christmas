@@ -12,6 +12,11 @@
   $: maxRounds = $gameState?.maxRounds;
   $: scoreboard = $gameState?.scoreboard || [];
   $: currentScore = $gameState?.scores?.[$socket?.id] || 0;
+  $: answerCounts = $gameState?.answerCounts || {};
+  $: answerPercentages = $gameState?.answerPercentages || {};
+  $: playersByAnswer = $gameState?.playersByAnswer || {};
+  $: showReveal = $gameState?.showReveal || false;
+  $: playerAnswer = $gameState?.answers?.[$socket?.id];
 
   let previousState = GameState.LOBBY;
   let previousScore = 0;
@@ -170,14 +175,57 @@
         </div>
       {/if}
     </div>
-  {:else if state === GameState.ROUND_END && question}
+  {:else if state === GameState.ROUND_END && question && showReveal}
     <div class="result-card">
       <div class="text-6xl mb-4">
-        {hasAnswered && question.correctIndex !== undefined ? '🎉' : '❌'}
+        {hasAnswered && question.correctIndex !== undefined && playerAnswer === question.correctIndex ? '🎉' : '❌'}
       </div>
       <h2 class="text-2xl font-bold mb-4">
         Correct Answer: {question.answers[question.correctIndex]}
       </h2>
+      
+      <!-- Voting Breakdown -->
+      <div class="voting-breakdown">
+        <h3 class="breakdown-title">📊 Voting Breakdown</h3>
+        <div class="answers-reveal">
+          {#each question.answers as answer, index}
+            {@const count = answerCounts[index] || 0}
+            {@const percentage = answerPercentages[index] || 0}
+            {@const isCorrect = index === question.correctIndex}
+            {@const playerNames = playersByAnswer[index] || []}
+            <div class="answer-reveal" class:correct={isCorrect} class:selected={playerAnswer === index}>
+              <div class="answer-reveal-header">
+                <span class="answer-letter-reveal">{String.fromCharCode(65 + index)}</span>
+                <span class="answer-text-reveal">{answer}</span>
+                {#if isCorrect}
+                  <span class="correct-badge">✓ Correct</span>
+                {/if}
+              </div>
+              <div class="percentage-bar-container">
+                <div 
+                  class="percentage-bar" 
+                  class:correct={isCorrect}
+                  style="width: {percentage}%"
+                >
+                  <span class="percentage-text">{percentage}% ({count})</span>
+                </div>
+              </div>
+              {#if playerNames.length > 0 && playerNames.length <= 5}
+                <div class="voters-list">
+                  <span class="voters-label">Voters:</span>
+                  <span class="voters-names">{playerNames.join(', ')}</span>
+                </div>
+              {:else if playerNames.length > 5}
+                <div class="voters-list">
+                  <span class="voters-label">Voters:</span>
+                  <span class="voters-names">{playerNames.slice(0, 5).join(', ')} and {playerNames.length - 5} more</span>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+      
       <div class="scoreboard-mini">
         <h3 class="text-lg font-bold mb-2">Top 5</h3>
         {#each scoreboard.slice(0, 5) as player, i}
@@ -371,5 +419,135 @@
   .score {
     font-weight: bold;
     color: #ffd700;
+  }
+
+  .voting-breakdown {
+    width: 100%;
+    max-width: 500px;
+    margin: 2rem 0;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 1rem;
+    padding: 1.5rem;
+  }
+
+  .breakdown-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: #ffd700;
+  }
+
+  .answers-reveal {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .answer-reveal {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    transition: all 0.3s;
+  }
+
+  .answer-reveal.correct {
+    background: rgba(15, 134, 68, 0.2);
+    border-color: #0f8644;
+    box-shadow: 0 0 20px rgba(15, 134, 68, 0.3);
+  }
+
+  .answer-reveal.selected {
+    border-color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+  }
+
+  .answer-reveal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .answer-letter-reveal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .answer-reveal.correct .answer-letter-reveal {
+    background: #0f8644;
+  }
+
+  .answer-text-reveal {
+    flex: 1;
+    font-weight: 600;
+    font-size: 1.125rem;
+  }
+
+  .correct-badge {
+    background: #0f8644;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: bold;
+  }
+
+  .percentage-bar-container {
+    width: 100%;
+    height: 2rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    position: relative;
+  }
+
+  .percentage-bar {
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.2));
+    transition: width 0.5s ease-out;
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    color: white;
+    font-weight: bold;
+    font-size: 0.875rem;
+  }
+
+  .percentage-bar.correct {
+    background: linear-gradient(90deg, #0f8644, #0a5d2e);
+  }
+
+  .percentage-text {
+    white-space: nowrap;
+  }
+
+  .voters-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 0.5rem;
+  }
+
+  .voters-label {
+    font-weight: 600;
+  }
+
+  .voters-names {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

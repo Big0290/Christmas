@@ -5,6 +5,7 @@
   import { GameType, GameState } from '@christmas/core';
   import ScoreAnimation from '$lib/components/ScoreAnimation.svelte';
   import NotificationToast from '$lib/components/NotificationToast.svelte';
+  import { browser } from '$app/environment';
   
   import TriviaRoyale from '$lib/games/TriviaRoyale.svelte';
   import GiftGrabber from '$lib/games/GiftGrabber.svelte';
@@ -12,6 +13,7 @@
   import EmojiCarol from '$lib/games/EmojiCarol.svelte';
   import NaughtyOrNice from '$lib/games/NaughtyOrNice.svelte';
   import PriceIsRight from '$lib/games/PriceIsRight.svelte';
+  import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
 
   const roomCode = $page.params.code;
 
@@ -24,9 +26,10 @@
   let notificationId = 0;
   let animationId = 0;
   let hasAttemptedReconnect = false;
+  let showFinalLeaderboard = false;
 
   function loadLeaderboardRanks() {
-    if (!$socket) return;
+    if (!$socket || !browser) return;
     
     const playerName = localStorage.getItem('christmas_playerName');
     if (!playerName) return;
@@ -83,22 +86,38 @@
           const previousPlayerId = sessionStorage.getItem('christmas_playerId');
           
           if (savedName && savedRoomCode && savedRoomCode === roomCode && $socket?.id) {
-            // Attempt to reconnect
+            // Attempt to reconnect with score recovery
             $socket.emit('reconnect_player', savedRoomCode, savedName, previousPlayerId, (response: any) => {
               if (response.success) {
                 // Update stored player ID
                 sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+                
+                // Show reconnection message with score info
+                let message = '✅ Reconnected!';
+                if (response.restoredScore !== undefined && response.restoredScore > 0) {
+                  message += ` Score restored: ${response.restoredScore} pts`;
+                }
                 notifications = [
                   ...notifications,
-                  { id: notificationId++, message: '✅ Reconnected!', type: 'success' },
+                  { id: notificationId++, message, type: 'success' },
                 ];
+                
                 // Reload leaderboard ranks after reconnection
                 loadLeaderboardRanks();
+                
+                // If game is in progress, restore player state
+                if (response.room?.currentGame && $gameState) {
+                  // Game state will be updated via socket events
+                }
               } else {
-                // Reconnection failed, try to join normally
+                // Reconnection failed, try to join normally (new player)
                 $socket.emit('join_room', savedRoomCode, savedName, (joinResponse: any) => {
                   if (joinResponse.success) {
                     sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+                    notifications = [
+                      ...notifications,
+                      { id: notificationId++, message: 'Joined as new player', type: 'info' },
+                    ];
                     loadLeaderboardRanks();
                   }
                 });
@@ -127,7 +146,7 @@
 
   // Track score changes for animations
   $: {
-    if (playerScore !== previousScore && previousScore > 0) {
+    if (browser && playerScore !== previousScore && previousScore > 0) {
       const scoreChange = playerScore - previousScore;
       if (scoreChange !== 0) {
         // Add score animation
@@ -164,9 +183,10 @@
           { id: notificationId++, message: '🎮 Game Starting!', type: 'info' },
         ];
       } else if (currentState === GameState.ROUND_END) {
+        const roundNum = $gameState?.round || 0;
         notifications = [
           ...notifications,
-          { id: notificationId++, message: `🎉 Round Complete!`, type: 'success' },
+          { id: notificationId++, message: `🎉 Round ${roundNum} Complete!`, type: 'success' },
         ];
       } else if (currentState === GameState.GAME_END) {
         notifications = [
@@ -177,9 +197,15 @@
         setTimeout(() => {
           loadLeaderboardRanks();
         }, 1000);
+        // Show final leaderboard automatically
+        showFinalLeaderboard = true;
       }
       previousState = currentState;
     }
+  }
+
+  function removeNotification(id: number) {
+    notifications = notifications.filter((n) => n.id !== id);
   }
 </script>
 
@@ -210,15 +236,17 @@
       <div>
         <div class="text-xs text-white/60">Room: {roomCode}</div>
         <div class="text-2xl font-bold score-display">🎄 {playerScore} pts</div>
-        {#if sessionRank > 0 || globalRank > 0}
-          <div class="text-xs text-white/50 mt-1">
-            {#if sessionRank > 0}
-              Session: #{sessionRank}
-            {/if}
-            {#if globalRank > 0}
-              {#if sessionRank > 0} • {/if}Global: #{globalRank}
-            {/if}
-          </div>
+        {#if currentState === GameState.GAME_END}
+          {#if sessionRank > 0 || globalRank > 0}
+            <div class="text-xs text-white/50 mt-1">
+              {#if sessionRank > 0}
+                Session: #{sessionRank}
+              {/if}
+              {#if globalRank > 0}
+                {#if sessionRank > 0} • {/if}Global: #{globalRank}
+              {/if}
+            </div>
+          {/if}
         {/if}
       </div>
       <div class="text-3xl">
@@ -276,6 +304,26 @@
       <PriceIsRight />
     {/if}
   </div>
+
+  <!-- Final Leaderboard Modal (only shown at game end) -->
+  {#if currentState === GameState.GAME_END && showFinalLeaderboard}
+    <div class="leaderboard-overlay" on:click={() => showFinalLeaderboard = false}>
+      <div class="leaderboard-modal" on:click|stopPropagation>
+        <div class="leaderboard-modal-header">
+          <h2 class="text-2xl font-bold text-christmas-gold">🏆 Final Results</h2>
+          <button on:click={() => showFinalLeaderboard = false} class="close-modal-btn">✕</button>
+        </div>
+        <div class="leaderboard-modal-content">
+          <SessionLeaderboard {roomCode} />
+        </div>
+        <div class="leaderboard-modal-footer">
+          <button on:click={() => showFinalLeaderboard = false} class="btn-primary">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -328,5 +376,66 @@
   :global(.mobile-container input, .mobile-container textarea) {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  /* Leaderboard Modal */
+  .leaderboard-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+  }
+
+  .leaderboard-modal {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 3px solid #ffd700;
+    border-radius: 1rem;
+    padding: 2rem;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .leaderboard-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .close-modal-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+
+  .close-modal-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .leaderboard-modal-content {
+    margin-bottom: 1.5rem;
+  }
+
+  .leaderboard-modal-footer {
+    display: flex;
+    justify-content: center;
   }
 </style>

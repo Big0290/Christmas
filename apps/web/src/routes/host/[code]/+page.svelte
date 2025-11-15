@@ -391,6 +391,62 @@
               {/each}
             </div>
           </div>
+        {:else if currentGameType === GameType.TRIVIA_ROYALE}
+          <!-- Trivia: Show question and voting breakdown -->
+          <div class="trivia-host-view">
+            <h2 class="game-title">🎄 Christmas Trivia Royale</h2>
+            {#if $gameState?.currentQuestion}
+              <div class="question-display">
+                <h3 class="question-text">{$gameState.currentQuestion.question}</h3>
+              </div>
+              
+              {#if currentState === GameState.ROUND_END && $gameState?.showReveal}
+                <!-- Show voting breakdown for host -->
+                <div class="voting-breakdown-host">
+                  <h3 class="breakdown-title-host">📊 Voting Breakdown</h3>
+                  <div class="answers-reveal-host">
+                    {#each $gameState.currentQuestion.answers as answer, index}
+                      {@const count = $gameState?.answerCounts?.[index] || 0}
+                      {@const percentage = $gameState?.answerPercentages?.[index] || 0}
+                      {@const isCorrect = index === $gameState.currentQuestion.correctIndex}
+                      {@const playerNames = $gameState?.playersByAnswer?.[index] || []}
+                      <div class="answer-reveal-host" class:correct={isCorrect}>
+                        <div class="answer-reveal-header-host">
+                          <span class="answer-letter-reveal-host">{String.fromCharCode(65 + index)}</span>
+                          <span class="answer-text-reveal-host">{answer}</span>
+                          {#if isCorrect}
+                            <span class="correct-badge-host">✓ Correct</span>
+                          {/if}
+                          <span class="percentage-stat">{percentage}% ({count})</span>
+                        </div>
+                        <div class="percentage-bar-container-host">
+                          <div 
+                            class="percentage-bar-host" 
+                            class:correct={isCorrect}
+                            style="width: {percentage}%"
+                          >
+                          </div>
+                        </div>
+                        {#if playerNames.length > 0}
+                          <div class="voters-list-host">
+                            <span class="voters-label-host">Voters:</span>
+                            <span class="voters-names-host">{playerNames.join(', ')}</span>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else if currentState === GameState.PLAYING}
+                <div class="waiting-message-host">
+                  <p class="instruction-text">Players are answering...</p>
+                  <p class="instruction-text-small">
+                    {Object.keys($gameState?.answers || {}).length} / {$players.length} answered
+                  </p>
+                </div>
+              {/if}
+            {/if}
+          </div>
         {:else}
           <h2 class="game-title">Game in Progress...</h2>
           <p class="instruction-text">Check your phones!</p>
@@ -476,6 +532,19 @@
             </div>
           {/each}
         </div>
+        
+        <!-- Enhanced Leaderboard Display for Host -->
+        <div class="host-leaderboard-tabs">
+          <div class="leaderboard-section">
+            <h3 class="section-title">📊 Session Leaderboard</h3>
+            <SessionLeaderboard {roomCode} />
+          </div>
+          <div class="leaderboard-section">
+            <h3 class="section-title">🌍 Global Leaderboard</h3>
+            <GlobalLeaderboard {roomCode} />
+          </div>
+        </div>
+
         <div class="game-end-actions">
           <button on:click={startNewGame} class="btn-primary-large">
             🚀 Start New Game
@@ -496,8 +565,8 @@
     {/if}
   </div>
 
-  <!-- Bottom Scoreboard -->
-  {#if currentState !== GameState.LOBBY && currentState !== GameState.GAME_END}
+  <!-- Bottom Scoreboard (only during game, not at end) -->
+  {#if currentState === GameState.PLAYING || currentState === GameState.ROUND_END || currentState === GameState.STARTING}
     <div class="bottom-scorebar">
       <div class="ticker-scroll">
         {#each scoreboard as player, i}
@@ -1232,17 +1301,184 @@
     font-weight: bold;
   }
 
+  /* Trivia Host View */
+  .trivia-host-view {
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .voting-breakdown-host {
+    margin-top: 3rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 2rem;
+    padding: 2rem;
+    border: 3px solid rgba(255, 215, 0, 0.3);
+  }
+
+  .breakdown-title-host {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 2rem;
+    text-align: center;
+    color: #ffd700;
+  }
+
+  .answers-reveal-host {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .answer-reveal-host {
+    background: rgba(255, 255, 255, 0.05);
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    transition: all 0.3s;
+  }
+
+  .answer-reveal-host.correct {
+    background: rgba(15, 134, 68, 0.2);
+    border-color: #0f8644;
+    box-shadow: 0 0 30px rgba(15, 134, 68, 0.4);
+  }
+
+  .answer-reveal-header-host {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .answer-letter-reveal-host {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    font-weight: bold;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .answer-reveal-host.correct .answer-letter-reveal-host {
+    background: #0f8644;
+  }
+
+  .answer-text-reveal-host {
+    flex: 1;
+    font-weight: 600;
+    font-size: 1.75rem;
+  }
+
+  .correct-badge-host {
+    background: #0f8644;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    font-weight: bold;
+  }
+
+  .percentage-stat {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+    margin-left: auto;
+  }
+
+  .percentage-bar-container-host {
+    width: 100%;
+    height: 3rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    position: relative;
+  }
+
+  .percentage-bar-host {
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.2));
+    transition: width 0.5s ease-out;
+  }
+
+  .percentage-bar-host.correct {
+    background: linear-gradient(90deg, #0f8644, #0a5d2e);
+  }
+
+  .voters-list-host {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.125rem;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .voters-label-host {
+    font-weight: 600;
+  }
+
+  .voters-names-host {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .waiting-message-host {
+    text-align: center;
+    margin-top: 2rem;
+  }
+
+  .instruction-text-small {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 1rem;
+  }
+
   .results-title {
     font-size: 4rem;
     margin-bottom: 3rem;
   }
 
-  .mini-scoreboard, .final-scoreboard {
+  .mini-scoreboard,   .final-scoreboard {
     background: rgba(0, 0, 0, 0.3);
     padding: 2rem;
     border-radius: 2rem;
     max-width: 800px;
-    margin: 0 auto;
+    margin: 0 auto 3rem;
+  }
+
+  .host-leaderboard-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto 3rem;
+  }
+
+  .leaderboard-section {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1.5rem;
+    border-radius: 1rem;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    color: #ffd700;
+    text-align: center;
+  }
+
+  @media (max-width: 1024px) {
+    .host-leaderboard-tabs {
+      grid-template-columns: 1fr;
+    }
   }
 
   .score-entry, .final-score-entry {

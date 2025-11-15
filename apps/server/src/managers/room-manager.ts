@@ -32,16 +32,8 @@ export class RoomManager {
     const now = Date.now();
     const expiresAt = now + 24 * 60 * 60 * 1000; // 24 hours
 
-    const hostPlayer: Player = {
-      id: hostId,
-      name: hostName,
-      avatar: generateAvatar('festive'),
-      status: PlayerStatus.CONNECTED,
-      score: 0,
-      joinedAt: now,
-      lastSeen: now,
-    };
-
+    // Host is NOT added to players list - they manage the room separately
+    const settings = GlobalSettingsSchema.parse({ theme: {} });
     const room: Room = {
       code,
       hostId,
@@ -49,12 +41,32 @@ export class RoomManager {
       expiresAt,
       currentGame: null,
       gameState: GameState.LOBBY,
-      players: new Map([[hostId, hostPlayer]]),
-      settings: GlobalSettingsSchema.parse({ theme: {} }),
+      players: new Map(), // Empty player list - host is separate
+      settings,
     };
+    
+    // Save room to database if available
+    if (this.supabase) {
+      Promise.resolve(this.supabase.from('rooms').insert({
+        code,
+        host_id: hostId,
+        expires_at: new Date(expiresAt).toISOString(),
+        is_public: false,
+        room_name: null,
+        description: null,
+        player_count: 0,
+        is_active: true,
+      })).then(({ error }) => {
+        if (error) {
+          console.error('[Room] Failed to save room to database:', error);
+        }
+      }).catch((err: any) => {
+        console.error('[Room] Failed to save room to database:', err);
+      });
+    }
 
     this.rooms.set(code, room);
-    this.playerToRoom.set(hostId, code);
+    // Don't add host to playerToRoom - they're managed separately
 
     return room;
   }
@@ -122,10 +134,35 @@ export class RoomManager {
     room.players.set(playerId, player);
     this.playerToRoom.set(playerId, code);
 
+    // Update player count in database
+    if (this.supabase) {
+      const connectedCount = Array.from(room.players.values()).filter(
+        p => p.status === PlayerStatus.CONNECTED
+      ).length;
+      Promise.resolve(this.supabase.from('rooms').update({
+        player_count: connectedCount,
+      }).eq('code', code)).then(({ error }) => {
+        if (error) {
+          console.error('[Room] Failed to update player count:', error);
+        }
+      }).catch((err: any) => {
+        console.error('[Room] Failed to update player count:', err);
+      });
+    }
+
     return { success: true, room, player };
   }
 
   leaveRoom(playerId: string, markDisconnected: boolean = false): string | null {
+    // Check if it's a host
+    const hostRoom = this.getRoomByHost(playerId);
+    if (hostRoom) {
+      // Host leaving - delete the room
+      this.deleteRoom(hostRoom.code);
+      return hostRoom.code;
+    }
+
+    // It's a player
     const roomCode = this.playerToRoom.get(playerId);
     if (!roomCode) return null;
 
@@ -146,8 +183,8 @@ export class RoomManager {
       room.players.delete(playerId);
       this.playerToRoom.delete(playerId);
 
-      // If host left or no players remain, delete room
-      if (playerId === room.hostId || room.players.size === 0) {
+      // If no players remain, delete room
+      if (room.players.size === 0) {
         this.deleteRoom(roomCode);
       }
     }
@@ -162,6 +199,31 @@ export class RoomManager {
   getRoomByPlayer(playerId: string): Room | undefined {
     const code = this.playerToRoom.get(playerId);
     return code ? this.rooms.get(code) : undefined;
+  }
+
+  getRoomByHost(hostId: string): Room | undefined {
+    for (const room of this.rooms.values()) {
+      if (room.hostId === hostId) {
+        return room;
+      }
+    }
+    return undefined;
+  }
+
+  getRoomBySocketId(socketId: string): { room: Room; isHost: boolean } | null {
+    // Check if it's a host
+    const hostRoom = this.getRoomByHost(socketId);
+    if (hostRoom) {
+      return { room: hostRoom, isHost: true };
+    }
+    
+    // Check if it's a player
+    const playerRoom = this.getRoomByPlayer(socketId);
+    if (playerRoom) {
+      return { room: playerRoom, isHost: false };
+    }
+    
+    return null;
   }
 
   updatePlayerLastSeen(playerId: string): void {
@@ -275,6 +337,93 @@ export class RoomManager {
     const sessionScores = this.sessionLeaderboards.get(roomCode)!;
     const currentScore = sessionScores.get(playerName) || 0;
     sessionScores.set(playerName, currentScore + score);
+    
+    // Also persist to database for recovery
+    if (this.supabase) {
+      // Store session scores in a way that can be recovered
+      // We'll use a combination of room_code and player_name
+      Promise.resolve(this.supabase.from('session_scores').upsert({
+        room_code: roomCode,
+        player_name: playerName,
+        total_score: currentScore + score,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'room_code,player_name',
+      })).then(({ error }) => {
+        if (error) {
+          // Table might not exist yet, ignore error
+          console.error('[Room] Failed to save session score:', error);
+        }
+      }).catch((err: any) => {
+        console.error('[Room] Failed to save session score:', err);
+      });
+    }
+  }
+  
+  async restoreSessionScore(roomCode: string, playerName: string): Promise<number> {
+    // Check in-memory first
+    const sessionScores = this.sessionLeaderboards.get(roomCode);
+    if (sessionScores) {
+      const score = sessionScores.get(playerName);
+      if (score !== undefined && score > 0) {
+        return score;
+      }
+    }
+    
+    // Check database
+    if (this.supabase) {
+      try {
+        const { data } = await this.supabase
+          .from('session_scores')
+          .select('total_score')
+          .eq('room_code', roomCode)
+          .eq('player_name', playerName)
+          .single();
+        
+        if (data && data.total_score) {
+          // Restore to in-memory
+          if (!this.sessionLeaderboards.has(roomCode)) {
+            this.sessionLeaderboards.set(roomCode, new Map());
+          }
+          const sessionScores = this.sessionLeaderboards.get(roomCode)!;
+          sessionScores.set(playerName, data.total_score);
+          return data.total_score;
+        }
+      } catch (err) {
+        // Table might not exist or no data, ignore
+      }
+    }
+    
+    return 0;
+  }
+  
+  // Restore player score in active game
+  restorePlayerScoreInGame(roomCode: string, playerId: string, playerName: string): void {
+    const game = this.getGame(roomCode);
+    if (!game) return;
+    
+    // Get session score
+    const sessionScores = this.sessionLeaderboards.get(roomCode);
+    if (sessionScores) {
+      const sessionScore = sessionScores.get(playerName);
+      if (sessionScore && sessionScore > 0) {
+        // Try to update player's score in the game
+        const gameState = game.getState();
+        if (gameState.scores) {
+          // Calculate the difference and add to current score
+          const currentScore = gameState.scores[playerId] || 0;
+          const scoreDiff = sessionScore - currentScore;
+          if (scoreDiff > 0) {
+            // Update score in game
+            gameState.scores[playerId] = sessionScore;
+            // Also update via game's updateScore method if available
+            if (typeof (game as any).updateScore === 'function') {
+              (game as any).updateScore(playerId, scoreDiff);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Cleanup

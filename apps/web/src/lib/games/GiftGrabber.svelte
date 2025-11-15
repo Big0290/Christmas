@@ -186,6 +186,12 @@
     touchStartY = e.touches[0].clientY;
   }
 
+  // Client-side throttling for gift_move
+  let lastMoveTime = 0;
+  const MOVE_THROTTLE_MS = 50; // Max 20 updates per second
+  let pendingMove: { x: number; y: number } | null = null;
+  let moveTimeout: NodeJS.Timeout | null = null;
+
   function handleTouchMove(e: TouchEvent) {
     if (!touchStartX || !touchStartY) return;
 
@@ -195,10 +201,32 @@
     // Normalize movement
     const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     if (magnitude > 5) {
-      $socket.emit('gift_move', {
+      const direction = {
         x: deltaX / magnitude,
         y: deltaY / magnitude,
-      });
+      };
+      
+      // Store as pending move
+      pendingMove = direction;
+      
+      // Throttle emits
+      const now = Date.now();
+      if (now - lastMoveTime >= MOVE_THROTTLE_MS) {
+        // Send immediately
+        $socket.emit('gift_move', direction);
+        lastMoveTime = now;
+        pendingMove = null;
+      } else if (!moveTimeout) {
+        // Schedule a delayed send
+        moveTimeout = setTimeout(() => {
+          if (pendingMove) {
+            $socket.emit('gift_move', pendingMove);
+            lastMoveTime = Date.now();
+            pendingMove = null;
+          }
+          moveTimeout = null;
+        }, MOVE_THROTTLE_MS - (now - lastMoveTime));
+      }
     }
 
     touchStartX = e.touches[0].clientX;
@@ -208,7 +236,13 @@
   function handleTouchEnd() {
     touchStartX = 0;
     touchStartY = 0;
+    if (moveTimeout) {
+      clearTimeout(moveTimeout);
+      moveTimeout = null;
+    }
+    pendingMove = null;
     $socket.emit('gift_move', { x: 0, y: 0 });
+    lastMoveTime = Date.now();
   }
 
   // Update socket ID when it changes

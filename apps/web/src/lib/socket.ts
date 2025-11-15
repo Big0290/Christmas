@@ -13,7 +13,7 @@ export const players = writable<any[]>([]);
 
 let socketInstance: TypedSocket | null = null;
 
-export function connectSocket(url: string = 'http://localhost:3000') {
+export function connectSocket(url?: string) {
   if (!browser) return;
   
   if (socketInstance?.connected) {
@@ -21,11 +21,41 @@ export function connectSocket(url: string = 'http://localhost:3000') {
     return;
   }
 
-  socketInstance = io(url, {
+  // Auto-detect server URL from current window location
+  // In production (fly.dev), use same origin (no port)
+  // In development (localhost:5173), use localhost:3000
+  // On local network (IP:5173), use IP:3000
+  const serverUrl = url || (() => {
+    if (typeof window !== 'undefined') {
+      const { protocol, hostname, port } = window.location;
+      
+      // Production (fly.dev) - use same origin without port
+      if (hostname.includes('fly.dev')) {
+        return `${protocol}//${hostname}`;
+      }
+      
+      // Localhost development (port 5173) - use port 3000
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return `${protocol}//${hostname}:3000`;
+      }
+      
+      // Standard ports (80/443) or no port - use same origin
+      if (!port || port === '80' || port === '443') {
+        return `${protocol}//${hostname}`;
+      }
+      
+      // Local network or other ports - use port 3000
+      return `${protocol}//${hostname}:3000`;
+    }
+    return 'http://localhost:3000';
+  })();
+
+  socketInstance = io(serverUrl, {
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionAttempts: 5,
+    timeout: 10000, // 10 second timeout for connection
   }) as TypedSocket;
 
   socketInstance.on('connect', () => {

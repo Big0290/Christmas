@@ -1,14 +1,14 @@
 import { Server, Socket } from 'socket.io';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { RoomManager } from '../managers/room-manager.js';
-import { GameType, GameState, PlayerStatus, Player, sanitizePlayerName, RateLimiter } from '@christmas/core';
+import { GameType, GameState, PlayerStatus, Player, sanitizePlayerName, RateLimiter, isExpired } from '@christmas/core';
 
 const rateLimiter = new RateLimiter(20, 1000); // 20 requests per second
 
 export function setupSocketHandlers(
   io: Server,
   roomManager: RoomManager,
-  supabase: SupabaseClient
+  supabase: SupabaseClient | null
 ) {
   io.on('connection', (socket: Socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
@@ -39,20 +39,15 @@ export function setupSocketHandlers(
 
         socket.join(room.code);
 
-        const player = room.players.get(socket.id);
-        if (!player) {
-          callback({ success: false, error: 'Failed to create player' });
-          return;
-        }
-
+        // Host is NOT in players list - return host info separately
         callback({
           success: true,
           roomCode: room.code,
-          player,
           isHost: true,
+          hostName: sanitizedName,
         });
 
-        console.log(`[Room] Created: ${room.code} by ${sanitizedName}`);
+        console.log(`[Room] Created: ${room.code} by ${sanitizedName} (host)`);
       } catch (error) {
         console.error('[Room] Create error:', error);
         callback({ success: false, error: 'Failed to create room' });
@@ -85,6 +80,7 @@ export function setupSocketHandlers(
           player: result.player,
           isHost: result.room?.hostId === socket.id,
           players: Array.from(result.room?.players.values() || []),
+          roomName: result.room?.settings?.roomName,
         });
 
         console.log(`[Room] ${sanitizedName} joined ${code}`);
@@ -99,7 +95,7 @@ export function setupSocketHandlers(
       handlePlayerLeave(socket, false);
     });
 
-    socket.on('reconnect_player', (roomCode: string, playerName: string, previousPlayerId: string | null, callback) => {
+    socket.on('reconnect_player', async (roomCode: string, playerName: string, previousPlayerId: string | null, callback) => {
       if (!checkRateLimit()) return;
 
       try {
@@ -134,6 +130,13 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Restore session score
+        const restoredScore = await roomManager.restoreSessionScore(roomCode, playerName);
+        if (restoredScore > 0) {
+          // Update player's current score to match session score
+          existingPlayer.score = restoredScore;
+        }
+
         // Update player with new socket ID
         const oldPlayerId = existingPlayer.id;
         room.players.delete(oldPlayerId);
@@ -155,9 +158,28 @@ export function setupSocketHandlers(
           player: existingPlayer,
         });
 
+        // Update game state if game is in progress
+        const game = roomManager.getGame(roomCode);
+        if (game) {
+          // Restore player's score in the game
+          if (restoredScore > 0) {
+            roomManager.restorePlayerScoreInGame(roomCode, socket.id, playerName);
+          }
+          // Send updated game state
+          socket.emit('game_state_update', game.getClientState(socket.id));
+          
+          // Also broadcast to room that player reconnected
+          io.to(roomCode).emit('player_reconnected', {
+            playerId: socket.id,
+            playerName: playerName,
+            restoredScore: restoredScore,
+          });
+        }
+
         callback({
           success: true,
           player: existingPlayer,
+          restoredScore,
           room: {
             code: room.code,
             players: Array.from(room.players.values()),
@@ -166,7 +188,7 @@ export function setupSocketHandlers(
           },
         });
 
-        console.log(`[Room] ${playerName} reconnected to ${roomCode}`);
+        console.log(`[Room] ${playerName} reconnected to ${roomCode} with score ${restoredScore}`);
       } catch (error) {
         console.error('[Room] Reconnect error:', error);
         callback({ success: false, error: 'Failed to reconnect' });
@@ -180,11 +202,12 @@ export function setupSocketHandlers(
     socket.on('start_game', async (gameType: GameType) => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) {
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
         socket.emit('error', 'Only host can start games');
         return;
       }
+      const room = roomInfo.room;
 
       const game = await roomManager.startGame(room.code, gameType);
       if (!game) {
@@ -201,11 +224,12 @@ export function setupSocketHandlers(
     socket.on('end_game', () => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) {
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
         socket.emit('error', 'Only host can end games');
         return;
       }
+      const room = roomInfo.room;
 
       const game = roomManager.getGame(room.code);
       let scoreboard: Array<{ playerId: string; name: string; score: number }> = [];
@@ -259,8 +283,9 @@ export function setupSocketHandlers(
     socket.on('pause_game', () => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) return;
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) return;
+      const room = roomInfo.room;
 
       const game = roomManager.getGame(room.code);
       if (game) {
@@ -273,8 +298,9 @@ export function setupSocketHandlers(
     socket.on('resume_game', () => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) return;
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) return;
+      const room = roomInfo.room;
 
       const game = roomManager.getGame(room.code);
       if (game) {
@@ -287,13 +313,14 @@ export function setupSocketHandlers(
     socket.on('kick_player', (targetPlayerId: string, callback) => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) {
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
         callback({ success: false, error: 'Only host can kick players' });
         return;
       }
+      const room = roomInfo.room;
 
-      // Prevent kicking the host
+      // Prevent kicking the host (shouldn't happen since host is not a player)
       if (targetPlayerId === room.hostId) {
         callback({ success: false, error: 'Cannot kick the host' });
         return;
@@ -334,7 +361,22 @@ export function setupSocketHandlers(
       handleGameAction('answer', { answerIndex });
     });
 
+    // Throttle gift_move events server-side (client should also throttle)
+    const lastMoveTime = new Map<string, number>();
+    const MOVE_THROTTLE_MS = 50; // Max 20 updates per second
+    
     socket.on('gift_move', (direction: { x: number; y: number }) => {
+      if (!checkRateLimit()) return;
+      
+      // Server-side throttling
+      const now = Date.now();
+      const lastMove = lastMoveTime.get(socket.id) || 0;
+      if (now - lastMove < MOVE_THROTTLE_MS) {
+        // Throttled - skip this update
+        return;
+      }
+      lastMoveTime.set(socket.id, now);
+      
       handleGameAction('move', direction);
     });
 
@@ -352,6 +394,144 @@ export function setupSocketHandlers(
 
     socket.on('price_guess', (guess: number) => {
       handleGameAction('guess', { guess });
+    });
+
+    // ========================================================================
+    // PUBLIC ROOMS
+    // ========================================================================
+
+    socket.on('list_public_rooms', async (callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Get public rooms from database
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available', rooms: [] });
+          return;
+        }
+
+        const { data: roomsData, error: dbError } = await supabase
+          .from('rooms')
+          .select('code, room_name, description, player_count, is_public')
+          .eq('is_public', true)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .order('player_count', { ascending: false })
+          .limit(50);
+
+        if (dbError) {
+          callback({ success: false, error: dbError.message, rooms: [] });
+          return;
+        }
+
+        // Also include in-memory rooms that are public
+        const publicRooms: Array<{ code: string; name?: string; description?: string; playerCount: number }> = [];
+        
+        // Get from database
+        if (roomsData) {
+          for (const roomData of roomsData) {
+            publicRooms.push({
+              code: roomData.code,
+              name: roomData.room_name || undefined,
+              description: roomData.description || undefined,
+              playerCount: roomData.player_count || 0,
+            });
+          }
+        }
+
+        // Also check in-memory rooms
+        const rooms = roomManager['rooms'] as Map<string, any>;
+        for (const [code, room] of rooms) {
+          // Check if room is public (from settings or metadata)
+          const isPublic = room.settings?.isPublic || false;
+          if (isPublic && !isExpired(room.expiresAt)) {
+            // Check if already in list
+            const exists = publicRooms.some(r => r.code === code);
+            if (!exists) {
+              const playersArray = Array.from(room.players.values()) as Player[];
+              const connectedCount = playersArray.filter(
+                (p: Player) => p.status === PlayerStatus.CONNECTED
+              ).length;
+              publicRooms.push({
+                code: room.code,
+                name: room.settings?.roomName || undefined,
+                description: room.settings?.description || undefined,
+                playerCount: connectedCount,
+              });
+            }
+          }
+        }
+
+        // Sort by player count
+        publicRooms.sort((a, b) => b.playerCount - a.playerCount);
+
+        callback({ success: true, rooms: publicRooms });
+      } catch (error: any) {
+        console.error('[Public Rooms] List error:', error);
+        callback({ success: false, error: error.message || 'Failed to list public rooms', rooms: [] });
+      }
+    });
+
+    socket.on('update_room_settings', async (settings: { isPublic?: boolean; roomName?: string; description?: string }, callback) => {
+      if (!checkRateLimit()) return;
+
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
+        callback({ success: false, error: 'Only host can update room settings' });
+        return;
+      }
+      const room = roomInfo.room;
+
+      try {
+        // Update room settings
+        if (settings.isPublic !== undefined) {
+          room.settings.isPublic = settings.isPublic;
+        }
+        if (settings.roomName !== undefined) {
+          room.settings.roomName = settings.roomName;
+        }
+        if (settings.description !== undefined) {
+          room.settings.description = settings.description;
+        }
+
+        // Update database
+        if (supabase) {
+          const updateData: any = {};
+          if (settings.isPublic !== undefined) {
+            updateData.is_public = settings.isPublic;
+          }
+          if (settings.roomName !== undefined) {
+            updateData.room_name = settings.roomName;
+          }
+          if (settings.description !== undefined) {
+            updateData.description = settings.description;
+          }
+
+          await supabase
+            .from('rooms')
+            .update(updateData)
+            .eq('code', room.code);
+        }
+
+        // Broadcast room update
+        io.to(room.code).emit('room_settings_updated', {
+          isPublic: room.settings.isPublic,
+          roomName: room.settings.roomName,
+          description: room.settings.description,
+        });
+
+        callback({ success: true, room: {
+          code: room.code,
+          isPublic: room.settings.isPublic,
+          roomName: room.settings.roomName,
+          description: room.settings.description,
+        }});
+
+        console.log(`[Room] Settings updated for room ${room.code}`);
+      } catch (error: any) {
+        console.error('[Room] Update settings error:', error);
+        callback({ success: false, error: error.message || 'Failed to update room settings' });
+      }
     });
 
     // ========================================================================
@@ -401,14 +581,56 @@ export function setupSocketHandlers(
     // SETTINGS (HOST ONLY)
     // ========================================================================
 
+    socket.on('get_game_settings', async (roomCode: string, gameType: GameType, callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Verify host permissions
+        const room = roomManager.getRoom(roomCode);
+        if (!room) {
+          callback({ success: false, error: 'Room not found' });
+          return;
+        }
+
+        const hostRoom = roomManager.getRoomByHost(socket.id);
+        if (!hostRoom || hostRoom.code !== roomCode) {
+          callback({ success: false, error: 'You must be the host of this room' });
+          return;
+        }
+
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available', settings: {} });
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('game_settings')
+          .select('settings')
+          .eq('room_code', roomCode)
+          .eq('game_type', gameType)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+          callback({ success: false, error: error.message, settings: {} });
+          return;
+        }
+
+        callback({ success: true, settings: data?.settings || {} });
+      } catch (error: any) {
+        console.error('[Settings] Get error:', error);
+        callback({ success: false, error: error.message || 'Failed to get settings', settings: {} });
+      }
+    });
+
     socket.on('update_settings', async (gameType: GameType, settings: any) => {
       if (!checkRateLimit()) return;
 
-      const room = roomManager.getRoomByPlayer(socket.id);
-      if (!room || room.hostId !== socket.id) {
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
         socket.emit('error', 'Only host can update settings');
         return;
       }
+      const room = roomInfo.room;
 
       try {
         // Save to database if available
@@ -623,12 +845,356 @@ export function setupSocketHandlers(
     });
 
     // ========================================================================
+    // QUESTION SET MANAGEMENT (Host-only)
+    // ========================================================================
+
+    socket.on('list_question_sets', async (callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available', sets: [] });
+          return;
+        }
+
+        // Get all question sets (for now, we'll allow any host to see all sets)
+        // In the future, we can filter by host_id if needed
+        const { data, error } = await supabase
+          .from('question_sets')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          callback({ success: false, error: error.message, sets: [] });
+          return;
+        }
+
+        const sets = (data || []).map((set) => ({
+          id: set.id,
+          name: set.name,
+          description: set.description || undefined,
+          questionCount: set.question_count || 0,
+          createdAt: set.created_at,
+        }));
+
+        callback({ success: true, sets });
+      } catch (error: any) {
+        console.error('[Question Sets] List error:', error);
+        callback({ success: false, error: error.message || 'Failed to list question sets', sets: [] });
+      }
+    });
+
+    socket.on('create_question_set', async (name: string, description: string | undefined, callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Verify host permissions
+        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        if (!roomInfo || !roomInfo.isHost) {
+          callback({ success: false, error: 'You must be a host' });
+          return;
+        }
+
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available' });
+          return;
+        }
+
+        if (!name || !name.trim()) {
+          callback({ success: false, error: 'Set name is required' });
+          return;
+        }
+
+        // Generate a unique set ID
+        const setId = `set_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const { data, error } = await supabase
+          .from('question_sets')
+          .insert({
+            id: setId,
+            name: name.trim(),
+            description: description?.trim() || null,
+            host_id: roomInfo.room.hostId,
+            question_count: 0,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          callback({ success: false, error: error.message });
+          return;
+        }
+
+        callback({
+          success: true,
+          set: {
+            id: data.id,
+            name: data.name,
+            description: data.description || undefined,
+            questionCount: 0,
+          },
+        });
+
+        console.log(`[Question Sets] Created set: ${setId} by host ${roomInfo.room.hostId}`);
+      } catch (error: any) {
+        console.error('[Question Sets] Create error:', error);
+        callback({ success: false, error: error.message || 'Failed to create question set' });
+      }
+    });
+
+    socket.on('add_question_to_set', async (setId: string, question: any, callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Verify host permissions
+        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        if (!roomInfo || !roomInfo.isHost) {
+          callback({ success: false, error: 'You must be a host' });
+          return;
+        }
+
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available' });
+          return;
+        }
+
+        // Validate question
+        if (!question.question || !question.question.trim()) {
+          callback({ success: false, error: 'Question text is required' });
+          return;
+        }
+
+        if (!question.answers || !Array.isArray(question.answers) || question.answers.length < 2) {
+          callback({ success: false, error: 'At least 2 answers are required' });
+          return;
+        }
+
+        if (typeof question.correctIndex !== 'number' || question.correctIndex < 0 || question.correctIndex >= question.answers.length) {
+          callback({ success: false, error: 'Invalid correct answer index' });
+          return;
+        }
+
+        // Verify set exists
+        const { data: setData, error: setError } = await supabase
+          .from('question_sets')
+          .select('id')
+          .eq('id', setId)
+          .single();
+
+        if (setError || !setData) {
+          callback({ success: false, error: 'Question set not found' });
+          return;
+        }
+
+        // Insert question
+        const { data, error } = await supabase
+          .from('trivia_questions')
+          .insert({
+            question: question.question.trim(),
+            answers: question.answers.filter((a: string) => a && a.trim()),
+            correct_index: question.correctIndex,
+            difficulty: question.difficulty || 'medium',
+            category: question.category?.trim() || null,
+            image_url: question.imageUrl?.trim() || null,
+            set_id: setId,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          callback({ success: false, error: error.message });
+          return;
+        }
+
+        callback({
+          success: true,
+          question: {
+            id: data.id,
+            question: data.question,
+            answers: data.answers,
+            correctIndex: data.correct_index,
+            difficulty: data.difficulty,
+            category: data.category,
+            imageUrl: data.image_url,
+          },
+        });
+
+        console.log(`[Question Sets] Added question to set ${setId}`);
+      } catch (error: any) {
+        console.error('[Question Sets] Add question error:', error);
+        callback({ success: false, error: error.message || 'Failed to add question' });
+      }
+    });
+
+    socket.on('delete_question_set', async (setId: string, callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Verify host permissions
+        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        if (!roomInfo || !roomInfo.isHost) {
+          callback({ success: false, error: 'You must be a host' });
+          return;
+        }
+
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available' });
+          return;
+        }
+
+        // Delete all questions in the set first (trigger will update count)
+        const { error: questionsError } = await supabase
+          .from('trivia_questions')
+          .delete()
+          .eq('set_id', setId);
+
+        if (questionsError) {
+          callback({ success: false, error: questionsError.message });
+          return;
+        }
+
+        // Delete the set
+        const { error } = await supabase
+          .from('question_sets')
+          .delete()
+          .eq('id', setId);
+
+        if (error) {
+          callback({ success: false, error: error.message });
+          return;
+        }
+
+        callback({ success: true });
+        console.log(`[Question Sets] Deleted set: ${setId}`);
+      } catch (error: any) {
+        console.error('[Question Sets] Delete error:', error);
+        callback({ success: false, error: error.message || 'Failed to delete question set' });
+      }
+    });
+
+    socket.on('set_room_question_set', async (roomCode: string, setId: string | null, callback) => {
+      if (!checkRateLimit()) return;
+
+      try {
+        // Verify host permissions
+        const room = roomManager.getRoom(roomCode);
+        if (!room) {
+          callback({ success: false, error: 'Room not found' });
+          return;
+        }
+
+        const hostRoom = roomManager.getRoomByHost(socket.id);
+        if (!hostRoom || hostRoom.code !== roomCode) {
+          callback({ success: false, error: 'You must be the host of this room' });
+          return;
+        }
+
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available' });
+          return;
+        }
+
+        // If setId is provided, verify it exists
+        if (setId) {
+          const { data: setData, error: setError } = await supabase
+            .from('question_sets')
+            .select('id')
+            .eq('id', setId)
+            .single();
+
+          if (setError || !setData) {
+            callback({ success: false, error: 'Question set not found' });
+            return;
+          }
+        }
+
+        // Get or create game settings for this room and game type
+        const { data: existingSettings } = await supabase
+          .from('game_settings')
+          .select('settings')
+          .eq('room_code', roomCode)
+          .eq('game_type', GameType.TRIVIA_ROYALE)
+          .single();
+
+        const currentSettings = existingSettings?.settings || {};
+
+        // Update settings with the new question set ID
+        const updatedSettings = {
+          ...currentSettings,
+          customQuestionSetId: setId || null,
+        };
+
+        // Upsert game settings
+        const { error } = await supabase
+          .from('game_settings')
+          .upsert({
+            room_code: roomCode,
+            game_type: GameType.TRIVIA_ROYALE,
+            settings: updatedSettings,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'room_code,game_type',
+          });
+
+        if (error) {
+          callback({ success: false, error: error.message });
+          return;
+        }
+
+        callback({ success: true });
+        console.log(`[Question Sets] Set room ${roomCode} to use question set: ${setId || 'default'}`);
+      } catch (error: any) {
+        console.error('[Question Sets] Set room question set error:', error);
+        callback({ success: false, error: error.message || 'Failed to set question set' });
+      }
+    });
+
+    socket.on('get_questions_for_set', async (setId: string, callback) => {
+      if (!checkRateLimit()) return;
+
+      // Reuse existing get_custom_questions handler
+      try {
+        if (!supabase) {
+          callback({ success: false, error: 'Database not available', questions: [] });
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('trivia_questions')
+          .select('*')
+          .eq('set_id', setId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          callback({ success: false, error: error.message, questions: [] });
+          return;
+        }
+
+        const questions = (data || []).map((q) => ({
+          id: q.id,
+          question: q.question,
+          answers: q.answers,
+          correctIndex: q.correct_index,
+          difficulty: q.difficulty,
+          category: q.category,
+          imageUrl: q.image_url,
+        }));
+
+        callback({ success: true, questions });
+      } catch (error: any) {
+        console.error('[Question Sets] Get questions error:', error);
+        callback({ success: false, error: error.message || 'Failed to get questions', questions: [] });
+      }
+    });
+
+    // ========================================================================
     // HELPER FUNCTIONS
     // ========================================================================
 
     function handleGameAction(action: string, data: any) {
       if (!checkRateLimit()) return;
 
+      // Only players can perform game actions, not hosts
       const room = roomManager.getRoomByPlayer(socket.id);
       if (!room) return;
 
@@ -656,13 +1222,22 @@ export function setupSocketHandlers(
     }
 
     function handlePlayerLeave(socket: Socket, markDisconnected: boolean = false) {
-      // Mark player as disconnected instead of removing (for reconnection)
+      // Check if host or player
+      const roomInfo = roomManager.getRoomBySocketId(socket.id);
+      if (!roomInfo) return;
+      
       const roomCode = roomManager.leaveRoom(socket.id, markDisconnected);
       if (roomCode) {
-        if (markDisconnected) {
-          socket.to(roomCode).emit('player_disconnected', socket.id);
+        if (roomInfo.isHost) {
+          // Host left - notify all players
+          io.to(roomCode).emit('host_left', { reason: 'Host disconnected' });
         } else {
-          socket.to(roomCode).emit('player_left', socket.id);
+          // Player left
+          if (markDisconnected) {
+            socket.to(roomCode).emit('player_disconnected', socket.id);
+          } else {
+            socket.to(roomCode).emit('player_left', socket.id);
+          }
         }
         socket.leave(roomCode);
       }
@@ -676,6 +1251,8 @@ export function setupSocketHandlers(
   });
 
   // Periodic game state broadcast (for real-time games like Gift Grabber)
+  // Reduced frequency and only broadcast when state actually changes
+  const lastBroadcastState = new Map<string, string>();
   setInterval(() => {
     const rooms = roomManager['rooms']; // Access private field
     if (rooms) {
@@ -684,16 +1261,31 @@ export function setupSocketHandlers(
         if (game && game.getState().state === GameState.PLAYING) {
           // Only broadcast for games in PLAYING state (real-time games)
           // This optimizes bandwidth for turn-based games
-          room.players.forEach((player) => {
-            const socket = io.sockets.sockets.get(player.id);
-            if (socket) {
-              socket.emit('game_state_update', game.getClientState(player.id));
-            }
-          });
+          
+          // Check if state has changed (use JSON string comparison for simplicity)
+          const currentState = JSON.stringify(game.getState());
+          const lastState = lastBroadcastState.get(code);
+          
+          // Only broadcast if state changed or every 200ms (5Hz instead of 10Hz)
+          const shouldBroadcast = currentState !== lastState || 
+            (Date.now() % 200 < 100); // Throttle to 5Hz
+          
+          if (shouldBroadcast) {
+            lastBroadcastState.set(code, currentState);
+            room.players.forEach((player) => {
+              const socket = io.sockets.sockets.get(player.id);
+              if (socket) {
+                socket.emit('game_state_update', game.getClientState(player.id));
+              }
+            });
+          }
+        } else {
+          // Clear state cache when game ends
+          lastBroadcastState.delete(code);
         }
       }
     }
-  }, 100); // 10Hz update rate for smooth Phaser rendering
+  }, 100); // Check every 100ms but throttle broadcasts to 5Hz (200ms intervals)
 }
 
 async function saveLeaderboard(
@@ -709,7 +1301,10 @@ async function saveLeaderboard(
   });
 
   // Save to database leaderboard (per-game records)
-  if (!supabase) return; // Skip if no database
+  if (!supabase) {
+    console.warn('[Leaderboard] Cannot save to database - Supabase not available');
+    return;
+  }
   
   try {
     const entries = scoreboard.map((entry, index) => ({
@@ -723,7 +1318,7 @@ async function saveLeaderboard(
 
     await supabase.from('leaderboards').insert(entries);
 
-    // Update global leaderboard
+    // Update global leaderboard (legacy)
     for (const entry of scoreboard) {
       // Get current player stats
       const { data: currentData } = await supabase
@@ -738,6 +1333,33 @@ async function saveLeaderboard(
 
       await supabase
         .from('global_leaderboard')
+        .upsert({
+          player_name: entry.name,
+          total_score: currentTotal + entry.score,
+          games_played: currentGames + 1,
+          last_played_at: new Date().toISOString(),
+          best_game_score: Math.max(currentBest, entry.score),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'player_name',
+        });
+    }
+
+    // Update player_profiles (new system)
+    // The trigger should handle this, but we can also do it explicitly
+    for (const entry of scoreboard) {
+      const { data: profileData } = await supabase
+        .from('player_profiles')
+        .select('total_score, games_played, best_game_score')
+        .eq('player_name', entry.name)
+        .single();
+
+      const currentTotal = profileData?.total_score || 0;
+      const currentGames = profileData?.games_played || 0;
+      const currentBest = profileData?.best_game_score || 0;
+
+      await supabase
+        .from('player_profiles')
         .upsert({
           player_name: entry.name,
           total_score: currentTotal + entry.score,

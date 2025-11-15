@@ -1,0 +1,24 @@
+# flyctl launch added from .gitignore
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+**/.turbo
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+**/.DS_Store
+**/coverage
+**/.vscode
+**/.idea
+**/*.swp
+**/*.swo
+**/.vercel
+**/.output
+**/playwright-report
+**/test-results
+
+# flyctl launch added from node_modules/.pnpm/tailwindcss@3.4.18/node_modules/tailwindcss/stubs/.gitignore
+!node_modules/.pnpm/tailwindcss@3.4.18/node_modules/tailwindcss/stubs/**/*
+fly.toml

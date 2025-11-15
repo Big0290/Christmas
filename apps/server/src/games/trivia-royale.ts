@@ -166,6 +166,48 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
   private endQuestion(): void {
     this.state.state = GameState.ROUND_END;
 
+    // Calculate voting statistics
+    const answerCounts: Record<number, number> = {};
+    const playersByAnswer: Record<number, string[]> = {};
+    
+    // Initialize counts
+    if (this.state.currentQuestion) {
+      for (let i = 0; i < this.state.currentQuestion.answers.length; i++) {
+        answerCounts[i] = 0;
+        playersByAnswer[i] = [];
+      }
+    }
+
+    // Count answers
+    const totalAnswers = Object.keys(this.state.answers).length;
+    Object.entries(this.state.answers).forEach(([playerId, answerIndex]) => {
+      answerCounts[answerIndex] = (answerCounts[answerIndex] || 0) + 1;
+      
+      // Get player name
+      const player = this.players.get(playerId);
+      if (player) {
+        if (!playersByAnswer[answerIndex]) {
+          playersByAnswer[answerIndex] = [];
+        }
+        playersByAnswer[answerIndex].push(player.name);
+      }
+    });
+
+    // Calculate percentages
+    const answerPercentages: Record<number, number> = {};
+    if (totalAnswers > 0) {
+      for (const [index, count] of Object.entries(answerCounts)) {
+        answerPercentages[parseInt(index)] = Math.round((count / totalAnswers) * 100);
+      }
+    }
+
+    // Store in state
+    this.state.answerCounts = answerCounts;
+    this.state.answerPercentages = answerPercentages;
+    this.state.playersByAnswer = playersByAnswer;
+    this.state.showReveal = true;
+    this.state.revealStartTime = Date.now();
+
     // Calculate scores
     const correctIndex = this.state.currentQuestion?.correctIndex ?? -1;
     const questionStartTime = this.state.questionStartTime;
@@ -183,10 +225,15 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
       this.updateScore(playerId, points);
     });
 
-    // Move to next question after 5 seconds
+    // Move to next question after reveal phase (extend to 8 seconds for reveal)
     this.setTimer(() => {
+      // Clear reveal data
+      this.state.showReveal = false;
+      this.state.answerCounts = undefined;
+      this.state.answerPercentages = undefined;
+      this.state.playersByAnswer = undefined;
       this.nextRound();
-    }, 5000);
+    }, 8000); // Extended to 8 seconds to show reveal
   }
 
   handlePlayerAction(playerId: string, action: string, data: any): void {
@@ -218,6 +265,12 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
         : null,
       hasAnswered: this.state.answers[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
+      // Include voting statistics for reveal phase
+      answerCounts: this.state.answerCounts,
+      answerPercentages: this.state.answerPercentages,
+      playersByAnswer: this.state.playersByAnswer,
+      showReveal: this.state.showReveal,
+      revealStartTime: this.state.revealStartTime,
     };
   }
 }

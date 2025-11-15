@@ -69,6 +69,10 @@ export const GlobalSettingsSchema = z.object({
   }).default({}),
   avatarStyle: z.enum(['festive', 'emoji', 'random']).default('festive'),
   spectatorMode: z.boolean().default(true),
+  // Room metadata
+  isPublic: z.boolean().default(false),
+  roomName: z.string().optional(),
+  description: z.string().optional(),
 });
 
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>;
@@ -287,6 +291,12 @@ export interface TriviaGameState extends BaseGameState {
   currentQuestion: TriviaQuestion | null;
   questionStartTime: number;
   answers: Record<string, number>;
+  // Voting percentages and reveal phase
+  answerCounts?: Record<number, number>; // Count of players who selected each answer index
+  answerPercentages?: Record<number, number>; // Percentage for each answer
+  playersByAnswer?: Record<number, string[]>; // Player names who selected each answer
+  showReveal?: boolean; // Whether to show reveal phase
+  revealStartTime?: number; // When reveal phase started
 }
 
 export interface GiftGrabberGameState extends BaseGameState {
