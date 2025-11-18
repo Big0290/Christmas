@@ -11,6 +11,7 @@
   import GameTile from '$lib/components/room/GameTile.svelte';
   import ShareRoom from '$lib/components/room/ShareRoom.svelte';
   import Jukebox from '$lib/components/room/Jukebox.svelte';
+  import GameSettingsModal from '$lib/components/room/GameSettingsModal.svelte';
   import { t, language } from '$lib/i18n';
   import { get } from 'svelte/store';
 
@@ -25,6 +26,8 @@
   let roomName = '';
   let roomDescription = '';
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+  let showSettingsModal = false;
+  let selectedGameForSettings: GameType | null = null;
   
   // Debug logging (dev mode only)
   $: if (import.meta.env.DEV) {
@@ -269,9 +272,24 @@
   });
 
   function startGame() {
-    if (selectedGame && isHost && $socket) {
-      $socket.emit('start_game', selectedGame);
+    if (selectedGame && isHost) {
+      // Show settings modal instead of starting immediately
+      selectedGameForSettings = selectedGame;
+      showSettingsModal = true;
     }
+  }
+
+  function handleStartWithSettings(settings: any) {
+    if (selectedGameForSettings && isHost && $socket) {
+      $socket.emit('start_game', selectedGameForSettings, settings);
+      showSettingsModal = false;
+      selectedGameForSettings = null;
+    }
+  }
+
+  function handleCloseModal() {
+    showSettingsModal = false;
+    selectedGameForSettings = null;
   }
 
   function selectGame(gameType: GameType) {
@@ -451,6 +469,16 @@
       </div>
     </div>
   </div>
+
+  <!-- Game Settings Modal -->
+  {#if selectedGameForSettings}
+    <GameSettingsModal
+      gameType={selectedGameForSettings}
+      open={showSettingsModal}
+      onClose={handleCloseModal}
+      onStart={handleStartWithSettings}
+    />
+  {/if}
 </div>
 
 <style>

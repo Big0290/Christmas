@@ -666,6 +666,53 @@
     "descriptionPlaceholder": "Describe your room...",
     "deleteConfirm": "Are you sure you want to delete room {code} ({name})? This action cannot be undone.",
     "reactivateConfirm": "Reactivate room {code} ({name})? This will generate a new host token and extend the room's expiration."
+  },
+  "gameSettings": {
+    "startGame": "Start Game",
+    "defaultSet": "Default Set",
+    "questions": "questions",
+    "items": "items",
+    "prompts": "prompts",
+    "trivia": {
+      "title": "Trivia Royale Settings",
+      "questionCount": "Number of Questions",
+      "timePerQuestion": "Time Per Question",
+      "difficulty": "Difficulty",
+      "difficultyEasy": "Easy",
+      "difficultyMedium": "Medium",
+      "difficultyHard": "Hard",
+      "difficultyMixed": "Mixed",
+      "scoringStrategy": "Scoring Strategy",
+      "scoringSpeed": "Speed",
+      "scoringAccuracy": "Accuracy",
+      "scoringBoth": "Both",
+      "questionSet": "Question Set"
+    },
+    "emoji": {
+      "title": "Emoji Carol Battle Settings",
+      "roundCount": "Number of Rounds",
+      "timePerRound": "Time Per Round",
+      "uniquePickBonus": "Unique Pick Bonus"
+    },
+    "price": {
+      "title": "Price Is Right Settings",
+      "roundCount": "Number of Rounds",
+      "timeLimit": "Time Limit",
+      "scoringMode": "Scoring Mode",
+      "scoringClosestWithoutOver": "Closest Without Going Over",
+      "scoringClosestOverall": "Closest Overall",
+      "itemSet": "Item Set"
+    },
+    "naughty": {
+      "title": "Naughty or Nice Settings",
+      "promptCount": "Number of Prompts",
+      "timePerRound": "Time Per Round",
+      "contentFilter": "Content Filter",
+      "filterPG": "PG",
+      "filterPG13": "PG-13",
+      "filterNone": "None",
+      "promptSet": "Prompt Set"
+    }
   }
 }
 

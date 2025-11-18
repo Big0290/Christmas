@@ -861,7 +861,7 @@ export function setupSocketHandlers(
     // GAME MANAGEMENT (HOST ONLY)
     // ========================================================================
 
-    socket.on('start_game', async (gameType: GameType) => {
+    socket.on('start_game', async (gameType: GameType, settings?: any) => {
       if (!checkRateLimit()) return;
 
       const roomInfo = roomManager.getRoomBySocketId(socket.id);
@@ -871,7 +871,34 @@ export function setupSocketHandlers(
       }
       const room = roomInfo.room;
 
-      const game = await roomManager.startGame(room.code, gameType);
+      // Save settings to database if provided
+      if (settings && supabase) {
+        try {
+          const { error } = await supabase
+            .from('game_settings')
+            .upsert(
+              {
+                room_code: room.code,
+                game_type: gameType,
+                settings: settings,
+                updated_at: new Date().toISOString(),
+              },
+              {
+                onConflict: 'room_code,game_type',
+              }
+            );
+
+          if (error) {
+            console.error(`[Game] Failed to save settings for ${gameType} in room ${room.code}:`, error);
+          } else {
+            console.log(`[Game] Saved settings for ${gameType} in room ${room.code}`);
+          }
+        } catch (error: any) {
+          console.error(`[Game] Error saving settings:`, error);
+        }
+      }
+
+      const game = await roomManager.startGame(room.code, gameType, settings);
       if (!game) {
         socket.emit('error', 'Failed to start game');
         return;

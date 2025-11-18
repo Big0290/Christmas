@@ -584,7 +584,15 @@ export class RoomManager {
   }
 
   // Game management
-  async startGame(roomCode: string, gameType: GameType): Promise<BaseGameEngine | null> {
+  async startGame(
+    roomCode: string,
+    gameType: GameType,
+    providedSettings?:
+      | TriviaRoyaleSettings
+      | PriceIsRightSettings
+      | NaughtyOrNiceSettings
+      | EmojiCarolSettings
+  ): Promise<BaseGameEngine | null> {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
 
@@ -599,7 +607,10 @@ export class RoomManager {
       | EmojiCarolSettings
       | undefined;
 
-    if (this.supabase) {
+    // Use provided settings if available, otherwise load from database
+    if (providedSettings) {
+      gameSettings = providedSettings;
+    } else if (this.supabase) {
       // Try to get game settings to find customSetId and all settings
       const { data: settingsData } = await this.supabase
         .from('game_settings')
@@ -610,7 +621,6 @@ export class RoomManager {
 
       if (settingsData?.settings) {
         const settings = settingsData.settings;
-        const customSetId = settings.customQuestionSetId || settings.customItemSetId || settings.customPromptSetId;
         
         // Store full settings object based on game type
         if (gameType === GameType.TRIVIA_ROYALE) {
@@ -622,17 +632,47 @@ export class RoomManager {
         } else if (gameType === GameType.EMOJI_CAROL) {
           gameSettings = settings as EmojiCarolSettings;
         }
-        
-        if (gameType === GameType.TRIVIA_ROYALE) {
-          if (customSetId) {
-            // Load custom question set
-            const { data: questionsData } = await this.supabase
+      }
+    }
+
+    // Get customSetId from settings (either provided or loaded from database)
+    if (gameSettings) {
+      const customSetId = (gameSettings as any).customQuestionSetId || 
+                         (gameSettings as any).customItemSetId || 
+                         (gameSettings as any).customPromptSetId;
+      
+      if (gameType === GameType.TRIVIA_ROYALE) {
+        if (customSetId && this.supabase) {
+          // Load custom question set
+          const { data: questionsData } = await this.supabase
+            .from('trivia_questions')
+            .select('*')
+            .eq('set_id', customSetId);
+
+          if (questionsData && questionsData.length > 0) {
+            customQuestions = questionsData.map((q) => ({
+              id: q.id,
+              question: q.question,
+              answers: q.answers,
+              correctIndex: q.correct_index,
+              difficulty: q.difficulty,
+              category: q.category,
+              imageUrl: q.image_url,
+              translations: q.translations || undefined,
+            }));
+          }
+        } else {
+          // Load default questions from database (set_id IS NULL)
+          if (this.supabase) {
+            const { data: defaultQuestionsData } = await this.supabase
               .from('trivia_questions')
               .select('*')
-              .eq('set_id', customSetId);
+              .is('set_id', null)
+              .order('created_at', { ascending: true })
+              .limit(50); // Limit to prevent loading too many
 
-            if (questionsData && questionsData.length > 0) {
-              customQuestions = questionsData.map((q) => ({
+            if (defaultQuestionsData && defaultQuestionsData.length > 0) {
+              customQuestions = defaultQuestionsData.map((q) => ({
                 id: q.id,
                 question: q.question,
                 answers: q.answers,
@@ -643,42 +683,41 @@ export class RoomManager {
                 translations: q.translations || undefined,
               }));
             }
-          } else {
-            // Load default questions from database (set_id IS NULL)
-            if (this.supabase) {
-              const { data: defaultQuestionsData } = await this.supabase
-                .from('trivia_questions')
-                .select('*')
-                .is('set_id', null)
-                .order('created_at', { ascending: true })
-                .limit(50); // Limit to prevent loading too many
-
-              if (defaultQuestionsData && defaultQuestionsData.length > 0) {
-                customQuestions = defaultQuestionsData.map((q) => ({
-                  id: q.id,
-                  question: q.question,
-                  answers: q.answers,
-                  correctIndex: q.correct_index,
-                  difficulty: q.difficulty,
-                  category: q.category,
-                  imageUrl: q.image_url,
-                  translations: q.translations || undefined,
-                }));
-              }
-            }
-            // If database query fails or returns no results, fallback to hardcoded DEFAULT_QUESTIONS
-            // (handled in TriviaRoyaleGame constructor)
           }
-        } else if (gameType === GameType.PRICE_IS_RIGHT) {
-          if (customSetId) {
-            // Load custom item set
-            const { data: itemsData } = await this.supabase
+          // If database query fails or returns no results, fallback to hardcoded DEFAULT_QUESTIONS
+          // (handled in TriviaRoyaleGame constructor)
+        }
+      } else if (gameType === GameType.PRICE_IS_RIGHT) {
+        if (customSetId && this.supabase) {
+          // Load custom item set
+          const { data: itemsData } = await this.supabase
+            .from('price_items')
+            .select('*')
+            .eq('set_id', customSetId);
+
+          if (itemsData && itemsData.length > 0) {
+            customItems = itemsData.map((item) => ({
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              price: parseFloat(item.price),
+              imageUrl: item.image_url,
+              category: item.category,
+              translations: item.translations || undefined,
+            }));
+          }
+        } else {
+          // Load default items from database (set_id IS NULL)
+          if (this.supabase) {
+            const { data: defaultItemsData } = await this.supabase
               .from('price_items')
               .select('*')
-              .eq('set_id', customSetId);
+              .is('set_id', null)
+              .order('created_at', { ascending: true })
+              .limit(50);
 
-            if (itemsData && itemsData.length > 0) {
-              customItems = itemsData.map((item) => ({
+            if (defaultItemsData && defaultItemsData.length > 0) {
+              customItems = defaultItemsData.map((item) => ({
                 id: item.id,
                 name: item.name,
                 description: item.description,
@@ -688,41 +727,39 @@ export class RoomManager {
                 translations: item.translations || undefined,
               }));
             }
-          } else {
-            // Load default items from database (set_id IS NULL)
-            if (this.supabase) {
-              const { data: defaultItemsData } = await this.supabase
-                .from('price_items')
-                .select('*')
-                .is('set_id', null)
-                .order('created_at', { ascending: true })
-                .limit(50);
-
-              if (defaultItemsData && defaultItemsData.length > 0) {
-                customItems = defaultItemsData.map((item) => ({
-                  id: item.id,
-                  name: item.name,
-                  description: item.description,
-                  price: parseFloat(item.price),
-                  imageUrl: item.image_url,
-                  category: item.category,
-                  translations: item.translations || undefined,
-                }));
-              }
-            }
-            // If database query fails or returns no results, fallback to hardcoded DEFAULT_ITEMS
-            // (handled in PriceIsRightGame constructor)
           }
-        } else if (gameType === GameType.NAUGHTY_OR_NICE) {
-          if (customSetId) {
-            // Load custom prompt set
-            const { data: promptsData } = await this.supabase
+          // If database query fails or returns no results, fallback to hardcoded DEFAULT_ITEMS
+          // (handled in PriceIsRightGame constructor)
+        }
+      } else if (gameType === GameType.NAUGHTY_OR_NICE) {
+        if (customSetId && this.supabase) {
+          // Load custom prompt set
+          const { data: promptsData } = await this.supabase
+            .from('naughty_prompts')
+            .select('*')
+            .eq('set_id', customSetId);
+
+          if (promptsData && promptsData.length > 0) {
+            customPrompts = promptsData.map((p) => ({
+              id: p.id,
+              prompt: p.prompt,
+              category: p.category || '',
+              contentRating: p.content_rating || 'pg',
+              translations: p.translations || undefined,
+            }));
+          }
+        } else {
+          // Load default prompts from database (set_id IS NULL)
+          if (this.supabase) {
+            const { data: defaultPromptsData } = await this.supabase
               .from('naughty_prompts')
               .select('*')
-              .eq('set_id', customSetId);
+              .is('set_id', null)
+              .order('created_at', { ascending: true })
+              .limit(50);
 
-            if (promptsData && promptsData.length > 0) {
-              customPrompts = promptsData.map((p) => ({
+            if (defaultPromptsData && defaultPromptsData.length > 0) {
+              customPrompts = defaultPromptsData.map((p) => ({
                 id: p.id,
                 prompt: p.prompt,
                 category: p.category || '',
@@ -730,29 +767,9 @@ export class RoomManager {
                 translations: p.translations || undefined,
               }));
             }
-          } else {
-            // Load default prompts from database (set_id IS NULL)
-            if (this.supabase) {
-              const { data: defaultPromptsData } = await this.supabase
-                .from('naughty_prompts')
-                .select('*')
-                .is('set_id', null)
-                .order('created_at', { ascending: true })
-                .limit(50);
-
-              if (defaultPromptsData && defaultPromptsData.length > 0) {
-                customPrompts = defaultPromptsData.map((p) => ({
-                  id: p.id,
-                  prompt: p.prompt,
-                  category: p.category || '',
-                  contentRating: p.content_rating || 'pg',
-                  translations: p.translations || undefined,
-                }));
-              }
-            }
-            // If database query fails or returns no results, fallback to hardcoded DEFAULT_PROMPTS
-            // (handled in NaughtyOrNiceGame constructor)
           }
+          // If database query fails or returns no results, fallback to hardcoded DEFAULT_PROMPTS
+          // (handled in NaughtyOrNiceGame constructor)
         }
       }
     }

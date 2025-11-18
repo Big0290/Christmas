@@ -687,6 +687,53 @@
     "descriptionPlaceholder": "Décrivez votre salle...",
     "deleteConfirm": "Êtes-vous sûr de vouloir supprimer la salle {code} ({name}) ? Cette action est irréversible.",
     "reactivateConfirm": "Réactiver la salle {code} ({name}) ? Cela générera un nouveau jeton d'hôte et prolongera l'expiration de la salle."
+  },
+  "gameSettings": {
+    "startGame": "Démarrer le jeu",
+    "defaultSet": "Jeu par défaut",
+    "questions": "questions",
+    "items": "articles",
+    "prompts": "invites",
+    "trivia": {
+      "title": "Paramètres Trivia Royale",
+      "questionCount": "Nombre de questions",
+      "timePerQuestion": "Temps par question",
+      "difficulty": "Difficulté",
+      "difficultyEasy": "Facile",
+      "difficultyMedium": "Moyen",
+      "difficultyHard": "Difficile",
+      "difficultyMixed": "Mixte",
+      "scoringStrategy": "Stratégie de notation",
+      "scoringSpeed": "Vitesse",
+      "scoringAccuracy": "Précision",
+      "scoringBoth": "Les deux",
+      "questionSet": "Jeu de questions"
+    },
+    "emoji": {
+      "title": "Paramètres Emoji Carol Battle",
+      "roundCount": "Nombre de manches",
+      "timePerRound": "Temps par manche",
+      "uniquePickBonus": "Bonus de choix unique"
+    },
+    "price": {
+      "title": "Paramètres Price Is Right",
+      "roundCount": "Nombre de manches",
+      "timeLimit": "Limite de temps",
+      "scoringMode": "Mode de notation",
+      "scoringClosestWithoutOver": "Le plus proche sans dépasser",
+      "scoringClosestOverall": "Le plus proche en général",
+      "itemSet": "Jeu d'articles"
+    },
+    "naughty": {
+      "title": "Paramètres Naughty or Nice",
+      "promptCount": "Nombre d'invites",
+      "timePerRound": "Temps par manche",
+      "contentFilter": "Filtre de contenu",
+      "filterPG": "PG",
+      "filterPG13": "PG-13",
+      "filterNone": "Aucun",
+      "promptSet": "Jeu d'invites"
+    }
   }
 }
 
