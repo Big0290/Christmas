@@ -27,6 +27,7 @@
 
   let progressInterval: number | null = null;
   let jukeboxStateHandler: ((e: CustomEvent) => void) | null = null;
+  let metadataHandler: ((e: CustomEvent) => void) | null = null;
   let visualizerKey = 0; // Force visualizer to restart when tracks change
   let refreshing = false;
   let tracksLoaded = false; // Track if tracks have been loaded
@@ -103,6 +104,16 @@
     };
     window.addEventListener('jukebox_state_update', jukeboxStateHandler as EventListener);
 
+    // Listen for audio metadata loaded events to update duration immediately
+    metadataHandler = (e: CustomEvent) => {
+      const audioManager = getAudioManager();
+      const newDuration = audioManager.getDuration();
+      if (newDuration && !isNaN(newDuration) && newDuration > 0) {
+        duration = newDuration;
+      }
+    };
+    window.addEventListener('audio_metadata_loaded', metadataHandler as EventListener);
+
     // Start progress tracking
     startProgressTracking();
   });
@@ -113,6 +124,9 @@
     }
     if (jukeboxStateHandler) {
       window.removeEventListener('jukebox_state_update', jukeboxStateHandler as EventListener);
+    }
+    if (metadataHandler) {
+      window.removeEventListener('audio_metadata_loaded', metadataHandler as EventListener);
     }
   });
 
@@ -125,7 +139,11 @@
       if (!browser) return;
       const audioManager = getAudioManager();
       progress = audioManager.getProgress();
-      duration = audioManager.getDuration();
+      const newDuration = audioManager.getDuration();
+      // Only update duration if it's a valid number (not NaN or 0)
+      if (newDuration && !isNaN(newDuration) && newDuration > 0) {
+        duration = newDuration;
+      }
       isPlaying = audioManager.getIsPlaying();
       
       // Sync current track from audio manager (handles shuffle correctly)
@@ -417,10 +435,29 @@
   // The progress tracking interval will keep it in sync
   
   // Get current track - use the index directly from our tracks array
-  // This will update immediately when currentTrackIndex changes
-  const currentTrack = currentTrackIndex >= 0 && currentTrackIndex < tracks.length 
-    ? tracks[currentTrackIndex] 
-    : null;
+  // Also check audio manager directly as fallback if index is invalid
+  $: currentTrack = (() => {
+    // First try using currentTrackIndex
+    if (currentTrackIndex >= 0 && currentTrackIndex < tracks.length) {
+      return tracks[currentTrackIndex];
+    }
+    
+    // Fallback: check audio manager directly
+    if (browser && tracks.length > 0) {
+      const audioManager = getAudioManager();
+      const managerTrack = audioManager.getCurrentTrack();
+      if (managerTrack) {
+        const foundIndex = tracks.findIndex(t => t.path === managerTrack.path);
+        if (foundIndex >= 0) {
+          // Sync the index for consistency
+          currentTrackIndex = foundIndex;
+          return tracks[foundIndex];
+        }
+      }
+    }
+    
+    return null;
+  })();
 </script>
 
 <div class="jukebox-container" class:minimized>

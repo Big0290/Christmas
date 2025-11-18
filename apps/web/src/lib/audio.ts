@@ -166,6 +166,16 @@ class AudioManager {
       this.handleTrackEnded();
     });
 
+    // Set up metadata loaded handler to notify when duration is available
+    this.backgroundMusic.addEventListener('loadedmetadata', () => {
+      // Dispatch custom event to notify components that duration is now available
+      if (browser && window) {
+        window.dispatchEvent(new CustomEvent('audio_metadata_loaded', {
+          detail: { duration: this.backgroundMusic?.duration || 0 }
+        }));
+      }
+    });
+
     // Set up audio context for visualizer
     this.setupAudioContext();
 
