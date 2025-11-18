@@ -169,7 +169,7 @@
             </div>
           {/if}
 
-          {#if $gameState?.guesses && Object.keys($gameState.guesses).length > 0}
+          {#if currentState === GameState.ROUND_END || ($gameState?.guesses && Object.keys($gameState.guesses).length > 0)}
             <div class="guesses-section-large">
               <h4 class="guesses-title-large">
                 <span class="guesses-title-bilingual">
@@ -177,6 +177,7 @@
                   <span class="guesses-title-english">All Guesses:</span>
                 </span>
               </h4>
+              {#if $gameState?.guesses && Object.keys($gameState.guesses).length > 0}
               <div class="guesses-list-large">
                 {#each (() => {
                   const guessesArray = Object.entries($gameState.guesses).map(([playerId, guess]) => {
@@ -242,15 +243,18 @@
                     {/if}
                   </div>
                 {/each}
-              </div>
             </div>
           {:else}
+                <div class="guesses-list-large">
             <p class="no-guesses-large">
               <span class="no-guesses-bilingual">
-                <span class="no-guesses-french">Aucune supposition pour le moment</span>
-                <span class="no-guesses-english">No guesses yet</span>
+                      <span class="no-guesses-french">Aucun joueur n'a deviné</span>
+                      <span class="no-guesses-english">No players guessed</span>
               </span>
             </p>
+                </div>
+              {/if}
+            </div>
           {/if}
         {/if}
       </div>

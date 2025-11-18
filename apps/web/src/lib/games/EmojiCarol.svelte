@@ -164,17 +164,50 @@
     gap: 1.5rem;
     width: 100%;
     padding-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .emoji-card::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(173, 216, 230, 0.2) 50%, rgba(255, 255, 255, 0.3) 100%);
+    background-size: 200% 200%;
+    animation: frost-shimmer 3s ease-in-out infinite;
+    z-index: -1;
+    opacity: 0.5;
+  }
+
+  @keyframes frost-shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
 
   .round-badge {
-    background: rgba(196, 30, 58, 0.3);
-    border: 2px solid #c41e3a;
+    background: rgba(173, 216, 230, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.4);
     padding: 0.5rem 1rem;
     border-radius: 9999px;
     font-weight: bold;
     text-align: center;
     width: fit-content;
     margin: 0 auto;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    position: relative;
+  }
+
+  .round-badge::before {
+    content: '❄️';
+    margin-right: 0.25rem;
+    animation: sparkle 2s ease-in-out infinite;
+  }
+
+  @keyframes sparkle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
   }
 
   .instruction {
@@ -183,8 +216,26 @@
     text-align: center;
     padding: 1.25rem;
     background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 1rem;
     line-height: 1.5;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 20px rgba(173, 216, 230, 0.3);
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+    position: relative;
+    overflow: hidden;
+  }
+
+  .instruction::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(173, 216, 230, 0.2) 50%, rgba(255, 255, 255, 0.3) 100%);
+    background-size: 200% 200%;
+    animation: frost-shimmer 3s ease-in-out infinite;
+    z-index: -1;
+    opacity: 0.6;
   }
 
   .emoji-grid {
@@ -200,8 +251,10 @@
     min-height: 70px;
     min-width: 70px;
     font-size: clamp(2.5rem, 8vw, 3rem);
-    background: rgba(15, 134, 68, 0.2);
-    border: 3px solid #0f8644;
+    background: rgba(173, 216, 230, 0.15);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 1rem;
     transition: all 0.15s;
     display: flex;
@@ -211,12 +264,42 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .emoji-button::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 1rem;
+    background: 
+      linear-gradient(0deg, transparent 0%, transparent 25%, #ff0000 25%, #ff0000 27%, transparent 27%, transparent 50%, #00ff00 50%, #00ff00 52%, transparent 52%, transparent 75%, #0000ff 75%, #0000ff 77%, transparent 77%, transparent 100%),
+      linear-gradient(90deg, transparent 0%, transparent 25%, #ff0000 25%, #ff0000 27%, transparent 27%, transparent 50%, #00ff00 50%, #00ff00 52%, transparent 52%, transparent 75%, #0000ff 75%, #0000ff 77%, transparent 77%, transparent 100%),
+      linear-gradient(180deg, transparent 0%, transparent 25%, #ff0000 25%, #ff0000 27%, transparent 27%, transparent 50%, #00ff00 50%, #00ff00 52%, transparent 52%, transparent 75%, #0000ff 75%, #0000ff 77%, transparent 77%, transparent 100%),
+      linear-gradient(270deg, transparent 0%, transparent 25%, #ff0000 25%, #ff0000 27%, transparent 27%, transparent 50%, #00ff00 50%, #00ff00 52%, transparent 52%, transparent 75%, #0000ff 75%, #0000ff 77%, transparent 77%, transparent 100%);
+    background-size: 100% 3px, 3px 100%, 100% 3px, 3px 100%;
+    background-position: 0 0, 0 0, 0 100%, 100% 0;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    opacity: 0;
+    pointer-events: none;
+    animation: christmas-lights-card 1.5s ease-in-out infinite;
+    filter: blur(0.5px);
+    z-index: 1;
+  }
+
+  @keyframes christmas-lights-card {
+    0%, 100% { opacity: 0.4; filter: blur(0.5px) brightness(0.9); }
+    25% { opacity: 0.9; filter: blur(0.3px) brightness(1.4); }
+    50% { opacity: 0.6; filter: blur(0.5px) brightness(1.1); }
+    75% { opacity: 1; filter: blur(0.3px) brightness(1.5); }
   }
 
   .emoji-button:active:not(:disabled),
   .emoji-button:hover:not(:disabled) {
     transform: scale(0.95);
-    background: rgba(15, 134, 68, 0.4);
+    background: rgba(173, 216, 230, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
   }
 
   .emoji-button.picked {
@@ -251,6 +334,20 @@
     width: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(173, 216, 230, 0.2) 50%, rgba(255, 255, 255, 0.3) 100%);
+    background-size: 200% 200%;
+    animation: frost-shimmer 3s ease-in-out infinite;
+    z-index: -1;
+    opacity: 0.5;
   }
 
   @keyframes spin {
@@ -289,6 +386,8 @@
     font-size: 1.5rem;
     font-weight: bold;
     color: #ffd700;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.3);
+    filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.3));
   }
 
   .timer-display {

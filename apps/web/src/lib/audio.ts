@@ -12,7 +12,7 @@ class AudioManager {
   private effectsVolume = 0.5;
   private musicEnabled = true;
   private effectsEnabled = true;
-  
+
   // Track last played sound events to prevent duplicates
   private lastPlayedSounds: Map<string, number> = new Map();
   private readonly SOUND_DEBOUNCE_MS = 500; // Prevent same sound from playing within 500ms

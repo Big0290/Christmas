@@ -35,8 +35,8 @@
         <h3 class="prompt-text-large prompt-text-english">{englishPrompt}</h3>
 
         <div class="vote-options-large">
-          {#if $gameState?.votes}
-            {@const votes = $gameState.votes || {}}
+          {#if currentState === GameState.ROUND_END || currentState === GameState.PLAYING || $gameState?.votes}
+            {@const votes = $gameState?.votes || {}}
             {@const naughtyCount = Object.values(votes).filter((v) => v === 'naughty').length}
             {@const niceCount = Object.values(votes).filter((v) => v === 'nice').length}
             {@const totalVotes = naughtyCount + niceCount}
@@ -125,25 +125,6 @@
                   </div>
                 </div>
               {/if}
-            </div>
-          {:else}
-            <div class="vote-option-card-large">
-              <span class="vote-emoji-large">😈</span>
-              <span class="vote-label-large">
-                <span class="vote-label-bilingual">
-                  <span class="vote-label-french">Méchant</span>
-                  <span class="vote-label-english">Naughty</span>
-                </span>
-              </span>
-            </div>
-            <div class="vote-option-card-large">
-              <span class="vote-emoji-large">😇</span>
-              <span class="vote-label-large">
-                <span class="vote-label-bilingual">
-                  <span class="vote-label-french">Gentil</span>
-                  <span class="vote-label-english">Nice</span>
-                </span>
-              </span>
             </div>
           {/if}
         </div>

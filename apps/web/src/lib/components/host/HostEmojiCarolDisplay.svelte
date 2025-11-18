@@ -12,7 +12,7 @@
   <div class="emoji-host-projection">
     <div class="emoji-question-section">
       <h2 class="game-title">🎶 Emoji Carol Battle</h2>
-      {#if currentState === GameState.ROUND_END && $gameState?.roundResults?.[round - 1]}
+      {#if currentState === GameState.ROUND_END}
         <!-- Round End: Show results -->
         <div class="emoji-display-large">
           <div class="round-number">
@@ -47,6 +47,16 @@
                   <span class="count-bilingual">
                     <span class="count-french">{count} {count === 1 ? 'vote' : 'votes'}</span>
                     <span class="count-english">{count} {count === 1 ? 'vote' : 'votes'}</span>
+                  </span>
+                </span>
+              </div>
+            {:else}
+              <div class="emoji-result-card-large">
+                <span class="emoji-display-large-host">📭</span>
+                <span class="emoji-count-large">
+                  <span class="count-bilingual">
+                    <span class="count-french">Aucun emoji choisi</span>
+                    <span class="count-english">No emojis picked</span>
                   </span>
                 </span>
               </div>

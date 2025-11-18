@@ -640,19 +640,53 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    background: linear-gradient(135deg, #0a1a2e 0%, #1a2a4e 30%, #2a3a6e 60%, #1a2a4e 100%);
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(173, 216, 230, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(176, 224, 230, 0.1) 0%, transparent 50%);
+    color: white;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Snowflake animation background */
+  .mobile-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cpath d='M50 0 L55 20 L75 15 L60 30 L80 40 L50 35 L50 50 L35 50 L40 30 L20 40 L30 25 L15 20 L35 15 Z' fill='rgba(255,255,255,0.03)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    animation: snow-drift 20s linear infinite;
+    pointer-events: none;
+    opacity: 0.6;
+    z-index: 0;
+  }
+
+  @keyframes snow-drift {
+    0% { transform: translateY(0) translateX(0); }
+    100% { transform: translateY(100vh) translateX(50px); }
   }
 
   .mobile-header {
     padding: 1rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
     position: relative;
+    z-index: 1;
   }
 
   .score-display {
     transition: transform 0.2s;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px rgba(173, 216, 230, 0.5);
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
   }
 
   .score-display:global(.score-updated) {
@@ -676,6 +710,8 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     width: 100%;
+    position: relative;
+    z-index: 1;
   }
 
   /* Disable text selection for better mobile UX */

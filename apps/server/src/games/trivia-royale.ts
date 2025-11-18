@@ -381,7 +381,13 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
       this.state.answerCounts = undefined;
       this.state.answerPercentages = undefined;
       this.state.playersByAnswer = undefined;
+      
+      // If this was the last round, end the game instead of starting a new round
+      if (this.state.round >= this.state.maxRounds) {
+        this.end();
+      } else {
       this.nextRound();
+      }
     }, 8000); // Extended to 8 seconds to show reveal
   }
 

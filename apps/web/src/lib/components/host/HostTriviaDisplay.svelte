@@ -80,7 +80,8 @@
                   </span>
                 {/if}
               </div>
-              {#if currentState === GameState.ROUND_END && $gameState?.showReveal}
+              {#if currentState === GameState.ROUND_END}
+                {#if $gameState?.showReveal}
                 <div class="answer-stats-large">
                   <div class="percentage-bar-container-large">
                     <div
@@ -97,6 +98,24 @@
                     </span>
                   </div>
                 </div>
+                {:else}
+                  <div class="answer-stats-large">
+                    <div class="percentage-bar-container-large">
+                      <div
+                        class="percentage-bar-large"
+                        class:correct={isCorrect}
+                        style="width: 0%"
+                      ></div>
+                    </div>
+                    <div class="stats-text-large">
+                      <span>0%</span>
+                      <span class="votes-bilingual">
+                        <span class="votes-french">(0 votes)</span>
+                        <span class="votes-english">(0 votes)</span>
+                      </span>
+                    </div>
+                  </div>
+                {/if}
               {:else if currentState === GameState.PLAYING}
                 <div class="answer-progress-large">
                   <div class="progress-text-large">

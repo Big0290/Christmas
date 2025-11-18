@@ -136,9 +136,14 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
 
     this.state.state = GameState.ROUND_END;
 
-    // Move to next round
+    // Move to next round (or end game if this was the last round)
     this.setTimer(() => {
+      // If this was the last round, end the game instead of starting a new round
+      if (this.state.round >= this.state.maxRounds) {
+        this.end();
+      } else {
       this.nextRound();
+      }
     }, 5000);
   }
 
