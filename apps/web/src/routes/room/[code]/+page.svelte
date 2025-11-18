@@ -581,26 +581,44 @@
     }
   }
 
-  /* Smooth scrollbar styling */
+  /* Smooth scrollbar styling - Candy Cane */
   :global(.room-page .card > div[class*="overflow-y-auto"]) {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 215, 0, 0.3) transparent;
+    scrollbar-color: #C41E3A transparent;
   }
 
   :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar) {
-    width: 8px;
+    width: 10px;
   }
 
   :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-track) {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
   }
 
   :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb) {
-    background: rgba(255, 215, 0, 0.3);
-    border-radius: 4px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 6px,
+      #ffffff 6px,
+      #ffffff 12px
+    );
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2);
   }
 
   :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover) {
-    background: rgba(255, 215, 0, 0.5);
+    background: repeating-linear-gradient(
+      45deg,
+      #ff0000 0px,
+      #ff0000 6px,
+      #ffffff 6px,
+      #ffffff 12px
+    );
+    box-shadow: 
+      inset 0 1px 2px rgba(255, 255, 255, 0.3),
+      0 0 8px rgba(196, 30, 58, 0.4);
   }
 </style>

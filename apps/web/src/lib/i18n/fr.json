@@ -468,7 +468,9 @@
     "shuffle": "Mélanger",
     "repeat": "Répéter : {mode}",
     "playlist": "Liste de lecture ({count})",
-    "showPlaylist": "Afficher la liste de lecture ({count} pistes)"
+    "showPlaylist": "Afficher la liste de lecture ({count} pistes)",
+    "showVisualizer": "Afficher le visualiseur",
+    "closeVisualizer": "Fermer le visualiseur"
   },
   "gameTile": {
     "player": "joueur",

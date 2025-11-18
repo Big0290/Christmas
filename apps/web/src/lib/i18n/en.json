@@ -453,7 +453,9 @@
     "shuffle": "Shuffle",
     "repeat": "Repeat: {mode}",
     "playlist": "Playlist ({count})",
-    "showPlaylist": "Show Playlist ({count} tracks)"
+    "showPlaylist": "Show Playlist ({count} tracks)",
+    "showVisualizer": "Show Visualizer",
+    "closeVisualizer": "Close Visualizer"
   },
   "gameTile": {
     "player": "player",

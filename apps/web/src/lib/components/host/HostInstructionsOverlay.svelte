@@ -343,7 +343,7 @@
     border: 1px solid rgba(255, 215, 0, 0.2);
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - Candy Cane */
   .instructions-content::-webkit-scrollbar {
     width: 12px;
   }
@@ -354,21 +354,34 @@
   }
 
   .instructions-content::-webkit-scrollbar-thumb {
-    background: linear-gradient(
-      135deg,
-      var(--christmas-gold),
-      var(--christmas-red)
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 6px,
+      #ffffff 6px,
+      #ffffff 12px
     );
     border-radius: 6px;
-    border: 2px solid rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2);
   }
 
   .instructions-content::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(
-      135deg,
-      var(--christmas-red),
-      var(--christmas-gold)
+    background: repeating-linear-gradient(
+      45deg,
+      #ff0000 0px,
+      #ff0000 6px,
+      #ffffff 6px,
+      #ffffff 12px
     );
+    box-shadow: 
+      inset 0 1px 2px rgba(255, 255, 255, 0.3),
+      0 0 8px rgba(196, 30, 58, 0.4);
+  }
+  
+  .instructions-content {
+    scrollbar-width: thin;
+    scrollbar-color: #C41E3A rgba(0, 0, 0, 0.2);
   }
 
   /* Responsive design */

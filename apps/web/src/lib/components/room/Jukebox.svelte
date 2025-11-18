@@ -5,6 +5,7 @@
   import { discoverBackgroundMusicTracks, clearTrackCache, type Track } from '$lib/utils/audio-discovery';
   import { socket } from '$lib/socket';
   import AudioVisualizer from './AudioVisualizer.svelte';
+  import ChristmasVisualizer from './ChristmasVisualizer.svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
 
@@ -12,7 +13,7 @@
   export let isHost: boolean = false;
 
   let tracks: Track[] = [];
-  let currentTrackIndex = 0;
+  let currentTrackIndex = -1; // Start with -1 to show "no track" until one is selected
   let isPlaying = false;
   let shuffleEnabled = false;
   let repeatMode: RepeatMode = 'all';
@@ -22,6 +23,7 @@
   let minimized = false;
   let showPlaylist = false; // Start with playlist collapsed for compactness
   let progressUpdating = false;
+  let showVisualizer = false;
 
   let progressInterval: number | null = null;
   let jukeboxStateHandler: ((e: CustomEvent) => void) | null = null;
@@ -50,6 +52,18 @@
 
         // Mark tracks as loaded
         tracksLoaded = true;
+
+        // Sync current track index from audio manager immediately
+        const managerTrack = audioManager.getCurrentTrack();
+        if (managerTrack) {
+          const foundIndex = tracks.findIndex(t => t.path === managerTrack.path);
+          if (foundIndex >= 0) {
+            currentTrackIndex = foundIndex;
+          }
+        } else {
+          // If no track is playing, reset to -1 to show "no track" message
+          currentTrackIndex = -1;
+        }
 
         // Sync initial state
         if (isHost && tracks.length > 0) {
@@ -113,6 +127,15 @@
       progress = audioManager.getProgress();
       duration = audioManager.getDuration();
       isPlaying = audioManager.getIsPlaying();
+      
+      // Sync current track from audio manager (handles shuffle correctly)
+      const managerTrack = audioManager.getCurrentTrack();
+      if (managerTrack && tracks.length > 0) {
+        const foundIndex = tracks.findIndex(t => t.path === managerTrack.path);
+        if (foundIndex >= 0 && foundIndex !== currentTrackIndex) {
+          currentTrackIndex = foundIndex;
+        }
+      }
     }, 100);
   }
 
@@ -311,8 +334,31 @@
 
     try {
       const audioManager = getAudioManager();
-      audioManager.playTrack(index);
+      
+      // Set the index immediately - this will update the UI right away
       currentTrackIndex = index;
+      
+      // Play the track - this will set the track in audio manager
+      audioManager.playTrack(index);
+      
+      // Verify the audio manager has the correct track after a brief moment
+      // Use setTimeout to allow playTrack to complete
+      setTimeout(() => {
+        const managerIndex = audioManager.getCurrentTrackIndex();
+        const managerTrack = audioManager.getCurrentTrack();
+        
+        if (managerTrack) {
+          // Find the track in our tracks array by path
+          const foundIndex = tracks.findIndex(t => t.path === managerTrack.path);
+          if (foundIndex >= 0 && foundIndex !== currentTrackIndex) {
+            currentTrackIndex = foundIndex;
+          }
+        } else if (managerIndex >= 0 && managerIndex < tracks.length && managerIndex !== currentTrackIndex) {
+          // Fallback to index if track object not available
+          currentTrackIndex = managerIndex;
+        }
+      }, 50);
+      
       visualizerKey++; // Force visualizer restart
 
       if ($socket) {
@@ -320,6 +366,15 @@
       }
     } catch (error) {
       console.error('[Jukebox] Error selecting track:', error);
+      // On error, try to sync from audio manager
+      const audioManager = getAudioManager();
+      const managerTrack = audioManager.getCurrentTrack();
+      if (managerTrack) {
+        const foundIndex = tracks.findIndex(t => t.path === managerTrack.path);
+        if (foundIndex >= 0) {
+          currentTrackIndex = foundIndex;
+        }
+      }
     }
   }
 
@@ -357,7 +412,15 @@
     }
   }
 
-  const currentTrack = tracks[currentTrackIndex] || null;
+  // Get current track - sync from audio manager periodically via progress tracking
+  // Don't use reactive statement here as it can interfere with direct index setting
+  // The progress tracking interval will keep it in sync
+  
+  // Get current track - use the index directly from our tracks array
+  // This will update immediately when currentTrackIndex changes
+  const currentTrack = currentTrackIndex >= 0 && currentTrackIndex < tracks.length 
+    ? tracks[currentTrackIndex] 
+    : null;
 </script>
 
 <div class="jukebox-container" class:minimized>
@@ -375,6 +438,15 @@
           {refreshing ? '⏳' : '🔄'}
         </button>
       {/if}
+      {#if !minimized && tracks.length > 0}
+        <button 
+          class="btn-visualizer" 
+          on:click={() => showVisualizer = !showVisualizer}
+          title={t('jukebox.showVisualizer')}
+        >
+          🎄
+        </button>
+      {/if}
       <button class="btn-minimize" on:click={() => minimized = !minimized} title={t('jukebox.minimize')}>
         {minimized ? '⬆️' : '⬇️'}
       </button>
@@ -384,9 +456,13 @@
   {#if !minimized}
     <div class="jukebox-content">
       <!-- Track Display -->
-      <div class="track-display">
+      <div class="track-display" class:no-track={!currentTrack}>
         <div class="track-name">{currentTrack?.displayName || t('jukebox.noTrack')}</div>
-        <div class="track-time">{formatTime(progress)} / {formatTime(duration)}</div>
+        {#if currentTrack}
+          <div class="track-time">{formatTime(progress)} / {formatTime(duration)}</div>
+        {:else}
+          <div class="track-time no-track-time">--:-- / --:--</div>
+        {/if}
       </div>
 
       <!-- Visualizer -->
@@ -518,20 +594,65 @@
   {/if}
 </div>
 
+<!-- Christmas Visualizer Overlay -->
+<ChristmasVisualizer 
+  show={showVisualizer} 
+  {isPlaying} 
+  {currentTrack}
+  onClose={() => showVisualizer = false}
+/>
+
 <style>
   .jukebox-container {
-    background: linear-gradient(135deg, rgba(196, 30, 58, 0.25), rgba(15, 134, 68, 0.25), rgba(255, 215, 0, 0.15));
-    border: 2px solid rgba(255, 215, 0, 0.4);
-    border-radius: 10px;
-    padding: 0.75rem;
-    backdrop-filter: blur(15px);
+    background: linear-gradient(135deg, 
+      rgba(196, 30, 58, 0.3) 0%, 
+      rgba(15, 134, 68, 0.3) 50%, 
+      rgba(255, 215, 0, 0.2) 100%);
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    border-radius: 16px;
+    padding: 1rem;
+    backdrop-filter: blur(20px);
     box-shadow: 
-      0 6px 24px rgba(0, 0, 0, 0.4),
-      0 0 12px rgba(255, 215, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      0 0 20px rgba(255, 215, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2);
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+  }
+  
+  .jukebox-container::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(
+      45deg,
+      #C41E3A 0%,
+      #FFD700 25%,
+      #0F8644 50%,
+      #FFD700 75%,
+      #C41E3A 100%
+    );
+    background-size: 200% 200%;
+    border-radius: 16px;
+    z-index: -1;
+    opacity: 0.6;
+    animation: border-glow 3s ease infinite;
+  }
+  
+  @keyframes border-glow {
+    0%, 100% {
+      background-position: 0% 50%;
+      opacity: 0.5;
+    }
+    50% {
+      background-position: 100% 50%;
+      opacity: 0.8;
+    }
   }
 
   .jukebox-container::before {
@@ -565,14 +686,33 @@
   }
 
   .jukebox-title {
-    font-size: 1rem;
-    font-weight: 800;
+    font-size: 1.1rem;
+    font-weight: 900;
     color: #ffd700;
     text-shadow: 
-      1px 1px 2px rgba(0, 0, 0, 0.7),
-      0 0 6px rgba(255, 215, 0, 0.5);
+      0 0 12px rgba(255, 215, 0, 0.8),
+      0 2px 4px rgba(0, 0, 0, 0.8),
+      1px 1px 2px rgba(0, 0, 0, 0.9);
     margin: 0;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.5px;
+    position: relative;
+    animation: title-glow 2s ease-in-out infinite;
+  }
+  
+  @keyframes title-glow {
+    0%, 100% {
+      text-shadow: 
+        0 0 12px rgba(255, 215, 0, 0.8),
+        0 2px 4px rgba(0, 0, 0, 0.8),
+        1px 1px 2px rgba(0, 0, 0, 0.9);
+    }
+    50% {
+      text-shadow: 
+        0 0 20px rgba(255, 215, 0, 1),
+        0 0 30px rgba(255, 215, 0, 0.6),
+        0 2px 4px rgba(0, 0, 0, 0.8),
+        1px 1px 2px rgba(0, 0, 0, 0.9);
+    }
   }
 
   .jukebox-controls {
@@ -580,53 +720,80 @@
     gap: 0.5rem;
   }
 
-  .btn-minimize {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1.5px solid rgba(255, 215, 0, 0.4);
-    border-radius: 6px;
-    padding: 0.3rem 0.5rem;
+  .btn-minimize,
+  .btn-refresh,
+  .btn-visualizer {
+    background: linear-gradient(135deg, 
+      rgba(196, 30, 58, 0.3), 
+      rgba(15, 134, 68, 0.3));
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    border-radius: 12px;
+    padding: 0.4rem 0.6rem;
     cursor: pointer;
     color: #ffd700;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    font-size: 0.95rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+      0 3px 8px rgba(0, 0, 0, 0.3),
+      0 0 8px rgba(255, 215, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    position: relative;
+    overflow: hidden;
   }
 
-  .btn-minimize:hover {
-    background: rgba(255, 215, 0, 0.2);
+  .btn-minimize::before,
+  .btn-refresh::before,
+  .btn-visualizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 215, 0, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.4s, height 0.4s;
+  }
+
+  .btn-minimize:hover::before,
+  .btn-refresh:hover::before,
+  .btn-visualizer:hover::before {
+    width: 200%;
+    height: 200%;
+  }
+
+  .btn-minimize:hover,
+  .btn-refresh:hover:not(:disabled),
+  .btn-visualizer:hover {
+    background: linear-gradient(135deg, 
+      rgba(255, 215, 0, 0.4), 
+      rgba(196, 30, 58, 0.3));
     border-color: #ffd700;
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+    transform: translateY(-2px) scale(1.08);
+    box-shadow: 
+      0 6px 16px rgba(255, 215, 0, 0.4),
+      0 0 16px rgba(255, 215, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    color: #fff;
   }
 
   .btn-refresh {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1.5px solid rgba(255, 215, 0, 0.4);
-    border-radius: 6px;
-    padding: 0.3rem 0.5rem;
-    cursor: pointer;
-    color: #ffd700;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     margin-right: 0.4rem;
-  }
-
-  .btn-refresh:hover:not(:disabled) {
-    background: rgba(255, 215, 0, 0.2);
-    border-color: #ffd700;
-    transform: rotate(180deg) scale(1.05);
-    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
   }
 
   .btn-refresh.refreshing {
     animation: spin 1s linear infinite;
-    opacity: 0.7;
+    opacity: 0.8;
   }
 
   .btn-refresh:disabled {
     cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 0.5;
+  }
+  
+  .btn-visualizer {
+    margin-right: 0.4rem;
   }
 
   @keyframes spin {
@@ -637,40 +804,122 @@
   .jukebox-content {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
   }
 
   .track-display {
     text-align: center;
-    padding: 0.5rem;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.2));
-    border-radius: 6px;
-    border: 1px solid rgba(255, 215, 0, 0.2);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, 
+      rgba(0, 0, 0, 0.4) 0%, 
+      rgba(196, 30, 58, 0.15) 50%, 
+      rgba(0, 0, 0, 0.4) 100%);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 
+      inset 0 2px 4px rgba(0, 0, 0, 0.4),
+      0 0 12px rgba(255, 215, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .track-display::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, 
+      transparent, 
+      rgba(255, 215, 0, 0.1), 
+      transparent);
+    animation: shimmer 3s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
   }
 
   .track-name {
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.95rem;
+    font-weight: 800;
     color: #ffd700;
-    margin-bottom: 0.15rem;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    margin-bottom: 0.25rem;
+    text-shadow: 
+      0 0 10px rgba(255, 215, 0, 0.6),
+      0 2px 4px rgba(0, 0, 0, 0.8),
+      1px 1px 2px rgba(0, 0, 0, 0.9);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 1;
+  }
+  
+  .track-display.no-track .track-name {
+    color: rgba(255, 255, 255, 0.6);
+    text-shadow: 
+      0 0 8px rgba(255, 255, 255, 0.3),
+      0 2px 4px rgba(0, 0, 0, 0.8);
+    font-style: italic;
+    font-weight: 600;
   }
 
   .track-time {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.95);
     font-family: 'Courier New', monospace;
-    font-weight: 600;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    position: relative;
+    z-index: 1;
+  }
+  
+  .track-time.no-track-time {
+    color: rgba(255, 255, 255, 0.4);
+    opacity: 0.6;
   }
 
   .visualizer-container {
     width: 100%;
-    height: 35px;
-    margin: 0.15rem 0;
+    height: 40px;
+    margin: 0.25rem 0;
+    padding: 0.5rem;
+    background: linear-gradient(135deg, 
+      rgba(0, 0, 0, 0.4) 0%, 
+      rgba(196, 30, 58, 0.1) 50%, 
+      rgba(0, 0, 0, 0.4) 100%);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 
+      inset 0 2px 4px rgba(0, 0, 0, 0.3),
+      0 0 8px rgba(255, 215, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .visualizer-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 215, 0, 0.05) 50%,
+      transparent 100%
+    );
+    animation: visualizer-shimmer 2s ease-in-out infinite;
+  }
+  
+  @keyframes visualizer-shimmer {
+    0%, 100% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
   }
 
   .progress-container {
@@ -681,22 +930,64 @@
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: linear-gradient(90deg, rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.1));
     outline: none;
     cursor: pointer;
-    border: 1px solid rgba(255, 215, 0, 0.2);
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  /* WebKit track styling - Candy Cane */
+  .progress-bar::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 8px,
+      #ffffff 8px,
+      #ffffff 16px
+    );
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Firefox track styling - Candy Cane */
+  .progress-bar::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 8px,
+      #ffffff 8px,
+      #ffffff 16px
+    );
+    border: 1px solid rgba(255, 215, 0, 0.3);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   .progress-bar::-webkit-slider-thumb {
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    /* Candy cane thumb with stripes */
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 3px,
+      #ffffff 3px,
+      #ffffff 6px
+    );
     cursor: pointer;
-    border: 1.5px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 1px 4px rgba(255, 215, 0, 0.6), 0 0 6px rgba(255, 215, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 
+      0 2px 6px rgba(196, 30, 58, 0.6),
+      0 0 8px rgba(255, 255, 255, 0.4),
+      inset 0 1px 2px rgba(255, 255, 255, 0.3);
     transition: all 0.2s;
   }
 
@@ -706,13 +997,23 @@
   }
 
   .progress-bar::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    /* Candy cane thumb with stripes */
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 3px,
+      #ffffff 3px,
+      #ffffff 6px
+    );
     cursor: pointer;
-    border: 1.5px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 1px 4px rgba(255, 215, 0, 0.6), 0 0 6px rgba(255, 215, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 
+      0 2px 6px rgba(196, 30, 58, 0.6),
+      0 0 8px rgba(255, 255, 255, 0.4),
+      inset 0 1px 2px rgba(255, 255, 255, 0.3);
     transition: all 0.2s;
   }
 
@@ -729,62 +1030,122 @@
   }
 
   .btn-control {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1));
-    border: 1.5px solid rgba(255, 215, 0, 0.4);
-    border-radius: 6px;
-    padding: 0.4rem 0.6rem;
+    background: linear-gradient(135deg, rgba(196, 30, 58, 0.3), rgba(15, 134, 68, 0.3));
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    border-radius: 14px;
+    padding: 0.5rem 0.75rem;
     cursor: pointer;
     color: white;
     font-size: 1.1rem;
-    transition: all 0.2s ease;
-    min-width: 38px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 44px;
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.3),
+      0 0 8px rgba(255, 215, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-control::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .btn-control:hover:not(:disabled)::before {
+    left: 100%;
   }
 
   .btn-control:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 215, 0, 0.15));
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.4), rgba(196, 30, 58, 0.3));
     border-color: #ffd700;
-    transform: translateY(-2px) scale(1.05);
-    box-shadow: 0 6px 12px rgba(255, 215, 0, 0.3);
+    transform: translateY(-3px) scale(1.08);
+    box-shadow: 
+      0 8px 20px rgba(255, 215, 0, 0.4),
+      0 0 20px rgba(255, 215, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .btn-control:active:not(:disabled) {
-    transform: translateY(0) scale(1);
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 
+      0 4px 12px rgba(255, 215, 0, 0.3),
+      0 0 12px rgba(255, 215, 0, 0.2);
   }
 
   .btn-control:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-    filter: grayscale(0.5);
+    filter: grayscale(0.6);
+    transform: none;
   }
 
   .btn-control.active {
-    background: linear-gradient(135deg, rgba(196, 30, 58, 0.6), rgba(196, 30, 58, 0.4));
+    background: linear-gradient(135deg, rgba(196, 30, 58, 0.7), rgba(196, 30, 58, 0.5));
     border-color: #c41e3a;
-    box-shadow: 0 0 15px rgba(196, 30, 58, 0.5);
+    box-shadow: 
+      0 0 20px rgba(196, 30, 58, 0.6),
+      0 4px 12px rgba(196, 30, 58, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: active-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes active-pulse {
+    0%, 100% {
+      box-shadow: 
+        0 0 20px rgba(196, 30, 58, 0.6),
+        0 4px 12px rgba(196, 30, 58, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+      box-shadow: 
+        0 0 30px rgba(196, 30, 58, 0.8),
+        0 6px 16px rgba(196, 30, 58, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
   }
 
   .btn-play {
-    background: linear-gradient(135deg, rgba(15, 134, 68, 0.4), rgba(15, 134, 68, 0.3));
+    background: linear-gradient(135deg, rgba(15, 134, 68, 0.6), rgba(15, 134, 68, 0.4));
     border-color: #0f8644;
-    font-size: 1.4rem;
-    padding: 0.5rem 0.9rem;
-    box-shadow: 0 3px 8px rgba(15, 134, 68, 0.4);
+    font-size: 1.5rem;
+    padding: 0.6rem 1rem;
+    min-width: 52px;
+    box-shadow: 
+      0 6px 16px rgba(15, 134, 68, 0.5),
+      0 0 12px rgba(15, 134, 68, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
   .btn-play:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(15, 134, 68, 0.6), rgba(15, 134, 68, 0.5));
-    box-shadow: 0 4px 12px rgba(15, 134, 68, 0.6);
+    background: linear-gradient(135deg, rgba(15, 134, 68, 0.8), rgba(15, 134, 68, 0.6));
+    border-color: #0f8644;
+    box-shadow: 
+      0 10px 24px rgba(15, 134, 68, 0.7),
+      0 0 20px rgba(15, 134, 68, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .volume-container {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.2));
-    border-radius: 6px;
-    border: 1px solid rgba(255, 215, 0, 0.2);
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    background: linear-gradient(135deg, 
+      rgba(0, 0, 0, 0.4) 0%, 
+      rgba(15, 134, 68, 0.15) 50%, 
+      rgba(0, 0, 0, 0.4) 100%);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 
+      inset 0 2px 4px rgba(0, 0, 0, 0.3),
+      0 0 8px rgba(255, 215, 0, 0.1);
   }
 
   .volume-label {
@@ -795,21 +1156,64 @@
     flex: 1;
     height: 6px;
     border-radius: 3px;
-    background: linear-gradient(90deg, rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.1));
     outline: none;
     cursor: pointer;
-    border: 1px solid rgba(255, 215, 0, 0.2);
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  /* WebKit track styling - Candy Cane */
+  .volume-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 8px,
+      #ffffff 8px,
+      #ffffff 16px
+    );
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Firefox track styling - Candy Cane */
+  .volume-slider::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 8px,
+      #ffffff 8px,
+      #ffffff 16px
+    );
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   .volume-slider::-webkit-slider-thumb {
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    /* Candy cane thumb with stripes */
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 3px,
+      #ffffff 3px,
+      #ffffff 6px
+    );
     cursor: pointer;
-    border: 1.5px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 1px 4px rgba(255, 215, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 
+      0 2px 6px rgba(196, 30, 58, 0.6),
+      0 0 8px rgba(255, 255, 255, 0.4),
+      inset 0 1px 2px rgba(255, 255, 255, 0.3);
   }
 
   .volume-slider::-webkit-slider-thumb:hover {
@@ -826,11 +1230,16 @@
   .playlist-container {
     max-height: 120px;
     overflow-y: auto;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.2));
-    border-radius: 6px;
-    padding: 0.4rem;
-    border: 1px solid rgba(255, 215, 0, 0.2);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, 
+      rgba(0, 0, 0, 0.4) 0%, 
+      rgba(15, 134, 68, 0.15) 50%, 
+      rgba(0, 0, 0, 0.4) 100%);
+    border-radius: 12px;
+    padding: 0.5rem;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 
+      inset 0 2px 4px rgba(0, 0, 0, 0.3),
+      0 0 8px rgba(255, 215, 0, 0.1);
   }
 
   .playlist-header {
@@ -848,12 +1257,30 @@
   }
 
   .btn-toggle {
-    background: transparent;
-    border: none;
-    color: white;
+    background: linear-gradient(135deg, 
+      rgba(196, 30, 58, 0.2), 
+      rgba(15, 134, 68, 0.2));
+    border: 2px solid rgba(255, 215, 0, 0.4);
+    border-radius: 10px;
+    color: #ffd700;
     cursor: pointer;
     font-size: 1.2rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.4rem 0.6rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 0 6px rgba(255, 215, 0, 0.15);
+  }
+  
+  .btn-toggle:hover {
+    background: linear-gradient(135deg, 
+      rgba(255, 215, 0, 0.3), 
+      rgba(196, 30, 58, 0.2));
+    border-color: #ffd700;
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 
+      0 4px 12px rgba(255, 215, 0, 0.3),
+      0 0 12px rgba(255, 215, 0, 0.2);
   }
 
   .playlist {
@@ -866,23 +1293,36 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.35rem 0.5rem;
-    border-radius: 5px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.2s;
-    color: rgba(255, 255, 255, 0.8);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid transparent;
   }
 
   .playlist-item:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, 
+      rgba(255, 215, 0, 0.15), 
+      rgba(196, 30, 58, 0.1));
+    border-color: rgba(255, 215, 0, 0.3);
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.15);
   }
 
   .playlist-item.active {
-    background: linear-gradient(90deg, rgba(196, 30, 58, 0.4), rgba(196, 30, 58, 0.2));
+    background: linear-gradient(135deg, 
+      rgba(196, 30, 58, 0.5), 
+      rgba(196, 30, 58, 0.3));
     color: #ffd700;
-    font-weight: bold;
-    border-left: 3px solid #ffd700;
-    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.2);
+    font-weight: 800;
+    border: 2px solid #ffd700;
+    border-left: 4px solid #ffd700;
+    box-shadow: 
+      0 4px 12px rgba(255, 215, 0, 0.3),
+      0 0 12px rgba(196, 30, 58, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateX(2px);
   }
 
   .track-number {
@@ -906,29 +1346,61 @@
     text-align: center;
     padding: 0.5rem;
   }
+  
+  .playlist-toggle .btn-toggle {
+    width: 100%;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, 
+      rgba(196, 30, 58, 0.25), 
+      rgba(15, 134, 68, 0.25));
+  }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - Candy Cane */
   .playlist-container::-webkit-scrollbar {
-    width: 8px;
+    width: 10px;
   }
 
   .playlist-container::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
+    border-radius: 5px;
   }
 
   .playlist-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    background: repeating-linear-gradient(
+      45deg,
+      #C41E3A 0px,
+      #C41E3A 6px,
+      #ffffff 6px,
+      #ffffff 12px
+    );
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2);
   }
 
   .playlist-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: repeating-linear-gradient(
+      45deg,
+      #ff0000 0px,
+      #ff0000 6px,
+      #ffffff 6px,
+      #ffffff 12px
+    );
+    box-shadow: 
+      inset 0 1px 2px rgba(255, 255, 255, 0.3),
+      0 0 8px rgba(196, 30, 58, 0.4);
+  }
+  
+  /* Firefox scrollbar */
+  .playlist-container {
+    scrollbar-width: thin;
+    scrollbar-color: #C41E3A rgba(0, 0, 0, 0.2);
   }
 </style>
 
