@@ -8,24 +8,30 @@
   export let scoreboard: Array<{ name: string; score: number }> = [];
 </script>
 
-{#if $gameState?.currentQuestion}
-  {@const questionTranslations = $gameState.currentQuestion.translations}
-  {@const frenchQuestion =
-    typeof questionTranslations?.fr?.question === 'string'
-      ? questionTranslations.fr.question
-      : ''}
-  {@const englishQuestion =
-    typeof questionTranslations?.en?.question === 'string'
-      ? questionTranslations.en.question
-      : $gameState.currentQuestion.question || ''}
-  {@const frenchAnswers = Array.isArray(questionTranslations?.fr?.answers)
-    ? questionTranslations.fr.answers
+{#if $gameState?.currentQuestion || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
+  {@const questionTranslations = $gameState?.currentQuestion?.translations}
+  {@const frenchQuestion = $gameState?.currentQuestion
+    ? (typeof questionTranslations?.fr?.question === 'string'
+        ? questionTranslations.fr.question
+        : '')
+    : ''}
+  {@const englishQuestion = $gameState?.currentQuestion
+    ? (typeof questionTranslations?.en?.question === 'string'
+        ? questionTranslations.en.question
+        : $gameState?.currentQuestion?.question || '')
+    : ''}
+  {@const frenchAnswers = $gameState?.currentQuestion
+    ? (Array.isArray(questionTranslations?.fr?.answers)
+        ? questionTranslations.fr.answers
+        : [])
     : []}
-  {@const englishAnswers = Array.isArray(questionTranslations?.en?.answers)
-    ? questionTranslations.en.answers
-    : Array.isArray($gameState.currentQuestion.answers)
-      ? $gameState.currentQuestion.answers
-      : []}
+  {@const englishAnswers = $gameState?.currentQuestion
+    ? (Array.isArray(questionTranslations?.en?.answers)
+        ? questionTranslations.en.answers
+        : Array.isArray($gameState.currentQuestion.answers)
+          ? $gameState.currentQuestion.answers
+          : [])
+    : []}
   <div
     class="trivia-host-projection"
     class:no-leaderboard={currentState === GameState.PLAYING}
@@ -42,14 +48,23 @@
         </div>
 
         <!-- Bilingual Question Display -->
-        {#if frenchQuestion}
-          <div class="question-text-french">{frenchQuestion}</div>
+        {#if $gameState?.currentQuestion}
+          {#if frenchQuestion}
+            <div class="question-text-french">{frenchQuestion}</div>
+          {/if}
+          <div class="question-text-english">{englishQuestion}</div>
+        {:else if currentState === GameState.PLAYING || currentState === GameState.STARTING}
+          <!-- Loading state when question is not yet available -->
+          <div class="question-text-english loading-state">
+            <div class="loading-spinner">⏳</div>
+            <p>Loading question...</p>
+          </div>
         {/if}
-        <div class="question-text-english">{englishQuestion}</div>
 
         <!-- Answer Options - Bilingual -->
         <div class="answers-grid-large">
-          {#each $gameState.currentQuestion.answers as answer, index}
+          {#if $gameState?.currentQuestion}
+            {#each $gameState.currentQuestion.answers as answer, index}
             {@const count = $gameState?.answerCounts?.[index] || 0}
             {@const percentage = $gameState?.answerPercentages?.[index] || 0}
             {@const isCorrect =
@@ -136,10 +151,16 @@
                 </div>
               {/if}
             </div>
-          {/each}
+            {/each}
+          {:else if currentState === GameState.PLAYING || currentState === GameState.STARTING}
+            <!-- Loading placeholder for answers -->
+            <div class="answers-loading-placeholder">
+              <p>Waiting for question to load...</p>
+            </div>
+          {/if}
         </div>
 
-        {#if currentState === GameState.PLAYING}
+        {#if currentState === GameState.PLAYING && $gameState?.currentQuestion}
           <div class="waiting-status-large">
             <p class="status-text-large">
               <span class="status-bilingual">
@@ -400,6 +421,31 @@
     overflow: hidden;
   }
 
+  .question-text-english.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    min-height: 150px;
+  }
+
+  .loading-spinner {
+    font-size: 3rem;
+    animation: spin 2s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-state p {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+  }
+
   /* Christmas lights around question card */
   .question-text-english::before {
     content: '';
@@ -445,6 +491,14 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     width: 100%;
+  }
+
+  .answers-loading-placeholder {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 2rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.5rem;
   }
 
   .answer-option-large {

@@ -12,24 +12,31 @@
   <!-- Left side: Item and Guesses -->
   <div class="price-question-section">
     <h2 class="game-title">💰 Price Is Right</h2>
-    {#if $gameState?.currentItem}
-      {@const itemTranslations = $gameState.currentItem.translations}
-      {@const frenchName =
-        typeof itemTranslations?.fr?.name === 'string'
-          ? itemTranslations.fr.name
-          : ''}
-      {@const englishName =
-        typeof itemTranslations?.en?.name === 'string'
-          ? itemTranslations.en.name
-          : $gameState.currentItem.name || ''}
-      {@const frenchDescription =
-        typeof itemTranslations?.fr?.description === 'string'
-          ? itemTranslations.fr.description
-          : ''}
-      {@const englishDescription =
-        typeof itemTranslations?.en?.description === 'string'
-          ? itemTranslations.en.description
-          : $gameState.currentItem.description || ''}
+    {#if $gameState?.currentItem || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
+      {#if $gameState?.currentItem}
+        {@const itemTranslations = $gameState.currentItem.translations}
+        {@const frenchName =
+          typeof itemTranslations?.fr?.name === 'string'
+            ? itemTranslations.fr.name
+            : ''}
+        {@const englishName =
+          typeof itemTranslations?.en?.name === 'string'
+            ? itemTranslations.en.name
+            : $gameState.currentItem.name || ''}
+        {@const frenchDescription =
+          typeof itemTranslations?.fr?.description === 'string'
+            ? itemTranslations.fr.description
+            : ''}
+        {@const englishDescription =
+          typeof itemTranslations?.en?.description === 'string'
+            ? itemTranslations.en.description
+            : $gameState.currentItem.description || ''}
+      {:else}
+        {@const frenchName = ''}
+        {@const englishName = ''}
+        {@const frenchDescription = ''}
+        {@const englishDescription = ''}
+      {/if}
       <div class="item-display-large">
         <div class="round-number">
           <div class="round-label-bilingual">

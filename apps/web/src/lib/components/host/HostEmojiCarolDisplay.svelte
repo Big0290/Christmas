@@ -8,7 +8,7 @@
   export let scoreboard: Array<{ name: string; score: number }> = [];
 </script>
 
-{#if $gameState?.availableEmojis}
+{#if $gameState?.availableEmojis || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
   <div class="emoji-host-projection">
     <div class="emoji-question-section">
       <h2 class="game-title">🎶 Emoji Carol Battle</h2>

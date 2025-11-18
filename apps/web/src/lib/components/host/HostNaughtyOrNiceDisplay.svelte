@@ -8,16 +8,21 @@
   export let scoreboard: Array<{ name: string; score: number }> = [];
 </script>
 
-{#if $gameState?.currentPrompt}
-  {@const promptTranslations = $gameState.currentPrompt.translations}
-  {@const frenchPrompt =
-    typeof promptTranslations?.fr?.prompt === 'string'
-      ? promptTranslations.fr.prompt
-      : ''}
-  {@const englishPrompt =
-    typeof promptTranslations?.en?.prompt === 'string'
-      ? promptTranslations.en.prompt
-      : $gameState.currentPrompt.prompt || ''}
+{#if $gameState?.currentPrompt || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
+  {#if $gameState?.currentPrompt}
+    {@const promptTranslations = $gameState.currentPrompt.translations}
+    {@const frenchPrompt =
+      typeof promptTranslations?.fr?.prompt === 'string'
+        ? promptTranslations.fr.prompt
+        : ''}
+    {@const englishPrompt =
+      typeof promptTranslations?.en?.prompt === 'string'
+        ? promptTranslations.en.prompt
+        : $gameState.currentPrompt.prompt || ''}
+  {:else}
+    {@const frenchPrompt = ''}
+    {@const englishPrompt = ''}
+  {/if}
   <div class="naughty-host-projection">
     <div class="naughty-question-section">
       <h2 class="game-title">😇 Naughty or Nice</h2>

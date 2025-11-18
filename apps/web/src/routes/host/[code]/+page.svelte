@@ -110,29 +110,9 @@
       instructionsShownForGame
     });
     
-    if (initialState) {
-      // Only show instructions on mount if we're in STARTING state
-      // If we're in PLAYING state, the reactive statement will handle it
-      const isStarting = initialState.state === GameState.STARTING;
-      
-      if (isStarting && initialState.gameType) {
-        const gameIdentifier = `${initialState.gameType}`;
-        if (instructionsShownForGame !== gameIdentifier && !showInstructions) {
-          console.log('[Host] ✅ onMount - showing instructions for active game (STARTING):', gameIdentifier);
-          showInstructions = true;
-          instructionStartTime = Date.now();
-          instructionsShownForGame = gameIdentifier;
-          
-          // Auto-hide after duration
-          setTimeout(() => {
-            console.log('[Host] Auto-hiding instructions after duration');
-            showInstructions = false;
-          }, INSTRUCTION_DURATION);
-        } else {
-          console.log('[Host] onMount - instructions already shown for:', gameIdentifier);
-        }
-      }
-    }
+    // Don't show instructions in onMount - let the reactive statement handle it
+    // This prevents duplicate triggers between onMount and reactive statements
+    console.log('[Host] onMount - skipping initial instructions, reactive statement will handle it');
     
     connectSocket().catch((err) => {
       console.error('[Host] Failed to connect socket:', err);
@@ -865,8 +845,14 @@
       countdownStartTime = 0;
       instructionStartTime = 0;
       countdownValue = 3;
-    } else if (state !== GameState.STARTING && previousState === GameState.STARTING) {
-      // Just left STARTING state - cleanup countdown but keep instructions if they're still showing
+    } else if (state === GameState.PLAYING && previousState === GameState.STARTING) {
+      // Just transitioned from STARTING to PLAYING - ensure instructions are hidden
+      // This prevents the overlay from showing in both STARTING and PLAYING blocks
+      if (showInstructions) {
+        console.log('[Host] Transitioning from STARTING to PLAYING - hiding instructions');
+        showInstructions = false;
+      }
+      // Cleanup countdown
       if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
