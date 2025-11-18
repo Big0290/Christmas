@@ -299,12 +299,66 @@
   .price-host-projection {
     display: grid;
     grid-template-columns: 1fr 400px;
-    gap: 3rem;
+    gap: 1.5rem;
     width: 100%;
     max-width: 1600px;
     margin: 0 auto;
-    padding: 2rem;
-    min-height: 60vh;
+    padding: 1rem;
+    min-height: fit-content;
+    position: relative;
+  }
+
+  /* Frosty border effect */
+  .price-host-projection::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 1rem;
+    padding: 2px;
+    background: linear-gradient(135deg, 
+      rgba(224, 242, 254, 0.3) 0%, 
+      rgba(173, 216, 230, 0.2) 25%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(173, 216, 230, 0.2) 75%,
+      rgba(224, 242, 254, 0.3) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.6;
+    pointer-events: none;
+    animation: frost-shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes frost-shimmer {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Christmas lights effect */
+  .price-host-projection::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 1rem;
+    background: 
+      linear-gradient(0deg, transparent 0%, transparent 10%, #ff0000 10%, #ff0000 12%, transparent 12%, transparent 20%, #00ff00 20%, #00ff00 22%, transparent 22%, transparent 30%, #0000ff 30%, #0000ff 32%, transparent 32%, transparent 40%, #ffff00 40%, #ffff00 42%, transparent 42%, transparent 50%, #ff00ff 50%, #ff00ff 52%, transparent 52%, transparent 60%, #00ffff 60%, #00ffff 62%, transparent 62%, transparent 70%, #ff8800 70%, #ff8800 72%, transparent 72%, transparent 80%, #ff0088 80%, #ff0088 82%, transparent 82%, transparent 90%, #88ff00 90%, #88ff00 92%, transparent 92%, transparent 100%),
+      linear-gradient(90deg, transparent 0%, transparent 10%, #ff0000 10%, #ff0000 12%, transparent 12%, transparent 20%, #00ff00 20%, #00ff00 22%, transparent 22%, transparent 30%, #0000ff 30%, #0000ff 32%, transparent 32%, transparent 40%, #ffff00 40%, #ffff00 42%, transparent 42%, transparent 50%, #ff00ff 50%, #ff00ff 52%, transparent 52%, transparent 60%, #00ffff 60%, #00ffff 62%, transparent 62%, transparent 70%, #ff8800 70%, #ff8800 72%, transparent 72%, transparent 80%, #ff0088 80%, #ff0088 82%, transparent 82%, transparent 90%, #88ff00 90%, #88ff00 92%, transparent 92%, transparent 100%),
+      linear-gradient(180deg, transparent 0%, transparent 10%, #ff0000 10%, #ff0000 12%, transparent 12%, transparent 20%, #00ff00 20%, #00ff00 22%, transparent 22%, transparent 30%, #0000ff 30%, #0000ff 32%, transparent 32%, transparent 40%, #ffff00 40%, #ffff00 42%, transparent 42%, transparent 50%, #ff00ff 50%, #ff00ff 52%, transparent 52%, transparent 60%, #00ffff 60%, #00ffff 62%, transparent 62%, transparent 70%, #ff8800 70%, #ff8800 72%, transparent 72%, transparent 80%, #ff0088 80%, #ff0088 82%, transparent 82%, transparent 90%, #88ff00 90%, #88ff00 92%, transparent 92%, transparent 100%),
+      linear-gradient(270deg, transparent 0%, transparent 10%, #ff0000 10%, #ff0000 12%, transparent 12%, transparent 20%, #00ff00 20%, #00ff00 22%, transparent 22%, transparent 30%, #0000ff 30%, #0000ff 32%, transparent 32%, transparent 40%, #ffff00 40%, #ffff00 42%, transparent 42%, transparent 50%, #ff00ff 50%, #ff00ff 52%, transparent 52%, transparent 60%, #00ffff 60%, #00ffff 62%, transparent 62%, transparent 70%, #ff8800 70%, #ff8800 72%, transparent 72%, transparent 80%, #ff0088 80%, #ff0088 82%, transparent 82%, transparent 90%, #88ff00 90%, #88ff00 92%, transparent 92%, transparent 100%);
+    background-size: 100% 4px, 4px 100%, 100% 4px, 4px 100%;
+    background-position: 0 0, 0 0, 0 100%, 100% 0;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    opacity: 0;
+    pointer-events: none;
+    animation: christmas-lights 2s ease-in-out infinite;
+    filter: blur(1px);
+  }
+
+  @keyframes christmas-lights {
+    0%, 100% { opacity: 0.3; filter: blur(1px) brightness(0.8); }
+    25% { opacity: 0.8; filter: blur(0.5px) brightness(1.2); }
+    50% { opacity: 0.5; filter: blur(1px) brightness(1); }
+    75% { opacity: 0.9; filter: blur(0.5px) brightness(1.3); }
   }
 
   /* Question Section - Left Side */
@@ -315,30 +369,66 @@
   }
 
   .game-title {
-    font-size: 3rem;
+    font-size: 2rem;
     font-weight: bold;
     color: #ffd700;
     text-align: center;
-    margin-bottom: 2rem;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1rem;
+    text-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.8),
+      0 0 30px rgba(255, 215, 0, 0.5),
+      2px 2px 8px rgba(0, 0, 0, 0.5);
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.4));
+    position: relative;
+  }
+
+  .game-title::before {
+    content: '❄️';
+    position: absolute;
+    left: -2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+    opacity: 0.6;
+    animation: sparkle 2s ease-in-out infinite;
+  }
+
+  .game-title::after {
+    content: '❄️';
+    position: absolute;
+    right: -2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+    opacity: 0.6;
+    animation: sparkle 2s ease-in-out infinite 1s;
+  }
+
+  @keyframes sparkle {
+    0%, 100% { opacity: 0.4; transform: translateY(-50%) scale(1); }
+    50% { opacity: 0.8; transform: translateY(-50%) scale(1.2); }
   }
 
   .item-display-large {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1rem;
     width: 100%;
   }
 
   .round-number {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: bold;
     color: #ffd700;
     text-align: center;
-    padding: 1rem 2rem;
-    background: rgba(255, 215, 0, 0.1);
-    border: 3px solid #ffd700;
-    border-radius: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(224, 242, 254, 0.1));
+    border: 2px solid rgba(255, 215, 0, 0.6);
+    border-radius: 0.75rem;
+    box-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.3),
+      inset 0 0 20px rgba(224, 242, 254, 0.1);
+    backdrop-filter: blur(5px);
   }
 
   .round-label-bilingual,
@@ -402,37 +492,75 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
-    padding: 2rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 1rem;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(224, 242, 254, 0.15), rgba(173, 216, 230, 0.1));
+    border: 2px solid rgba(224, 242, 254, 0.4);
+    border-radius: 0.75rem;
+    box-shadow: 
+      0 0 20px rgba(224, 242, 254, 0.2),
+      inset 0 0 30px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Christmas lights around item card */
+  .item-content-large::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 0.75rem;
+    background: 
+      linear-gradient(0deg, transparent 0%, transparent 15%, #ff0000 15%, #ff0000 17%, transparent 17%, transparent 30%, #00ff00 30%, #00ff00 32%, transparent 32%, transparent 45%, #0000ff 45%, #0000ff 47%, transparent 47%, transparent 60%, #ffff00 60%, #ffff00 62%, transparent 62%, transparent 75%, #ff00ff 75%, #ff00ff 77%, transparent 77%, transparent 90%, #00ffff 90%, #00ffff 92%, transparent 92%, transparent 100%),
+      linear-gradient(90deg, transparent 0%, transparent 15%, #ff0000 15%, #ff0000 17%, transparent 17%, transparent 30%, #00ff00 30%, #00ff00 32%, transparent 32%, transparent 45%, #0000ff 45%, #0000ff 47%, transparent 47%, transparent 60%, #ffff00 60%, #ffff00 62%, transparent 62%, transparent 75%, #ff00ff 75%, #ff00ff 77%, transparent 77%, transparent 90%, #00ffff 90%, #00ffff 92%, transparent 92%, transparent 100%),
+      linear-gradient(180deg, transparent 0%, transparent 15%, #ff0000 15%, #ff0000 17%, transparent 17%, transparent 30%, #00ff00 30%, #00ff00 32%, transparent 32%, transparent 45%, #0000ff 45%, #0000ff 47%, transparent 47%, transparent 60%, #ffff00 60%, #ffff00 62%, transparent 62%, transparent 75%, #ff00ff 75%, #ff00ff 77%, transparent 77%, transparent 90%, #00ffff 90%, #00ffff 92%, transparent 92%, transparent 100%),
+      linear-gradient(270deg, transparent 0%, transparent 15%, #ff0000 15%, #ff0000 17%, transparent 17%, transparent 30%, #00ff00 30%, #00ff00 32%, transparent 32%, transparent 45%, #0000ff 45%, #0000ff 47%, transparent 47%, transparent 60%, #ffff00 60%, #ffff00 62%, transparent 62%, transparent 75%, #ff00ff 75%, #ff00ff 77%, transparent 77%, transparent 90%, #00ffff 90%, #00ffff 92%, transparent 92%, transparent 100%);
+    background-size: 100% 3px, 3px 100%, 100% 3px, 3px 100%;
+    background-position: 0 0, 0 0, 0 100%, 100% 0;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    opacity: 0;
+    pointer-events: none;
+    animation: christmas-lights-card 1.8s ease-in-out infinite;
+    filter: blur(0.5px);
+    z-index: 0;
+  }
+
+  @keyframes christmas-lights-card {
+    0%, 100% { opacity: 0.4; filter: blur(0.5px) brightness(0.9); }
+    25% { opacity: 0.9; filter: blur(0.3px) brightness(1.4); }
+    50% { opacity: 0.6; filter: blur(0.5px) brightness(1.1); }
+    75% { opacity: 1; filter: blur(0.3px) brightness(1.5); }
   }
 
   .item-image-large {
     width: 100%;
     max-width: 500px;
-    max-height: 400px;
+    max-height: 300px;
     object-fit: contain;
-    border-radius: 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0 20px rgba(224, 242, 254, 0.2);
   }
 
   .item-name-large {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: bold;
     text-align: center;
     color: white;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    text-shadow: 
+      0 0 10px rgba(224, 242, 254, 0.5),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   .item-name-french {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.9);
     margin-bottom: 0.5rem;
   }
 
   .item-name-english {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: bold;
     color: white;
   }
@@ -462,40 +590,53 @@
 
   .actual-price-display-large {
     text-align: center;
-    padding: 2rem;
-    background: rgba(15, 134, 68, 0.2);
-    border: 3px solid #0f8644;
-    border-radius: 1rem;
-    margin: 1rem 0;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(15, 134, 68, 0.25), rgba(224, 242, 254, 0.15));
+    border: 2px solid rgba(15, 134, 68, 0.6);
+    border-radius: 0.75rem;
+    margin: 0.75rem 0;
+    box-shadow: 
+      0 0 25px rgba(15, 134, 68, 0.4),
+      0 0 15px rgba(224, 242, 254, 0.2),
+      inset 0 0 30px rgba(15, 134, 68, 0.15);
+    backdrop-filter: blur(8px);
   }
 
   .actual-price-label {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: white;
     display: block;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
+    text-shadow: 0 0 8px rgba(224, 242, 254, 0.4);
   }
 
   .actual-price-value {
-    font-size: 4rem;
+    font-size: 3rem;
     font-weight: bold;
     color: #0f8644;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    text-shadow: 
+      0 0 15px rgba(15, 134, 68, 0.8),
+      0 0 30px rgba(224, 242, 254, 0.5),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
+    filter: drop-shadow(0 0 10px rgba(15, 134, 68, 0.4));
   }
 
   .guesses-section-large {
     width: 100%;
-    margin-top: 2rem;
+    margin-top: 1rem;
   }
 
   .guesses-title-large {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: bold;
     color: #ffd700;
     text-align: center;
-    margin-bottom: 1.5rem;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1rem;
+    text-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.8),
+      0 0 30px rgba(255, 215, 0, 0.5),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   .guesses-list-large {
@@ -507,17 +648,63 @@
   }
 
   .guess-entry-large {
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.75rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(224, 242, 254, 0.05));
+    border: 2px solid rgba(224, 242, 254, 0.3);
+    border-radius: 0.5rem;
     transition: all 0.3s;
+    box-shadow: 
+      0 0 15px rgba(224, 242, 254, 0.1),
+      inset 0 0 20px rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(5px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .guess-entry-large::before {
+    content: '✨';
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.875rem;
+    opacity: 0.3;
+    animation: twinkle 3s ease-in-out infinite;
+    z-index: 2;
+  }
+
+  /* Christmas lights around guess cards */
+  .guess-entry-large::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 0.5rem;
+    background: 
+      linear-gradient(0deg, transparent 0%, transparent 20%, #ff0000 20%, #ff0000 22%, transparent 22%, transparent 40%, #00ff00 40%, #00ff00 42%, transparent 42%, transparent 60%, #0000ff 60%, #0000ff 62%, transparent 62%, transparent 80%, #ffff00 80%, #ffff00 82%, transparent 82%, transparent 100%),
+      linear-gradient(90deg, transparent 0%, transparent 20%, #ff0000 20%, #ff0000 22%, transparent 22%, transparent 40%, #00ff00 40%, #00ff00 42%, transparent 42%, transparent 60%, #0000ff 60%, #0000ff 62%, transparent 62%, transparent 80%, #ffff00 80%, #ffff00 82%, transparent 82%, transparent 100%),
+      linear-gradient(180deg, transparent 0%, transparent 20%, #ff0000 20%, #ff0000 22%, transparent 22%, transparent 40%, #00ff00 40%, #00ff00 42%, transparent 42%, transparent 60%, #0000ff 60%, #0000ff 62%, transparent 62%, transparent 80%, #ffff00 80%, #ffff00 82%, transparent 82%, transparent 100%),
+      linear-gradient(270deg, transparent 0%, transparent 20%, #ff0000 20%, #ff0000 22%, transparent 22%, transparent 40%, #00ff00 40%, #00ff00 42%, transparent 42%, transparent 60%, #0000ff 60%, #0000ff 62%, transparent 62%, transparent 80%, #ffff00 80%, #ffff00 82%, transparent 82%, transparent 100%);
+    background-size: 100% 3px, 3px 100%, 100% 3px, 3px 100%;
+    background-position: 0 0, 0 0, 0 100%, 100% 0;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    opacity: 0;
+    pointer-events: none;
+    animation: christmas-lights-card 1.5s ease-in-out infinite;
+    filter: blur(0.5px);
+    z-index: 1;
+  }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.5; }
   }
 
   .guess-entry-large.closest {
-    background: rgba(15, 134, 68, 0.2);
+    background: linear-gradient(135deg, rgba(15, 134, 68, 0.25), rgba(224, 242, 254, 0.15));
     border-color: #0f8644;
-    box-shadow: 0 0 20px rgba(15, 134, 68, 0.4);
+    box-shadow: 
+      0 0 20px rgba(15, 134, 68, 0.4),
+      0 0 15px rgba(224, 242, 254, 0.3),
+      inset 0 0 25px rgba(15, 134, 68, 0.2);
   }
 
   .guess-info-large {
@@ -591,18 +778,25 @@
 
   .waiting-status-large {
     text-align: center;
-    padding: 2rem;
-    background: rgba(255, 215, 0, 0.1);
-    border: 3px solid #ffd700;
-    border-radius: 1rem;
-    margin-top: 1rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(224, 242, 254, 0.1));
+    border: 2px solid rgba(255, 215, 0, 0.6);
+    border-radius: 0.75rem;
+    margin-top: 0.75rem;
+    box-shadow: 
+      0 0 20px rgba(255, 215, 0, 0.3),
+      inset 0 0 25px rgba(224, 242, 254, 0.1);
+    backdrop-filter: blur(5px);
   }
 
   .status-text-large {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: bold;
     color: #ffd700;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    text-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.8),
+      0 0 30px rgba(255, 215, 0, 0.5),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   /* Leaderboard Section - Right Side */
@@ -610,39 +804,86 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-height: 80vh;
-    background: rgba(0, 0, 0, 0.3);
-    border: 3px solid #ffd700;
-    border-radius: 1rem;
-    padding: 2rem;
+    max-height: 70vh;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(30, 50, 80, 0.3));
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
     overflow-y: auto;
+    box-shadow: 
+      0 0 30px rgba(255, 215, 0, 0.2),
+      inset 0 0 40px rgba(224, 242, 254, 0.05);
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .price-leaderboard-section::before {
+    content: '❄️';
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    font-size: 1rem;
+    opacity: 0.3;
+    animation: float 4s ease-in-out infinite;
+    z-index: 2;
+  }
+
+  /* Christmas lights around leaderboard */
+  .price-leaderboard-section::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 0.75rem;
+    background: 
+      linear-gradient(0deg, transparent 0%, transparent 12%, #ff0000 12%, #ff0000 14%, transparent 14%, transparent 24%, #00ff00 24%, #00ff00 26%, transparent 26%, transparent 36%, #0000ff 36%, #0000ff 38%, transparent 38%, transparent 48%, #ffff00 48%, #ffff00 50%, transparent 50%, transparent 60%, #ff00ff 60%, #ff00ff 62%, transparent 62%, transparent 72%, #00ffff 72%, #00ffff 74%, transparent 74%, transparent 84%, #ff8800 84%, #ff8800 86%, transparent 86%, transparent 96%, #88ff00 96%, #88ff00 98%, transparent 98%, transparent 100%),
+      linear-gradient(90deg, transparent 0%, transparent 12%, #ff0000 12%, #ff0000 14%, transparent 14%, transparent 24%, #00ff00 24%, #00ff00 26%, transparent 26%, transparent 36%, #0000ff 36%, #0000ff 38%, transparent 38%, transparent 48%, #ffff00 48%, #ffff00 50%, transparent 50%, transparent 60%, #ff00ff 60%, #ff00ff 62%, transparent 62%, transparent 72%, #00ffff 72%, #00ffff 74%, transparent 74%, transparent 84%, #ff8800 84%, #ff8800 86%, transparent 86%, transparent 96%, #88ff00 96%, #88ff00 98%, transparent 98%, transparent 100%),
+      linear-gradient(180deg, transparent 0%, transparent 12%, #ff0000 12%, #ff0000 14%, transparent 14%, transparent 24%, #00ff00 24%, #00ff00 26%, transparent 26%, transparent 36%, #0000ff 36%, #0000ff 38%, transparent 38%, transparent 48%, #ffff00 48%, #ffff00 50%, transparent 50%, transparent 60%, #ff00ff 60%, #ff00ff 62%, transparent 62%, transparent 72%, #00ffff 72%, #00ffff 74%, transparent 74%, transparent 84%, #ff8800 84%, #ff8800 86%, transparent 86%, transparent 96%, #88ff00 96%, #88ff00 98%, transparent 98%, transparent 100%),
+      linear-gradient(270deg, transparent 0%, transparent 12%, #ff0000 12%, #ff0000 14%, transparent 14%, transparent 24%, #00ff00 24%, #00ff00 26%, transparent 26%, transparent 36%, #0000ff 36%, #0000ff 38%, transparent 38%, transparent 48%, #ffff00 48%, #ffff00 50%, transparent 50%, transparent 60%, #ff00ff 60%, #ff00ff 62%, transparent 62%, transparent 72%, #00ffff 72%, #00ffff 74%, transparent 74%, transparent 84%, #ff8800 84%, #ff8800 86%, transparent 86%, transparent 96%, #88ff00 96%, #88ff00 98%, transparent 98%, transparent 100%);
+    background-size: 100% 3px, 3px 100%, 100% 3px, 3px 100%;
+    background-position: 0 0, 0 0, 0 100%, 100% 0;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    opacity: 0;
+    pointer-events: none;
+    animation: christmas-lights-card 2s ease-in-out infinite;
+    filter: blur(0.5px);
+    z-index: 1;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
   }
 
   .leaderboard-title-large {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: bold;
     color: #ffd700;
     text-align: center;
-    margin-bottom: 2rem;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1rem;
+    text-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.8),
+      0 0 30px rgba(255, 215, 0, 0.5),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   .leaderboard-list-large {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .leaderboard-entry-large {
     display: grid;
     grid-template-columns: auto 1fr auto;
-    gap: 1.5rem;
+    gap: 1rem;
     align-items: center;
-    padding: 1.25rem 1.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(224, 242, 254, 0.05));
+    border: 1px solid rgba(224, 242, 254, 0.2);
+    border-radius: 0.5rem;
     transition: all 0.2s;
+    backdrop-filter: blur(3px);
   }
 
   .leaderboard-entry-large.top-three {

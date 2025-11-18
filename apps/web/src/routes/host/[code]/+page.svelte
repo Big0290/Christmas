@@ -924,9 +924,35 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #0a1a2e 0%, #1a2a4e 30%, #2a3a6e 60%, #1a2a4e 100%);
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(173, 216, 230, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(176, 224, 230, 0.1) 0%, transparent 50%);
     color: white;
     overflow: hidden;
+    position: relative;
+  }
+
+  /* Snowflake animation background */
+  .host-screen::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cpath d='M50 0 L55 20 L75 15 L60 30 L80 40 L50 35 L50 50 L35 50 L40 30 L20 40 L30 25 L15 20 L35 15 Z' fill='rgba(255,255,255,0.03)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    animation: snow-drift 20s linear infinite;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  @keyframes snow-drift {
+    0% { transform: translateY(0) translateX(0); }
+    100% { transform: translateY(100vh) translateX(50px); }
   }
 
   .host-content {
@@ -934,9 +960,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3rem;
-    padding-bottom: calc(3rem + 80px); /* Account for bottom scorebar */
+    padding: 1.5rem;
+    padding-bottom: calc(1.5rem + 80px); /* Account for bottom scorebar */
     transition: margin-right 0.3s ease-in-out;
+    position: relative;
+    z-index: 1;
   }
 
   .host-screen.panel-open .host-content {
@@ -954,20 +982,21 @@
   .paused-screen {
     width: 100%;
     max-width: 1600px;
-    min-height: 80vh;
+    min-height: fit-content;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
     text-align: center;
-    padding: 2rem;
+    padding: 1rem;
     box-sizing: border-box;
+    position: relative;
   }
 
   .starting-with-content {
     position: relative;
     width: 100%;
-    min-height: 80vh;
+    min-height: fit-content;
   }
 
   .game-display-container {
@@ -977,21 +1006,32 @@
     align-items: flex-start;
     justify-content: center;
     overflow: auto;
-    padding: 1rem;
+    padding: 0.5rem;
     box-sizing: border-box;
+    position: relative;
   }
 
   .countdown-text {
-    font-size: 4rem;
-    margin-bottom: 2rem;
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    color: #e0f2fe;
+    text-shadow: 
+      0 0 10px rgba(224, 242, 254, 0.8),
+      0 0 20px rgba(173, 216, 230, 0.6),
+      2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   .countdown-number {
-    font-size: 15rem;
+    font-size: 12rem;
     font-weight: bold;
     color: #ffd700;
-    text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    text-shadow: 
+      0 0 20px rgba(255, 215, 0, 0.8),
+      0 0 40px rgba(255, 215, 0, 0.6),
+      0 0 60px rgba(255, 215, 0, 0.4),
+      2px 2px 8px rgba(0, 0, 0, 0.5);
     transition: transform 0.3s ease;
+    filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
   }
 
   .countdown-number.pulse {
@@ -999,22 +1039,33 @@
   }
 
   .countdown-subtitle {
-    font-size: 2rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-top: 2rem;
+    font-size: 1.5rem;
+    color: rgba(224, 242, 254, 0.8);
+    margin-top: 1.5rem;
+    text-shadow: 
+      0 0 10px rgba(224, 242, 254, 0.5),
+      1px 1px 3px rgba(0, 0, 0, 0.5);
   }
 
   .mega-title {
-    font-size: 5rem;
+    font-size: 4rem;
     font-weight: bold;
-    margin-bottom: 2rem;
-    text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1.5rem;
+    color: #e0f2fe;
+    text-shadow: 
+      0 0 15px rgba(224, 242, 254, 0.8),
+      0 0 30px rgba(173, 216, 230, 0.6),
+      4px 4px 8px rgba(0, 0, 0, 0.5);
+    filter: drop-shadow(0 0 10px rgba(224, 242, 254, 0.4));
   }
 
   .instruction-text {
-    font-size: 1.25rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 2rem;
+    font-size: 1.125rem;
+    color: rgba(224, 242, 254, 0.8);
+    margin-bottom: 1.5rem;
+    text-shadow: 
+      0 0 8px rgba(224, 242, 254, 0.4),
+      1px 1px 3px rgba(0, 0, 0, 0.5);
   }
 
   .btn-primary-large {
