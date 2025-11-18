@@ -6,7 +6,9 @@ import {
   PriceItem,
   Player,
   shuffleArray,
+  calculateSpeedBonus,
 } from '@christmas/core';
+import { translatePriceItem } from '../utils/translations.js';
 
 const DEFAULT_ITEMS: PriceItem[] = [
   { id: '1', name: 'iPhone 15 Pro', description: 'Latest Apple smartphone', price: 999.0, imageUrl: 'https://picsum.photos/seed/iphone/400/300', category: 'Electronics' },
@@ -24,14 +26,19 @@ const DEFAULT_ITEMS: PriceItem[] = [
 export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
   private items: PriceItem[] = [];
   private scoringMode: 'closest_without_over' | 'closest_overall' = 'closest_without_over';
+  private timePerRound: number = 30000; // 30 seconds
 
-  constructor(players: Map<string, Player>, customItems?: PriceItem[]) {
+  constructor(players: Map<string, Player>, customItems?: PriceItem[], timeLimitSeconds?: number) {
     super(GameType.PRICE_IS_RIGHT, players);
     this.items = customItems && customItems.length > 0
       ? shuffleArray(customItems)
       : shuffleArray(DEFAULT_ITEMS);
     // Update maxRounds now that items are initialized
     this.state.maxRounds = Math.min(this.items.length, 10);
+    // Set time limit if provided (convert seconds to milliseconds)
+    if (timeLimitSeconds !== undefined) {
+      this.timePerRound = timeLimitSeconds * 1000;
+    }
   }
 
   protected createInitialState(): PriceIsRightGameState {
@@ -50,6 +57,8 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
       currentItem: null,
       guesses: {},
       guessingClosed: false,
+      roundStartTime: 0,
+      guessTimes: {},
     };
   }
 
@@ -74,12 +83,14 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
     }
     this.state.currentItem = this.items[itemIndex];
     this.state.guesses = {};
+    this.state.guessTimes = {};
     this.state.guessingClosed = false;
+    this.state.roundStartTime = Date.now();
 
     // Timer to end guessing
     this.setTimer(() => {
       this.endGuessing();
-    }, 30000);
+    }, this.timePerRound);
   }
 
   private endGuessing(): void {
@@ -90,6 +101,8 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
     const actualPrice = this.state.currentItem.price;
     const guesses = Object.entries(this.state.guesses);
 
+    const speedBonusMultiplier = 1.0; // Moderate multiplier for price game
+    
     if (this.scoringMode === 'closest_without_over') {
       // Classic Price Is Right rules
       const validGuesses = guesses.filter(([, guess]) => guess <= actualPrice);
@@ -100,7 +113,16 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
           const currentDiff = actualPrice - current[1];
           return currentDiff < bestDiff ? current : best;
         });
-        this.updateScore(closest[0], 100);
+        
+        let points = 100;
+        // Speed bonus for closest guess
+        if (this.state.guessTimes[closest[0]]) {
+          const guessTime = this.state.guessTimes[closest[0]] - this.state.roundStartTime;
+          const speedBonus = calculateSpeedBonus(guessTime, this.timePerRound, speedBonusMultiplier);
+          points += speedBonus;
+        }
+        
+        this.updateScore(closest[0], points);
       }
     } else {
       // Closest overall
@@ -110,7 +132,16 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
           const currentDiff = Math.abs(actualPrice - current[1]);
           return currentDiff < bestDiff ? current : best;
         });
-        this.updateScore(closest[0], 100);
+        
+        let points = 100;
+        // Speed bonus for closest guess
+        if (this.state.guessTimes[closest[0]]) {
+          const guessTime = this.state.guessTimes[closest[0]] - this.state.roundStartTime;
+          const speedBonus = calculateSpeedBonus(guessTime, this.timePerRound, speedBonusMultiplier);
+          points += speedBonus;
+        }
+        
+        this.updateScore(closest[0], points);
       }
     }
 
@@ -126,6 +157,7 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
     if (action === 'guess' && this.state.state === GameState.PLAYING && !this.state.guessingClosed) {
       if (!this.state.guesses[playerId]) {
         this.state.guesses[playerId] = data.guess;
+        this.state.guessTimes[playerId] = Date.now();
 
         // If all players guessed, end guessing early
         if (Object.keys(this.state.guesses).length === this.players.size) {
@@ -137,15 +169,24 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
   }
 
   getClientState(playerId: string): any {
+    // Get player's language preference, default to English
+    const player = this.players.get(playerId);
+    const language = player?.language || 'en';
+
+    // Translate current item if it exists
+    let translatedItem = null;
+    if (this.state.currentItem) {
+      translatedItem = translatePriceItem(this.state.currentItem, language);
+      // Don't send actual price until guessing is closed
+      translatedItem = {
+        ...translatedItem,
+        price: this.state.guessingClosed ? translatedItem.price : undefined,
+      };
+    }
+
     return {
       ...this.state,
-      currentItem: this.state.currentItem
-        ? {
-            ...this.state.currentItem,
-            // Don't send actual price until guessing is closed
-            price: this.state.guessingClosed ? this.state.currentItem.price : undefined,
-          }
-        : null,
+      currentItem: translatedItem,
       hasGuessed: this.state.guesses[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
     };

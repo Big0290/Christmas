@@ -6,6 +6,15 @@ RUN npm install -g pnpm@8.15.0
 
 WORKDIR /app
 
+# Accept build arguments for environment variables
+# These will be passed from Fly.io secrets at build time
+ARG PUBLIC_SUPABASE_URL
+ARG PUBLIC_SUPABASE_ANON_KEY
+
+# Set as environment variables for Vite to pick up during build
+ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
+ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
+
 # Copy package files
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml turbo.json tsconfig.json ./
 COPY packages/core/package.json ./packages/core/

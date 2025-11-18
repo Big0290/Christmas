@@ -3,63 +3,678 @@
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import { onMount, onDestroy } from 'svelte';
-  import { socket, connectSocket, gameState, players } from '$lib/socket';
+  import { get } from 'svelte/store';
+  import { socket, connectSocket, gameState, players, connected } from '$lib/socket';
   import { GameState, GameType, PlayerStatus } from '@christmas/core';
   import { playSound } from '$lib/audio';
-  import GiftGrabberHostCanvas from '$lib/games/GiftGrabberHostCanvas.svelte';
   import GlobalLeaderboard from '$lib/components/GlobalLeaderboard.svelte';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
+  import FinalResults from '$lib/components/FinalResults.svelte';
+  import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
+  import HostConnectionStatus from '$lib/components/host/HostConnectionStatus.svelte';
+  import HostConfirmationDialog from '$lib/components/host/HostConfirmationDialog.svelte';
+  import HostLobbyScreen from '$lib/components/host/HostLobbyScreen.svelte';
+  import HostHeader from '$lib/components/host/HostHeader.svelte';
+  import HostBottomScorebar from '$lib/components/host/HostBottomScorebar.svelte';
+  import HostInstructionsOverlay from '$lib/components/host/HostInstructionsOverlay.svelte';
+  import HostCountdownOverlay from '$lib/components/host/HostCountdownOverlay.svelte';
+  import HostControlPanel from '$lib/components/host/HostControlPanel.svelte';
+  import HostGameDisplay from '$lib/components/host/HostGameDisplay.svelte';
+  import { t, language } from '$lib/i18n';
 
-  const roomCode = $page.params.code;
+  // Normalize room code to uppercase (server expects uppercase)
+  const roomCode = ($page.params.code || '').toUpperCase();
   let controlPanelOpen = false;
   let showConfirmDialog = false;
-  let confirmAction: (() => void) | null = null;
   let confirmMessage = '';
   let isPaused = false;
   let origin = '';
   let leaderboardTab: 'session' | 'global' = 'session';
+  let error = ''; // Error message for connection issues
+
+  // Declare timeouts and subscriptions before onMount
+  let stateInitTimeout: ReturnType<typeof setTimeout> | null = null;
+  let connectionSubscription: (() => void) | null = null; // Store subscription for cleanup
+  let connectionTimeout: ReturnType<typeof setTimeout> | null = null; // Store connection timeout
+  let countdownInterval: ReturnType<typeof setInterval> | null = null;
+  let listenersSetup = false; // Flag to prevent duplicate listener registration
+
+  // Countdown timer variables - declared before reactive statements to avoid TDZ errors
+  let countdownValue = 3;
+  let countdownStartTime = 0;
+  let showInstructions = true; // Show instructions first, then countdown
+  let instructionStartTime = 0;
+  let previousState: GameState | undefined = undefined;
+  const INSTRUCTION_DURATION = 5000; // 5 seconds for instructions
+
+  // Declare derived variables before reactive statements to avoid TDZ errors
+  let currentState: GameState | undefined = undefined;
+  let currentGameType: GameType | null = null;
+  let scoreboard: any[] = [];
+  let round = 0;
+  let maxRounds = 0;
+  let startedAt = 0;
+  let isGameActive = false;
+  let canPause = false;
+  let canResume = false;
+  let confirmActionRef: (() => void) | null = null;
+
+  function handleManualReconnect() {
+    if (!browser) return;
+    const hostToken = localStorage.getItem('christmas_hostToken');
+    const savedRoomCode = localStorage.getItem('christmas_roomCode');
+    console.log('[Host] Manual reconnect attempt:', {
+      hostToken: !!hostToken,
+      savedRoomCode,
+      roomCode,
+    });
+    if (hostToken && savedRoomCode === roomCode && $socket) {
+      const currentLanguage = get(language);
+      ($socket as any).emit(
+        'reconnect_host',
+        roomCode,
+        hostToken,
+        currentLanguage,
+        (response: any) => {
+          console.log('[Host] Manual reconnect response:', response);
+          if (!response || !response.success) {
+            alert(
+              `Failed to reconnect: ${response?.error || 'Unknown error'}. Please go to /room/${roomCode} first.`
+            );
+          }
+        }
+      );
+    } else {
+      console.log('[Host] No valid credentials, redirecting to room page...');
+      goto(`/room/${roomCode}`);
+    }
+  }
 
   const games = [
     { type: GameType.TRIVIA_ROYALE, name: '🎄 Christmas Trivia Royale', desc: 'Fast-paced quiz' },
-    { type: GameType.GIFT_GRABBER, name: '🎁 Gift Grabber', desc: 'Collect presents' },
-    { type: GameType.WORKSHOP_TYCOON, name: '🏭 Workshop Tycoon', desc: 'Build your empire' },
     { type: GameType.EMOJI_CAROL, name: '🎶 Emoji Carol Battle', desc: 'Strategic voting' },
     { type: GameType.NAUGHTY_OR_NICE, name: '😇 Naughty or Nice', desc: 'Social voting' },
     { type: GameType.PRICE_IS_RIGHT, name: '💰 Price Is Right', desc: 'Guess the price' },
   ];
 
   onMount(() => {
-    connectSocket();
-    
+    console.log('[Host] Component mounted, connecting socket...');
+    connectSocket().catch((err) => {
+      console.error('[Host] Failed to connect socket:', err);
+      error = 'Failed to connect to server. Please refresh the page.';
+    });
+
     if (browser) {
       origin = window.location.origin;
     }
 
-    // Listen for game state changes
-    $socket.on('game_ended', (data: any) => {
-      playSound('gameEnd');
-      // Game state will be updated via gameState store
-    });
+    // Add a fallback timeout to show error if connection takes too long
+    connectionTimeout = setTimeout(() => {
+      if (!$connected) {
+        console.error('[Host] Connection timeout after 15 seconds');
+        error = 'Connection timeout. Please check your internet connection and refresh the page.';
+      }
+    }, 15000);
 
-    // Listen for pause/resume events
-    $socket.on('game_state_update', (data: any) => {
-      if (data.state === 'paused' || data.state === GameState.PAUSED) {
-        isPaused = true;
-      } else if (data.state === 'playing' || data.state === GameState.PLAYING) {
-        isPaused = false;
+    // Clear timeout when connection succeeds
+    // Declare unsubscribe function variable first to avoid TDZ error
+    let unsubscribeConnected: (() => void) | null = null;
+    unsubscribeConnected = connected.subscribe((isConnected) => {
+      if (isConnected && connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+        if (unsubscribeConnected) {
+          unsubscribeConnected();
+        }
       }
     });
 
-    // Listen for room updates
-    $socket.on('room_update', (data: any) => {
-      // Players list is updated via socket store
-    });
+    // Wait for socket to be ready AND connected before setting up listeners
+    const setupSocketListeners = () => {
+      if (!$socket) {
+        console.log('[Host] setupSocketListeners: Socket not available yet');
+        return;
+      }
+
+      // Prevent duplicate listener registration
+      if (listenersSetup) {
+        console.log('[Host] setupSocketListeners: Listeners already set up, skipping');
+        return;
+      }
+
+      console.log(
+        '[Host] setupSocketListeners: Socket available, connected:',
+        $socket.connected,
+        'store connected:',
+        $connected
+      );
+      listenersSetup = true;
+
+      // Wait for socket to be connected before attempting reconnect
+      const waitForConnection = () => {
+        if (!$connected || !$socket?.connected) {
+          console.log('[Host] Waiting for socket connection...');
+          let waitTimeout: ReturnType<typeof setTimeout> | null = null;
+          // Wait for connection
+          const unsubscribe = connected.subscribe((isConnected) => {
+            if (isConnected && $socket?.connected) {
+              if (waitTimeout) clearTimeout(waitTimeout);
+              unsubscribe();
+              // Clear stored subscription before setting new one
+              if (connectionSubscription) {
+                connectionSubscription();
+              }
+              connectionSubscription = null;
+              console.log('[Host] Socket connected, attempting host reconnect...');
+              attemptHostReconnect();
+            }
+          });
+          // Store subscription for cleanup (cleanup old one first)
+          if (connectionSubscription) {
+            connectionSubscription();
+          }
+          connectionSubscription = unsubscribe;
+          // Timeout after 10 seconds
+          waitTimeout = setTimeout(() => {
+            unsubscribe();
+            connectionSubscription = null; // Clear stored subscription
+            if (!$connected || !$socket?.connected) {
+              console.error('[Host] Socket connection timeout');
+              error = 'Failed to connect to server. Please refresh the page.';
+            }
+          }, 10000);
+        } else {
+          attemptHostReconnect();
+        }
+      };
+
+      // Auto reconnect host if token present
+      function attemptHostReconnect() {
+        if (!browser || !$socket || !$connected || !$socket.connected) {
+          console.warn('[Host] Cannot reconnect: socket not connected');
+          return;
+        }
+
+        const savedRoomCode = localStorage.getItem('christmas_roomCode');
+        let hostToken = localStorage.getItem('christmas_hostToken');
+        console.log('[Host] Checking host credentials:', {
+          savedRoomCode,
+          roomCode,
+          hasToken: !!hostToken,
+        });
+
+        // If no token but we have auth, try to regenerate it
+        if (savedRoomCode === roomCode && !hostToken) {
+          console.log('[Host] No token found, attempting to regenerate...');
+          // Try to regenerate token from server
+          import('$lib/supabase').then(({ getAccessToken }) => {
+            getAccessToken().then(async (authToken) => {
+              if (authToken && $socket && $connected && $socket.connected) {
+                ($socket as any).emit('regenerate_host_token', roomCode, (response: any) => {
+                  if (response && response.success && response.token) {
+                    console.log('[Host] ✅ Token regenerated successfully');
+                    localStorage.setItem('christmas_hostToken', response.token);
+                    hostToken = response.token;
+                    // Now try reconnecting with new token
+                    if (hostToken) {
+                      attemptReconnect(hostToken);
+                    }
+                  } else {
+                    console.error('[Host] ❌ Failed to regenerate token:', response?.error);
+                    // Fallback to room page
+                    setTimeout(() => {
+                      goto(`/room/${roomCode}`);
+                    }, 2000);
+                  }
+                });
+              } else {
+                // No auth token, redirect to room page
+                setTimeout(() => {
+                  goto(`/room/${roomCode}`);
+                }, 2000);
+              }
+            });
+          });
+        } else if (savedRoomCode === roomCode && hostToken) {
+          // Ensure hostToken is not null before attempting reconnect
+          if (hostToken) {
+            attemptReconnect(hostToken);
+          } else {
+            console.warn('[Host] Host token is null, cannot reconnect');
+            setTimeout(() => {
+              goto(`/room/${roomCode}`);
+            }, 2000);
+          }
+        } else {
+          // No token - set to LOBBY state so page can render immediately
+          console.warn(
+            '[Host] ⚠️ No valid host token found. Saved room:',
+            savedRoomCode,
+            'Current room:',
+            roomCode,
+            'Has token:',
+            !!hostToken
+          );
+          console.warn('[Host] Redirecting to room page to get host credentials...');
+          // Redirect to room page to get proper host credentials
+          setTimeout(() => {
+            goto(`/room/${roomCode}`);
+          }, 2000);
+          gameState.set({
+            state: GameState.LOBBY,
+            gameType: null,
+            round: 0,
+            maxRounds: 0,
+            startedAt: 0,
+            scores: {},
+            scoreboard: [],
+          });
+        }
+      }
+
+      function attemptReconnect(token: string) {
+        if (!$socket || !$connected || !$socket.connected) {
+          console.error('[Host] Cannot reconnect: socket not connected');
+          return;
+        }
+
+        console.log('[Host] Attempting to reconnect as host with room code:', roomCode);
+        const currentLanguage = get(language);
+        // Ensure room code is uppercase for consistency with server
+        const normalizedRoomCode = roomCode.toUpperCase();
+        ($socket as any).emit(
+          'reconnect_host',
+          normalizedRoomCode,
+          token,
+          currentLanguage,
+          (response: any) => {
+            console.log('[Host] Reconnect response:', response);
+            if (response && response.success && response.room) {
+              console.log('[Host] ✅ Successfully reconnected as host');
+
+              // Set players immediately from response
+              if (response.room.players && Array.isArray(response.room.players)) {
+                players.set(response.room.players);
+                console.log(
+                  `[Host] Set ${response.room.players.length} player(s) from reconnect response`
+                );
+                // The server emits room_update after reconnect (line 333-336 in handlers.ts)
+                // which will sync the players list, but we set it here for immediate display
+                // The room_update event will arrive shortly and ensure we have the latest state
+              } else {
+                console.warn('[Host] Reconnect response missing players array');
+                // Set empty array to prevent undefined state
+                players.set([]);
+              }
+
+              // Verify we're in the room by checking socket rooms (for debugging)
+              // Note: socket.io doesn't expose rooms on client side, but server logs will show
+              console.log(
+                '[Host] Host reconnected, waiting for room_update event to sync players...'
+              );
+
+              // response.room.gameState is just the enum value (e.g., 'lobby'), not a full object
+              // Don't set minimal state here - wait for game_state_update event which will provide full state
+              // Only set minimal state if we're in LOBBY and have no state at all
+              const stateValue = response.room.gameState || GameState.LOBBY;
+              console.log('[Host] Reconnect returned gameState:', stateValue);
+
+              // Only set minimal state if we're in LOBBY and have no state
+              // For other states (STARTING, PLAYING, etc.), wait for game_state_update to provide full state
+              if (!$gameState && stateValue === GameState.LOBBY) {
+                console.log('[Host] No existing game state and in LOBBY, setting minimal state');
+                gameState.set({
+                  state: stateValue,
+                  gameType: response.room.currentGame || null,
+                  round: 0,
+                  maxRounds: 0,
+                  startedAt: 0,
+                  scores: {},
+                  scoreboard: [],
+                });
+              } else if (!$gameState && stateValue !== GameState.LOBBY) {
+                console.log(
+                  '[Host] Game is active, waiting for game_state_update to provide full state'
+                );
+                // Don't set minimal state - wait for game_state_update
+              } else if ($gameState) {
+                console.log(
+                  '[Host] Already have game state, waiting for game_state_update to sync if needed'
+                );
+              }
+
+              // Request game state after a short delay if we're in a game and don't have full state
+              // This ensures we get the full state if game_state_update doesn't arrive
+              if (stateValue !== GameState.LOBBY && stateValue !== GameState.GAME_END) {
+                setTimeout(() => {
+                  // If we still don't have full game content, request it
+                  const currentState = $gameState;
+                  if (
+                    !currentState?.currentQuestion &&
+                    !currentState?.currentItem &&
+                    !currentState?.currentPrompt &&
+                    !currentState?.availableEmojis &&
+                    $socket
+                  ) {
+                    console.log('[Host] Requesting game state after reconnect...');
+                    requestGameStateIfMissing();
+                  }
+                }, 1000); // Increased delay to give game_state_update time to arrive
+              }
+            } else {
+              // Reconnection failed - try regenerating token if we have auth
+              const errorMsg = response?.error || 'Unknown error';
+              console.error('[Host] ❌ Reconnect failed:', errorMsg);
+
+              // Try regenerating token as fallback
+              import('$lib/supabase').then(({ getAccessToken }) => {
+                getAccessToken().then(async (authToken) => {
+                  if (authToken && $socket && $connected && $socket.connected) {
+                    ($socket as any).emit(
+                      'regenerate_host_token',
+                      roomCode,
+                      (regenerateResponse: any) => {
+                        if (
+                          regenerateResponse &&
+                          regenerateResponse.success &&
+                          regenerateResponse.token
+                        ) {
+                          console.log('[Host] ✅ Token regenerated, retrying reconnect...');
+                          localStorage.setItem('christmas_hostToken', regenerateResponse.token);
+                          attemptReconnect(regenerateResponse.token);
+                        } else {
+                          alert(
+                            `Failed to reconnect as host: ${errorMsg}. Please go back to the room page and try again.`
+                          );
+                          gameState.set({
+                            state: GameState.LOBBY,
+                            gameType: null,
+                            round: 0,
+                            maxRounds: 0,
+                            startedAt: 0,
+                            scores: {},
+                            scoreboard: [],
+                          });
+                        }
+                      }
+                    );
+                  } else {
+                    alert(
+                      `Failed to reconnect as host: ${errorMsg}. Please go back to the room page and try again.`
+                    );
+                    gameState.set({
+                      state: GameState.LOBBY,
+                      gameType: null,
+                      round: 0,
+                      maxRounds: 0,
+                      startedAt: 0,
+                      scores: {},
+                      scoreboard: [],
+                    });
+                  }
+                });
+              });
+            }
+          }
+        );
+      }
+
+      // Start the reconnect process
+      waitForConnection();
+
+      // Listen for game state changes
+      $socket.on('game_ended', (data: any) => {
+        playSound('gameEnd');
+        // Game state will be updated via gameState store
+      });
+
+      // Listen for pause/resume events and game state updates
+      // Note: The socket store (socket.ts) should also listen to this event and update gameState store
+      // But we also update it here as a backup to ensure the store is always updated
+      $socket.on('game_state_update', (data: any) => {
+        console.log('[Host] ✅ Game state update received:', {
+          state: data?.state,
+          gameType: data?.gameType,
+          round: data?.round,
+          hasQuestion: !!data?.currentQuestion,
+          hasItem: !!data?.currentItem,
+          hasPrompt: !!data?.currentPrompt,
+          hasEmojis: !!data?.availableEmojis,
+        });
+
+        // Update the store directly to ensure it's always synced
+        // This is a backup in case the socket.ts listener doesn't fire
+        gameState.set(data);
+
+        // Handle host-specific state (pause/resume)
+        if (data.state === 'paused' || data.state === GameState.PAUSED) {
+          isPaused = true;
+        } else if (data.state === 'playing' || data.state === GameState.PLAYING) {
+          isPaused = false;
+        }
+
+        // Log state changes for debugging
+        if (data && typeof data === 'object' && data.state) {
+          const previousState = $gameState?.state;
+          if (!$gameState || $gameState.state !== data.state) {
+            console.log(`[Host] State changed from ${previousState} to ${data.state}`);
+          }
+        }
+      });
+
+      // Request game state if we don't receive one within 2 seconds after reconnection
+      let gameStateTimeout: ReturnType<typeof setTimeout> | null = null;
+      const requestGameStateIfMissing = () => {
+        if (gameStateTimeout) clearTimeout(gameStateTimeout);
+        if (!$connected || !$socket) return;
+
+        gameStateTimeout = setTimeout(() => {
+          // Check if we have game state but it's missing content
+          const currentState = $gameState;
+          const needsState =
+            !currentState ||
+            (currentState.state !== GameState.LOBBY &&
+              currentState.state !== GameState.GAME_END &&
+              !currentState.currentQuestion &&
+              !currentState.currentItem &&
+              !currentState.currentPrompt &&
+              !currentState.availableEmojis);
+
+          if (needsState && $connected && $socket) {
+            console.log(
+              '[Host] ⚠️ No full game state received, requesting via get_room_details...'
+            );
+            // Try to get game state from room
+            ($socket as any).emit('get_room_details', roomCode, (response: any) => {
+              if (response && response.success) {
+                // get_room_details might not return full game state, but it's worth trying
+                console.log('[Host] get_room_details response:', response);
+                if (response.gameState) {
+                  console.log('[Host] ✅ Received game state from get_room_details');
+                  gameState.set(response.gameState);
+                }
+              } else {
+                console.warn('[Host] ⚠️ Could not retrieve game state from get_room_details');
+              }
+            });
+          }
+        }, 2000);
+      };
+
+      // Trigger state request after successful reconnection
+      // The reconnect_host callback will call this if needed
+
+      // Listen for room updates (players joining/leaving)
+      // Note: The socket store handles player updates automatically via room_update events
+      // We just need to ensure game state is initialized
+      ($socket as any).on('room_update', (data: any) => {
+        console.log('[Host] Room update received:', data);
+        if (data && Array.isArray(data.players)) {
+          console.log(`[Host] Room update: ${data.players.length} player(s) in room`);
+          // Verify players store was updated (should happen automatically via socket.ts)
+          // Use a small delay to check after store update
+          setTimeout(() => {
+            console.log(
+              `[Host] Players store now has ${$players.length} player(s) after room_update`
+            );
+            if ($players.length !== data.players.length) {
+              console.warn(
+                `[Host] ⚠️ Players count mismatch! Store: ${$players.length}, Event: ${data.players.length}`
+              );
+            }
+          }, 100);
+        }
+        // Ensure we have game state if we don't have one yet
+        if (!$gameState && $connected) {
+          gameState.set({
+            state: GameState.LOBBY,
+            gameType: null,
+            round: 0,
+            maxRounds: 0,
+            startedAt: 0,
+            scores: {},
+            scoreboard: [],
+          });
+        }
+      });
+
+      // Listen for socket reconnection - host needs to rejoin room
+      // Socket.io automatically rejoins rooms, but we need to re-authenticate as host
+      ($socket as any).on('reconnect', () => {
+        console.log('[Host] Socket reconnected, checking if we need to reconnect as host...');
+        if (browser) {
+          const savedRoomCode = localStorage.getItem('christmas_roomCode');
+          const hostToken = localStorage.getItem('christmas_hostToken');
+          if (
+            savedRoomCode === roomCode &&
+            hostToken &&
+            $socket &&
+            $connected &&
+            $socket.connected
+          ) {
+            console.log('[Host] Socket reconnected, attempting to reconnect as host...');
+            // Small delay to ensure socket is fully connected
+            setTimeout(() => {
+              if (hostToken) {
+                attemptReconnect(hostToken);
+              } else {
+                console.warn('[Host] Host token is null, cannot reconnect');
+              }
+            }, 500);
+          }
+        }
+      });
+
+      // Listen for player join/leave events for logging (players store handles updates)
+      $socket.on('player_joined', (player: any) => {
+        console.log('[Host] Player joined event:', player);
+        // Players store will be updated automatically via room_update
+      });
+
+      $socket.on('player_left', (data: any) => {
+        console.log('[Host] Player left event:', data);
+        // Players store will be updated automatically via room_update
+      });
+
+      // Also listen for player_disconnected events
+      ($socket as any).on('player_disconnected', (playerId: any) => {
+        console.log('[Host] Player disconnected:', playerId);
+        // Players store will be updated automatically via room_update
+      });
+    };
+
+    // Try to setup immediately, or wait for socket
+    if ($socket) {
+      setupSocketListeners();
+    } else {
+      // Wait for socket to be available
+      const unsubscribe = socket.subscribe((sock) => {
+        if (sock) {
+          unsubscribe();
+          setupSocketListeners();
+        }
+      });
+      // Store subscription for cleanup (cleanup old one first)
+      if (connectionSubscription) {
+        connectionSubscription();
+      }
+      connectionSubscription = unsubscribe;
+    }
+
+    // Also ensure we're listening for connection state changes even if socket exists but isn't connected
+    // This handles the case where socket exists but connection hasn't been established yet
+    if ($socket && !$connected) {
+      console.log('[Host] Socket exists but not connected, waiting for connection...');
+      const unsubscribe = connected.subscribe((isConnected) => {
+        if (isConnected && $socket?.connected) {
+          unsubscribe();
+          // Clear stored subscription before setting new one
+          if (connectionSubscription) {
+            connectionSubscription();
+          }
+          connectionSubscription = null;
+          // Socket is now connected, ensure listeners are set up and reconnect attempt happens
+          console.log('[Host] Socket connected, triggering reconnect attempt...');
+          // Call setupSocketListeners again to ensure everything is set up
+          setupSocketListeners();
+        }
+      });
+      // Store subscription for cleanup (cleanup old one first)
+      if (connectionSubscription) {
+        connectionSubscription();
+      }
+      connectionSubscription = unsubscribe;
+    }
+
+    // Return cleanup function for onMount
+    return () => {
+      // Clean up connection timeout subscription
+      if (unsubscribeConnected) {
+        unsubscribeConnected();
+      }
+      // Clean up connection timeout
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
+    };
   });
 
   onDestroy(() => {
-    $socket.off('game_ended');
-    $socket.off('game_state_update');
-    $socket.off('room_update');
+    // Reset listeners flag
+    listenersSetup = false;
+
+    // Clean up socket event listeners
+    if ($socket) {
+      $socket.off('game_ended');
+      $socket.off('game_state_update');
+      ($socket as any).off('room_update');
+      ($socket as any).off('player_joined');
+      ($socket as any).off('player_left');
+      ($socket as any).off('player_disconnected');
+      ($socket as any).off('reconnect');
+    }
+    // Clean up timeouts/intervals
+    if (stateInitTimeout) {
+      clearTimeout(stateInitTimeout);
+    }
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+    // Clean up any active subscriptions
+    if (connectionSubscription) {
+      connectionSubscription();
+      connectionSubscription = null;
+    }
+    // Clean up connection timeout
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      connectionTimeout = null;
+    }
+    // Note: We don't clear players store here because:
+    // 1. It's a global store shared across pages
+    // 2. The room_update event is authoritative and will replace the list when joining a new room
+    // 3. Clearing it here could cause flickering if navigating between rooms
   });
 
   $: currentState = $gameState?.state;
@@ -67,13 +682,26 @@
   $: scoreboard = $gameState?.scoreboard || [];
   $: round = $gameState?.round || 0;
   $: maxRounds = $gameState?.maxRounds || 0;
-  $: isGameActive = currentState === GameState.PLAYING || currentState === GameState.ROUND_END || currentState === GameState.STARTING;
+  $: startedAt = $gameState?.startedAt || 0;
+
+  // Reactive logging for debugging
+  $: if ($gameState && import.meta.env.DEV) {
+    console.log('[Host] $gameState reactive update:', {
+      state: $gameState.state,
+      gameType: $gameState.gameType,
+      round: $gameState.round,
+      hasQuestion: !!$gameState.currentQuestion,
+      questionText: $gameState.currentQuestion?.question || 'N/A',
+      answersCount: $gameState.currentQuestion?.answers?.length || 0,
+    });
+  }
+  $: isGameActive =
+    currentState === GameState.PLAYING ||
+    currentState === GameState.ROUND_END ||
+    currentState === GameState.STARTING;
   $: canPause = currentState === GameState.PLAYING && !isPaused;
   $: canResume = currentState === GameState.PAUSED || isPaused;
-  $: playerPositions = $gameState?.playerPositions || {};
-  $: gifts = $gameState?.gifts || [];
-  $: coals = $gameState?.coals || [];
-  
+
   // Update isPaused based on game state
   $: {
     if (currentState === GameState.PAUSED) {
@@ -83,499 +711,192 @@
     }
   }
 
-  function toggleControlPanel() {
-    controlPanelOpen = !controlPanelOpen;
+  // Handle STARTING state - show instructions first, then countdown
+  $: {
+    // Guard against undefined currentState to avoid initialization errors
+    const state = $gameState?.state;
+    // Detect state change to STARTING
+    if (state === GameState.STARTING && previousState !== GameState.STARTING) {
+      // Just entered STARTING state - show instructions first
+      showInstructions = true;
+      instructionStartTime = Date.now();
+      countdownValue = 3;
+
+      // Don't request game state - rely on game_state_update events from server
+      // The server sends game_state_update immediately when question is ready
+      // This ensures synchronization with player screens
+
+      // After instruction duration, hide instructions and start countdown
+      setTimeout(() => {
+        showInstructions = false;
+        countdownStartTime = Date.now();
+
+        // Clear any existing interval
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+        }
+
+        // Start countdown timer
+        countdownInterval = setInterval(() => {
+          const elapsed = Date.now() - countdownStartTime;
+          const remaining = Math.max(0, Math.ceil((3000 - elapsed) / 1000));
+          countdownValue = remaining;
+
+          if (remaining <= 0) {
+            if (countdownInterval) {
+              clearInterval(countdownInterval);
+              countdownInterval = null;
+            }
+            // State should transition to PLAYING via server
+            console.log('[Host] Countdown finished, waiting for PLAYING state');
+          }
+        }, 100);
+      }, INSTRUCTION_DURATION);
+    } else if (state !== GameState.STARTING && previousState === GameState.STARTING) {
+      // Just left STARTING state - cleanup
+      showInstructions = false;
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+      countdownStartTime = 0;
+      instructionStartTime = 0;
+      countdownValue = 3;
+    }
+
+    // Update previous state
+    previousState = state;
+  }
+
+  // Fallback: If connected but no game state after a delay, set to LOBBY
+  $: {
+    // Check $gameState directly instead of currentState to avoid initialization order issues
+    if ($connected && !$gameState) {
+      if (stateInitTimeout) clearTimeout(stateInitTimeout);
+      console.log('[Host] Connected but no game state, setting timeout');
+      stateInitTimeout = setTimeout(() => {
+        if (!$gameState && $connected) {
+          console.log('[Host] Timeout reached, setting to LOBBY');
+          gameState.set({
+            state: GameState.LOBBY,
+            gameType: null,
+            round: 0,
+            maxRounds: 0,
+            startedAt: 0,
+            scores: {},
+            scoreboard: [],
+          });
+        }
+      }, 1500); // Reduced to 1.5 seconds
+    } else if ($gameState) {
+      if (stateInitTimeout) {
+        clearTimeout(stateInitTimeout);
+        stateInitTimeout = null;
+      }
+    }
   }
 
   function showConfirmation(message: string, action: () => void) {
     confirmMessage = message;
-    confirmAction = action;
+    confirmActionRef = action;
     showConfirmDialog = true;
   }
 
-  function confirm() {
-    if (confirmAction) {
-      confirmAction();
-    }
-    showConfirmDialog = false;
-    confirmAction = null;
-  }
-
-  function cancelConfirm() {
-    showConfirmDialog = false;
-    confirmAction = null;
-  }
-
-  function endGame() {
-    showConfirmation('Are you sure you want to end the current game?', () => {
-      $socket.emit('end_game');
-      playSound('gameEnd');
-      // Navigate back to room selection after a brief delay
-      setTimeout(() => {
-        goto(`/room/${roomCode}`);
-      }, 1000);
-    });
-  }
-
-  function pauseGame() {
-    if (canPause) {
-      $socket.emit('pause_game');
-      isPaused = true;
-      playSound('click');
-    }
-  }
-
   function resumeGame() {
-    if (canResume) {
-      $socket.emit('resume_game');
-      isPaused = false;
-      playSound('click');
-    }
-  }
-
-  function startNewGame() {
-    goto(`/room/${roomCode}`);
-  }
-
-  function returnToLobby() {
-    goto(`/room/${roomCode}`);
-  }
-
-  function kickPlayer(playerId: string, playerName: string) {
-    showConfirmation(`Remove ${playerName} from the room?`, () => {
-      $socket.emit('kick_player', playerId, (response: any) => {
-        if (response.success) {
-          playSound('click');
-        } else {
-          alert(response.error || 'Failed to remove player');
-        }
-      });
-    });
-  }
-
-  function copyRoomCode() {
-    if (browser && navigator.clipboard) {
-      navigator.clipboard.writeText(roomCode);
-      playSound('click');
-      alert('Room code copied!');
-    }
-  }
-
-  function openSettings() {
-    if (browser) {
-      window.open(`/gamemaster?room=${roomCode}`, '_blank');
-    }
+    if (!$socket || !isPaused) return;
+    $socket.emit('resume_game');
+    isPaused = false;
+    playSound('click');
   }
 </script>
 
 <svelte:head>
-  <title>Host Screen - Room {roomCode}</title>
+  <title>{t('host.title', { code: roomCode })} | {t('home.title')}</title>
 </svelte:head>
 
-<div class="host-screen">
-  <!-- Control Panel Toggle Button -->
-  <button
-    on:click={toggleControlPanel}
-    class="control-toggle"
-    class:open={controlPanelOpen}
-    title={controlPanelOpen ? 'Close Control Panel' : 'Open Control Panel'}
-  >
-    {controlPanelOpen ? '✕' : '⚙️'}
-  </button>
-
-  <!-- Floating Control Panel -->
-  <div class="control-panel" class:open={controlPanelOpen}>
-    <div class="panel-header">
-      <h2>Host Controls</h2>
-      <button on:click={toggleControlPanel} class="close-btn">✕</button>
-    </div>
-
-    <div class="panel-content">
-      <!-- Game Controls -->
-      <div class="panel-section">
-        <h3>🎮 Game Controls</h3>
-        <div class="button-group">
-          {#if isGameActive}
-            <button on:click={endGame} class="btn-danger">
-              ⏹️ End Game
-            </button>
-            {#if canPause}
-              <button on:click={pauseGame} class="btn-secondary">
-                ⏸️ Pause
-              </button>
-            {:else if canResume}
-              <button on:click={resumeGame} class="btn-primary">
-                ▶️ Resume
-              </button>
-            {/if}
-          {/if}
-          {#if currentState === GameState.GAME_END}
-            <button on:click={startNewGame} class="btn-primary">
-              🚀 Start New Game
-            </button>
-          {/if}
-          <button on:click={returnToLobby} class="btn-secondary">
-            🏠 Return to Lobby
-          </button>
-        </div>
-      </div>
-
-      <!-- Player Management -->
-      <div class="panel-section">
-        <h3>👥 Players ({$players.length})</h3>
-        <div class="player-list">
-          {#each $players as player}
-            <div class="player-item" class:disconnected={player.status === PlayerStatus.DISCONNECTED}>
-              <div class="player-info">
-                <span class="player-avatar-small">{player.avatar}</span>
-                <div class="player-details">
-                  <span class="player-name-small">
-                    {player.name}
-                    {#if player.status === PlayerStatus.DISCONNECTED}
-                      <span class="disconnected-badge">🔴</span>
-                    {/if}
-                  </span>
-                  <span class="player-score-small">Score: {player.score || 0}</span>
-                </div>
-              </div>
-              {#if player.id !== $socket?.id}
-                <button
-                  on:click={() => kickPlayer(player.id, player.name)}
-                  class="kick-btn"
-                  title="Remove player"
-                >
-                  🗑️
-                </button>
-              {:else}
-                <span class="host-badge">Host</span>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Room Management -->
-      <div class="panel-section">
-        <h3>🏠 Room Management</h3>
-        <div class="button-group">
-          <button on:click={copyRoomCode} class="btn-secondary">
-            📋 Copy Room Code
-          </button>
-          <button on:click={openSettings} class="btn-secondary">
-            ⚙️ Settings
-          </button>
-        </div>
-        <div class="room-info-panel">
-          <p><strong>Room Code:</strong> <code>{roomCode}</code></p>
-          <p><strong>Join URL:</strong></p>
-          <code class="join-url">{origin}/join?code={roomCode}</code>
-        </div>
-      </div>
-
-      <!-- Game State Indicator -->
-      <div class="panel-section">
-        <h3>📊 Game Status</h3>
-        <div class="status-info">
-          <p><strong>State:</strong> {currentState || 'LOBBY'}</p>
-          {#if isPaused}
-            <p class="paused-indicator">⏸️ PAUSED</p>
-          {/if}
-          {#if round > 0}
-            <p><strong>Round:</strong> {round}/{maxRounds}</p>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Leaderboards -->
-      <div class="panel-section">
-        <h3>🏆 Leaderboards</h3>
-        <div class="leaderboard-tabs">
-          <button
-            on:click={() => (leaderboardTab = 'session')}
-            class="tab-btn"
-            class:active={leaderboardTab === 'session'}
-          >
-            Session
-          </button>
-          <button
-            on:click={() => (leaderboardTab = 'global')}
-            class="tab-btn"
-            class:active={leaderboardTab === 'global'}
-          >
-            Global
-          </button>
-        </div>
-        {#if leaderboardTab === 'session'}
-          <SessionLeaderboard {roomCode} />
-        {:else}
-          <GlobalLeaderboard {roomCode} />
-        {/if}
-      </div>
-    </div>
-  </div>
+<div class="host-screen" class:panel-open={controlPanelOpen}>
+  <!-- Control Panel -->
+  <HostControlPanel
+    bind:controlPanelOpen
+    {roomCode}
+    {origin}
+    {currentState}
+    bind:isPaused
+    {round}
+    {maxRounds}
+    bind:leaderboardTab
+    {showConfirmation}
+  />
 
   <!-- Confirmation Dialog -->
-  {#if showConfirmDialog}
-    <div class="confirm-overlay" on:click={cancelConfirm}>
-      <div class="confirm-dialog" on:click|stopPropagation>
-        <h3>Confirm Action</h3>
-        <p>{confirmMessage}</p>
-        <div class="confirm-buttons">
-          <button on:click={confirm} class="btn-primary">Confirm</button>
-          <button on:click={cancelConfirm} class="btn-secondary">Cancel</button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <HostConfirmationDialog
+    bind:showConfirmDialog
+    {confirmMessage}
+    confirmAction={confirmActionRef}
+  />
 
   <!-- Top Bar -->
-  <div class="host-header">
-    <div class="room-info">
-      <span class="room-code">Room: {roomCode}</span>
-      <span class="player-count">👥 {$players.length} Players</span>
-      {#if isPaused}
-        <span class="paused-badge">⏸️ PAUSED</span>
-      {/if}
-    </div>
-    {#if round > 0}
-      <div class="round-info">
-        Round {round}/{maxRounds}
-      </div>
-    {/if}
-  </div>
+  <HostHeader {roomCode} {isPaused} {round} {maxRounds} onReconnect={handleManualReconnect} />
 
   <!-- Main Content Area -->
   <div class="host-content">
-    {#if currentState === GameState.LOBBY}
-      <div class="lobby-screen">
-        <h1 class="mega-title">🎄 Christmas Party Games 🎄</h1>
-        <p class="waiting-text">Waiting for host to start...</p>
-        <div class="player-grid">
-          {#each $players as player}
-            <div class="player-badge">
-              <span class="player-avatar">{player.avatar}</span>
-              <span class="player-name">{player.name}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {:else if currentState === GameState.STARTING}
-      <div class="countdown-screen">
-        <h1 class="countdown-text">Get Ready!</h1>
-        <div class="countdown-number">3</div>
-        <p class="countdown-subtitle">Game starting soon...</p>
-      </div>
-    {:else if currentState === GameState.PLAYING}
-      <div class="playing-screen">
-        {#if currentGameType === GameType.GIFT_GRABBER}
-          <!-- Gift Grabber: Show Phaser canvas -->
-          <div class="gift-grabber-host-view">
-            <GiftGrabberHostCanvas 
-              {playerPositions} 
-              {gifts} 
-              {coals}
-            />
-          </div>
-        {:else if currentGameType === GameType.WORKSHOP_TYCOON}
-          <!-- Workshop Tycoon: Show leaderboard -->
-          <div class="workshop-leaderboard">
-            <h2 class="game-title">🏭 Workshop Tycoon</h2>
-            <div class="tycoon-scoreboard">
-              {#each scoreboard.slice(0, 10) as player, i}
-                <div class="tycoon-entry" class:leader={i === 0}>
-                  <span class="tycoon-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-                  <span class="tycoon-name">{player.name}</span>
-                  <span class="tycoon-resources">🎁 {Math.floor($gameState?.playerResources?.[player.playerId] || 0)}</span>
-                  <span class="tycoon-production">⚡ {($gameState?.playerProduction?.[player.playerId] || 0).toFixed(1)}/s</span>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {:else if currentGameType === GameType.TRIVIA_ROYALE}
-          <!-- Trivia: Show question and voting breakdown -->
-          <div class="trivia-host-view">
-            <h2 class="game-title">🎄 Christmas Trivia Royale</h2>
-            {#if $gameState?.currentQuestion}
-              <div class="question-display">
-                <h3 class="question-text">{$gameState.currentQuestion.question}</h3>
-              </div>
-              
-              {#if currentState === GameState.ROUND_END && $gameState?.showReveal}
-                <!-- Show voting breakdown for host -->
-                <div class="voting-breakdown-host">
-                  <h3 class="breakdown-title-host">📊 Voting Breakdown</h3>
-                  <div class="answers-reveal-host">
-                    {#each $gameState.currentQuestion.answers as answer, index}
-                      {@const count = $gameState?.answerCounts?.[index] || 0}
-                      {@const percentage = $gameState?.answerPercentages?.[index] || 0}
-                      {@const isCorrect = index === $gameState.currentQuestion.correctIndex}
-                      {@const playerNames = $gameState?.playersByAnswer?.[index] || []}
-                      <div class="answer-reveal-host" class:correct={isCorrect}>
-                        <div class="answer-reveal-header-host">
-                          <span class="answer-letter-reveal-host">{String.fromCharCode(65 + index)}</span>
-                          <span class="answer-text-reveal-host">{answer}</span>
-                          {#if isCorrect}
-                            <span class="correct-badge-host">✓ Correct</span>
-                          {/if}
-                          <span class="percentage-stat">{percentage}% ({count})</span>
-                        </div>
-                        <div class="percentage-bar-container-host">
-                          <div 
-                            class="percentage-bar-host" 
-                            class:correct={isCorrect}
-                            style="width: {percentage}%"
-                          >
-                          </div>
-                        </div>
-                        {#if playerNames.length > 0}
-                          <div class="voters-list-host">
-                            <span class="voters-label-host">Voters:</span>
-                            <span class="voters-names-host">{playerNames.join(', ')}</span>
-                          </div>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {:else if currentState === GameState.PLAYING}
-                <div class="waiting-message-host">
-                  <p class="instruction-text">Players are answering...</p>
-                  <p class="instruction-text-small">
-                    {Object.keys($gameState?.answers || {}).length} / {$players.length} answered
-                  </p>
-                </div>
-              {/if}
-            {/if}
+    <HostConnectionStatus {error} {currentState} />
+    {#if !error && $connected && currentState !== undefined && currentState !== null}
+      {#if currentState === GameState.LOBBY}
+        <HostLobbyScreen {roomCode} />
+      {:else if currentState === GameState.STARTING}
+        <!-- STARTING state: Show question immediately if available, with instructions/countdown overlay -->
+        {#if $gameState?.currentQuestion || $gameState?.currentItem || $gameState?.currentPrompt || $gameState?.availableEmojis}
+          <!-- Game content is available - show it immediately with overlay -->
+          <div class="playing-screen starting-with-content">
+            <!-- Instructions Overlay (if showing) -->
+            <HostInstructionsOverlay gameType={currentGameType} {showInstructions} />
+
+            <!-- Countdown Overlay (when not showing instructions) -->
+            <HostCountdownOverlay {countdownValue} show={!showInstructions} />
+
+            <!-- Game Content (visible immediately when available) -->
+            <HostGameDisplay {currentGameType} {currentState} {round} {maxRounds} {scoreboard} />
           </div>
         {:else}
-          <h2 class="game-title">Game in Progress...</h2>
-          <p class="instruction-text">Check your phones!</p>
-          
-          {#if $gameState?.currentQuestion}
-            <div class="question-display">
-              <h3 class="question-text">{$gameState.currentQuestion.question}</h3>
+          <!-- No game content yet - show countdown only -->
+          <div class="countdown-screen">
+            <h1 class="countdown-text">Get Ready!</h1>
+            <div class="countdown-number" class:pulse={countdownValue <= 1}>
+              {countdownValue > 0 ? countdownValue : 'GO!'}
             </div>
-          {:else if $gameState?.currentPrompt}
-            <div class="prompt-display">
-              <h3 class="prompt-text">{$gameState.currentPrompt.prompt}</h3>
-            </div>
-          {:else if $gameState?.currentItem}
-            <div class="item-display">
-              <img src={$gameState.currentItem.imageUrl} alt="Item" class="item-image" />
-              <h3 class="item-name">{$gameState.currentItem.name}</h3>
-            </div>
-          {/if}
-        {/if}
-      </div>
-    {:else if currentState === GameState.ROUND_END}
-      <div class="results-screen">
-        <h2 class="results-title">🎉 Round {round} Results 🎉</h2>
-        <div class="mini-scoreboard">
-          {#each scoreboard.slice(0, 10) as player, i}
-            <div class="score-entry" class:leader={i === 0}>
-              <span class="rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-              <span class="name">{player.name}</span>
-              <span class="score">{player.score}</span>
-            </div>
-          {/each}
-        </div>
-        {#if currentGameType === GameType.EMOJI_CAROL && $gameState?.roundResults?.[round - 1]}
-          <div class="emoji-results-display">
-            <h3 class="text-xl font-bold mb-4">Emoji Picks</h3>
-            <div class="emoji-results-grid">
-              {#each Object.entries($gameState.roundResults[round - 1].emojiCounts || {}) as [emoji, count]}
-                <div class="emoji-result-item">
-                  <span class="emoji-large">{emoji}</span>
-                  <span class="emoji-count">×{count}</span>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {:else if currentGameType === GameType.NAUGHTY_OR_NICE && $gameState?.votes}
-          {@const votes = $gameState.votes || {}}
-          {@const naughtyCount = Object.values(votes).filter(v => v === 'naughty').length}
-          {@const niceCount = Object.values(votes).filter(v => v === 'nice').length}
-          {@const total = naughtyCount + niceCount}
-          <div class="vote-results-display">
-            <h3 class="text-xl font-bold mb-4">Vote Results</h3>
-            <div class="vote-bars">
-              <div class="vote-bar-container">
-                <div class="vote-bar-label">😈 Naughty</div>
-                <div class="vote-bar">
-                  <div class="vote-bar-fill naughty-fill" style="width: {total > 0 ? (naughtyCount / total * 100) : 0}%">
-                    {naughtyCount}
-                  </div>
-                </div>
-              </div>
-              <div class="vote-bar-container">
-                <div class="vote-bar-label">👼 Nice</div>
-                <div class="vote-bar">
-                  <div class="vote-bar-fill nice-fill" style="width: {total > 0 ? (niceCount / total * 100) : 0}%">
-                    {niceCount}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <p class="countdown-subtitle">Game starting soon...</p>
           </div>
         {/if}
-      </div>
-    {:else if currentState === GameState.GAME_END}
-      <div class="final-screen">
-        <h1 class="mega-title">🏆 Final Results 🏆</h1>
-        <div class="final-scoreboard">
-          {#each scoreboard as player, i}
-            <div class="final-score-entry" class:winner={i === 0} class:podium={i < 3}>
-              <span class="final-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-              <span class="final-avatar">{player.name.charAt(0)}</span>
-              <span class="final-name">{player.name}</span>
-              <span class="final-score">{player.score}</span>
-            </div>
-          {/each}
-        </div>
-        
-        <!-- Enhanced Leaderboard Display for Host -->
-        <div class="host-leaderboard-tabs">
-          <div class="leaderboard-section">
-            <h3 class="section-title">📊 Session Leaderboard</h3>
-            <SessionLeaderboard {roomCode} />
-          </div>
-          <div class="leaderboard-section">
-            <h3 class="section-title">🌍 Global Leaderboard</h3>
-            <GlobalLeaderboard {roomCode} />
+      {:else if currentState === GameState.PLAYING}
+        <div class="playing-screen">
+          <!-- Game Display - should fill available space -->
+          <div class="game-display-container">
+            <HostGameDisplay {currentGameType} {currentState} {round} {maxRounds} {scoreboard} />
           </div>
         </div>
-
-        <div class="game-end-actions">
-          <button on:click={startNewGame} class="btn-primary-large">
-            🚀 Start New Game
-          </button>
-          <button on:click={returnToLobby} class="btn-secondary-large">
-            🏠 Return to Lobby
-          </button>
+      {:else if currentState === GameState.ROUND_END}
+        <!-- Round End: Show full game content with reveals and leaderboard -->
+        <div class="playing-screen">
+          <div class="game-display-container">
+            <HostGameDisplay {currentGameType} {currentState} {round} {maxRounds} {scoreboard} />
+          </div>
         </div>
-      </div>
-    {:else if currentState === GameState.PAUSED}
-      <div class="paused-screen">
-        <h1 class="mega-title">⏸️ Game Paused</h1>
-        <p class="instruction-text">The game is currently paused</p>
-        <button on:click={resumeGame} class="btn-primary-large">
-          ▶️ Resume Game
-        </button>
-      </div>
+      {:else if currentState === GameState.GAME_END}
+        <FinalResults {roomCode} {scoreboard} gameType={currentGameType} isHost={true} />
+      {:else if currentState === GameState.PAUSED}
+        <div class="paused-screen">
+          <h1 class="mega-title">⏸️ Game Paused</h1>
+          <p class="instruction-text">The game is currently paused</p>
+          <button on:click={resumeGame} class="btn-primary-large"> ▶️ Resume Game </button>
+        </div>
+      {/if}
     {/if}
   </div>
 
   <!-- Bottom Scoreboard (only during game, not at end) -->
   {#if currentState === GameState.PLAYING || currentState === GameState.ROUND_END || currentState === GameState.STARTING}
-    <div class="bottom-scorebar">
-      <div class="ticker-scroll">
-        {#each scoreboard as player, i}
-          <span class="ticker-item">
-            #{i + 1} {player.name}: {player.score}
-          </span>
-        {/each}
-      </div>
-    </div>
+    <HostBottomScorebar {scoreboard} />
   {/if}
 </div>
 
@@ -589,660 +910,56 @@
     overflow: hidden;
   }
 
-  .host-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2rem 3rem;
-    background: rgba(0, 0, 0, 0.5);
-    border-bottom: 4px solid #ffd700;
-  }
-
-  .room-info {
-    display: flex;
-    gap: 2rem;
-    font-size: 1.5rem;
-    font-weight: bold;
-  }
-
-  .room-code {
-    color: #ffd700;
-  }
-
-  .round-info {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #ffd700;
-  }
-
   .host-content {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 3rem;
+    padding-bottom: calc(3rem + 80px); /* Account for bottom scorebar */
+    transition: margin-right 0.3s ease-in-out;
   }
 
-  .lobby-screen, .countdown-screen, .playing-screen, .results-screen, .final-screen, .paused-screen {
-    width: 100%;
-    max-width: 1400px;
-    text-align: center;
-  }
-
-  .gift-grabber-host-view {
-    width: 100%;
-    height: 100%;
-    min-height: 600px;
-  }
-
-  .workshop-leaderboard {
-    width: 100%;
-    max-width: 1000px;
-  }
-
-  .tycoon-scoreboard {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    margin-top: 2rem;
-  }
-
-  .tycoon-entry {
-    display: grid;
-    grid-template-columns: 80px 1fr 150px 120px;
-    gap: 1rem;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 1rem;
-    border: 2px solid transparent;
-    transition: all 0.2s;
-  }
-
-  .tycoon-entry.leader {
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.05));
-    border-color: #ffd700;
-  }
-
-  .tycoon-rank {
-    font-size: 1.5rem;
-    font-weight: bold;
-  }
-
-  .tycoon-name {
-    font-size: 1.25rem;
-    font-weight: bold;
-  }
-
-  .tycoon-resources {
-    font-size: 1.125rem;
-    color: #ffd700;
-    font-weight: bold;
-  }
-
-  .tycoon-production {
-    font-size: 1rem;
-    color: #0f8644;
-    font-weight: bold;
-  }
-
-  .emoji-results-display {
-    margin-top: 3rem;
-    max-width: 800px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .emoji-results-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-
-  .emoji-result-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 1rem;
-  }
-
-  .emoji-large {
-    font-size: 3rem;
-  }
-
-  .emoji-count {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #ffd700;
-  }
-
-  .vote-results-display {
-    margin-top: 3rem;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .vote-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-top: 1rem;
-  }
-
-  .vote-bar-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .vote-bar-label {
-    font-size: 1.25rem;
-    font-weight: bold;
-  }
-
-  .vote-bar {
-    width: 100%;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 9999px;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .vote-bar-fill {
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 1.125rem;
-    transition: width 0.5s ease;
-  }
-
-  .naughty-fill {
-    background: linear-gradient(90deg, #c41e3a, #8b1538);
-  }
-
-  .nice-fill {
-    background: linear-gradient(90deg, #0f8644, #0a5d2e);
-  }
-
-  .paused-screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2rem;
-  }
-
-  .game-end-actions {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    margin-top: 3rem;
-  }
-
-  .btn-primary-large, .btn-secondary-large {
-    padding: 1.5rem 3rem;
-    font-size: 1.5rem;
-    font-weight: bold;
-    border-radius: 1rem;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary-large {
-    background: linear-gradient(135deg, #c41e3a 0%, #8b1538 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(196, 30, 58, 0.4);
-  }
-
-  .btn-primary-large:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
-  }
-
-  .btn-secondary-large {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-  }
-
-  .btn-secondary-large:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  /* Control Panel Styles */
-  .control-toggle {
-    position: fixed;
-    top: 2rem;
-    right: 2rem;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.8);
-    border: 3px solid #ffd700;
-    color: #ffd700;
-    font-size: 1.5rem;
-    cursor: pointer;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-  }
-
-  .control-toggle:hover {
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.1);
-  }
-
-  .control-toggle.open {
-    background: rgba(196, 30, 58, 0.9);
-    border-color: #ffd700;
-  }
-
-  .control-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 400px;
-    max-width: 90vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.95);
-    border-left: 4px solid #ffd700;
-    z-index: 999;
-    transform: translateX(100%);
-    transition: transform 0.3s ease-in-out;
-    overflow-y: auto;
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
-  }
-
-  .control-panel.open {
-    transform: translateX(0);
-  }
-
-  .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2rem;
-    background: rgba(196, 30, 58, 0.3);
-    border-bottom: 2px solid #ffd700;
-  }
-
-  .panel-header h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    color: #ffd700;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 1.5rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    transition: background 0.2s;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .panel-content {
-    padding: 1.5rem;
-  }
-
-  .panel-section {
-    margin-bottom: 2rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .panel-section:last-child {
-    border-bottom: none;
-  }
-
-  .panel-section h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1.25rem;
-    color: #ffd700;
-  }
-
-  .leaderboard-tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-
-  .tab-btn {
-    flex: 1;
-    padding: 0.5rem 1rem;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.5rem;
-    color: rgba(255, 255, 255, 0.7);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .tab-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .tab-btn.active {
-    background: rgba(196, 30, 58, 0.3);
-    border-color: #c41e3a;
-    color: white;
-  }
-
-  .button-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .button-group button {
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: all 0.2s;
-    text-align: left;
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, #c41e3a 0%, #8b1538 100%);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(196, 30, 58, 0.4);
-  }
-
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .btn-danger {
-    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-    color: white;
-  }
-
-  .btn-danger:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.4);
-  }
-
-  .player-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-
-  .player-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    opacity: 1;
-    transition: opacity 0.2s;
-  }
-
-  .player-item.disconnected {
-    opacity: 0.5;
-    border: 1px dashed rgba(255, 255, 255, 0.2);
-  }
-
-  .disconnected-badge {
-    font-size: 0.75rem;
-    margin-left: 0.25rem;
-  }
-
-  .player-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex: 1;
-  }
-
-  .player-avatar-small {
-    font-size: 2rem;
-  }
-
-  .player-details {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .player-name-small {
-    font-weight: 600;
-    color: white;
-  }
-
-  .player-score-small {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.7);
-  }
-
-  .kick-btn {
-    background: rgba(220, 38, 38, 0.2);
-    border: 1px solid rgba(220, 38, 38, 0.5);
-    color: #fca5a5;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: all 0.2s;
-  }
-
-  .kick-btn:hover {
-    background: rgba(220, 38, 38, 0.4);
-    border-color: #dc2626;
-  }
-
-  .host-badge {
-    background: rgba(255, 215, 0, 0.2);
-    border: 1px solid #ffd700;
-    color: #ffd700;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .room-info-panel {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-  }
-
-  .room-info-panel p {
-    margin: 0.5rem 0;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .room-info-panel code {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    color: #ffd700;
-    font-family: monospace;
-  }
-
-  .join-url {
-    display: block;
-    word-break: break-all;
-    margin-top: 0.5rem;
-  }
-
-  .status-info {
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.5rem;
-  }
-
-  .status-info p {
-    margin: 0.5rem 0;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .paused-indicator {
-    color: #ffd700 !important;
-    font-weight: bold;
-    font-size: 1.1rem;
-  }
-
-  .paused-badge {
-    background: rgba(255, 215, 0, 0.2);
-    border: 1px solid #ffd700;
-    color: #ffd700;
-    padding: 0.25rem 0.75rem;
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  /* Confirmation Dialog */
-  .confirm-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
-    z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .confirm-dialog {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 3px solid #ffd700;
-    border-radius: 1rem;
-    padding: 2rem;
-    max-width: 400px;
-    width: 90%;
-    text-align: center;
-  }
-
-  .confirm-dialog h3 {
-    margin: 0 0 1rem 0;
-    color: #ffd700;
-    font-size: 1.5rem;
-  }
-
-  .confirm-dialog p {
-    margin: 0 0 2rem 0;
-    color: white;
-    font-size: 1.1rem;
-  }
-
-  .confirm-buttons {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-  }
-
-  .confirm-buttons button {
-    padding: 0.75rem 2rem;
-    border-radius: 0.5rem;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: all 0.2s;
+  .host-screen.panel-open .host-content {
+    margin-right: 400px;
   }
 
   @media (max-width: 768px) {
-    .control-panel {
-      width: 100vw;
-      max-width: 100vw;
-    }
-
-    .control-toggle {
-      top: 1rem;
-      right: 1rem;
-      width: 50px;
-      height: 50px;
-      font-size: 1.25rem;
-    }
-
-    .game-end-actions {
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .btn-primary-large, .btn-secondary-large {
-      width: 100%;
-      max-width: 300px;
+    .host-screen.panel-open .host-content {
+      margin-right: 0;
     }
   }
 
-  .mega-title {
-    font-size: 5rem;
-    font-weight: bold;
-    margin-bottom: 2rem;
-    text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
-  }
-
-  .waiting-text {
-    font-size: 2rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 3rem;
-  }
-
-  .player-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1.5rem;
-  }
-
-  .player-badge {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 1.5rem;
-    border-radius: 1rem;
+  .countdown-screen,
+  .playing-screen,
+  .paused-screen {
+    width: 100%;
+    max-width: 1600px;
+    min-height: 80vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: flex-start;
+    text-align: center;
+    padding: 2rem;
+    box-sizing: border-box;
   }
 
-  .player-avatar {
-    font-size: 3rem;
+  .starting-with-content {
+    position: relative;
+    width: 100%;
+    min-height: 80vh;
   }
 
-  .player-name {
-    font-size: 1.25rem;
-    font-weight: bold;
+  .game-display-container {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow: auto;
+    padding: 1rem;
+    box-sizing: border-box;
   }
 
   .countdown-text {
@@ -1254,7 +971,12 @@
     font-size: 15rem;
     font-weight: bold;
     color: #ffd700;
-    animation: pulse 1s ease-in-out;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    transition: transform 0.3s ease;
+  }
+
+  .countdown-number.pulse {
+    animation: pulse 0.5s ease-in-out infinite;
   }
 
   .countdown-subtitle {
@@ -1263,287 +985,40 @@
     margin-top: 2rem;
   }
 
-  .game-title {
-    font-size: 4rem;
-    margin-bottom: 1rem;
+  .mega-title {
+    font-size: 5rem;
+    font-weight: bold;
+    margin-bottom: 2rem;
+    text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
   }
 
   .instruction-text {
-    font-size: 2rem;
+    font-size: 1.25rem;
     color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 3rem;
-  }
-
-  .question-display, .prompt-display, .item-display {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 3rem;
-    border-radius: 2rem;
-    border: 4px solid #ffd700;
-  }
-
-  .question-text, .prompt-text {
-    font-size: 3rem;
-    font-weight: bold;
-    line-height: 1.4;
-  }
-
-  .item-image {
-    width: 100%;
-    max-width: 600px;
-    max-height: 400px;
-    object-fit: contain;
-    border-radius: 1rem;
     margin-bottom: 2rem;
   }
 
-  .item-name {
-    font-size: 3rem;
-    font-weight: bold;
-  }
-
-  /* Trivia Host View */
-  .trivia-host-view {
-    width: 100%;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  .voting-breakdown-host {
-    margin-top: 3rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 2rem;
-    padding: 2rem;
-    border: 3px solid rgba(255, 215, 0, 0.3);
-  }
-
-  .breakdown-title-host {
-    font-size: 2.5rem;
-    font-weight: bold;
-    margin-bottom: 2rem;
-    text-align: center;
-    color: #ffd700;
-  }
-
-  .answers-reveal-host {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .answer-reveal-host {
-    background: rgba(255, 255, 255, 0.05);
-    border: 3px solid rgba(255, 255, 255, 0.2);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    transition: all 0.3s;
-  }
-
-  .answer-reveal-host.correct {
-    background: rgba(15, 134, 68, 0.2);
-    border-color: #0f8644;
-    box-shadow: 0 0 30px rgba(15, 134, 68, 0.4);
-  }
-
-  .answer-reveal-header-host {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .answer-letter-reveal-host {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 3rem;
-    height: 3rem;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 0.75rem;
-    font-weight: bold;
+  .btn-primary-large {
+    padding: 1.5rem 3rem;
     font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-
-  .answer-reveal-host.correct .answer-letter-reveal-host {
-    background: #0f8644;
-  }
-
-  .answer-text-reveal-host {
-    flex: 1;
-    font-weight: 600;
-    font-size: 1.75rem;
-  }
-
-  .correct-badge-host {
-    background: #0f8644;
+    font-weight: bold;
+    background: linear-gradient(135deg, #c41e3a 0%, #8b1538 100%);
     color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 0.75rem;
-    font-size: 1rem;
-    font-weight: bold;
-  }
-
-  .percentage-stat {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #ffd700;
-    margin-left: auto;
-  }
-
-  .percentage-bar-container-host {
-    width: 100%;
-    height: 3rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 0.75rem;
-    overflow: hidden;
-    margin-bottom: 1rem;
-    position: relative;
-  }
-
-  .percentage-bar-host {
-    height: 100%;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.2));
-    transition: width 0.5s ease-out;
-  }
-
-  .percentage-bar-host.correct {
-    background: linear-gradient(90deg, #0f8644, #0a5d2e);
-  }
-
-  .voters-list-host {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 1.125rem;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .voters-label-host {
-    font-weight: 600;
-  }
-
-  .voters-names-host {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .waiting-message-host {
-    text-align: center;
-    margin-top: 2rem;
-  }
-
-  .instruction-text-small {
-    font-size: 1.5rem;
-    color: rgba(255, 255, 255, 0.6);
-    margin-top: 1rem;
-  }
-
-  .results-title {
-    font-size: 4rem;
-    margin-bottom: 3rem;
-  }
-
-  .mini-scoreboard,   .final-scoreboard {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 2rem;
-    border-radius: 2rem;
-    max-width: 800px;
-    margin: 0 auto 3rem;
-  }
-
-  .host-leaderboard-tabs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-    max-width: 1200px;
-    margin: 0 auto 3rem;
-  }
-
-  .leaderboard-section {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 1.5rem;
     border-radius: 1rem;
-    border: 2px solid rgba(255, 215, 0, 0.3);
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(196, 30, 58, 0.4);
   }
 
-  .section-title {
-    font-size: 1.5rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
-    color: #ffd700;
-    text-align: center;
-  }
-
-  @media (max-width: 1024px) {
-    .host-leaderboard-tabs {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .score-entry, .final-score-entry {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 2rem;
-    align-items: center;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 1rem;
-    font-size: 2rem;
-  }
-
-  .score-entry.leader, .final-score-entry.winner {
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.3), rgba(255, 215, 0, 0.1));
-    border: 3px solid #ffd700;
-  }
-
-  .rank, .final-rank {
-    font-weight: bold;
-    width: 4rem;
-  }
-
-  .name, .final-name {
-    font-weight: bold;
-    text-align: left;
-  }
-
-  .score, .final-score {
-    font-weight: bold;
-    color: #ffd700;
-    font-size: 2.5rem;
-  }
-
-  .bottom-scorebar {
-    background: rgba(0, 0, 0, 0.7);
-    padding: 1rem;
-    border-top: 3px solid #ffd700;
-    overflow: hidden;
-  }
-
-  .ticker-scroll {
-    display: flex;
-    gap: 3rem;
-    animation: scroll 30s linear infinite;
-    white-space: nowrap;
-  }
-
-  .ticker-item {
-    font-size: 1.5rem;
-    font-weight: bold;
-  }
-
-  @keyframes scroll {
-    0% {
-      transform: translateX(0);
-    }
-    100% {
-      transform: translateX(-50%);
-    }
+  .btn-primary-large:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
   }
 
   @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
       transform: scale(1);
     }
     50% {

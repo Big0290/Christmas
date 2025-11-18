@@ -3,782 +3,514 @@
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import { onMount, onDestroy } from 'svelte';
-  import { socket, connectSocket, players } from '$lib/socket';
+  import { socket, connectSocket, players, connected } from '$lib/socket';
   import QRCode from 'qrcode';
   import { GameType } from '@christmas/core';
   import { playSound } from '$lib/audio';
+  import { loadRoomTheme } from '$lib/theme';
+  import GameTile from '$lib/components/room/GameTile.svelte';
+  import ShareRoom from '$lib/components/room/ShareRoom.svelte';
+  import Jukebox from '$lib/components/room/Jukebox.svelte';
+  import { t, language } from '$lib/i18n';
+  import { get } from 'svelte/store';
 
   const roomCode = $page.params.code;
   let qrCodeDataUrl = '';
   let isHost = false;
   let selectedGame: GameType | null = null;
   let origin = '';
-  let showRoomSettings = false;
+  let joinUrl = '';
+  let verifyingConnection = false;
+  let connectionError = '';
   let roomName = '';
   let roomDescription = '';
-  let isPublic = false;
-  let loadingSettings = false;
+  let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   
-  // Trivia Questions Management
-  let showTriviaQuestions = false;
-  let questionSets: Array<{ id: string; name: string; description?: string; questionCount: number }> = [];
-  let selectedQuestionSet: string | null = null; // null means use default questions
-  let currentQuestions: Array<{ id: string; question: string; answers: string[]; correctIndex: number; difficulty: string; category?: string }> = [];
-  let loadingSets = false;
-  let loadingQuestions = false;
-  let creatingSet = false;
-  let addingQuestion = false;
-  let newSetName = '';
-  let newSetDescription = '';
-  let newQuestion = {
-    question: '',
-    answers: ['', '', '', ''],
-    correctIndex: 0,
-    difficulty: 'medium' as 'easy' | 'medium' | 'hard',
-    category: '',
-  };
+  // Debug logging (dev mode only)
+  $: if (import.meta.env.DEV) {
+    console.log('[Room] Players store updated:', $players);
+    console.log('[Room] Players count:', $players.length);
+    console.log('[Room] Socket connected:', $connected);
+    console.log('[Room] Is host:', isHost);
+  }
 
-  const games = [
-    { type: GameType.TRIVIA_ROYALE, name: '🎄 Christmas Trivia Royale', desc: 'Fast-paced quiz' },
-    { type: GameType.GIFT_GRABBER, name: '🎁 Gift Grabber', desc: 'Collect presents' },
-    { type: GameType.WORKSHOP_TYCOON, name: '🏭 Workshop Tycoon', desc: 'Build your empire' },
-    { type: GameType.EMOJI_CAROL, name: '🎶 Emoji Carol Battle', desc: 'Strategic voting' },
-    { type: GameType.NAUGHTY_OR_NICE, name: '😇 Naughty or Nice', desc: 'Social voting' },
-    { type: GameType.PRICE_IS_RIGHT, name: '💰 Price Is Right', desc: 'Guess the price' },
+  $: games = [
+    { type: GameType.TRIVIA_ROYALE, name: t('room.games.triviaRoyale.name'), desc: t('room.games.triviaRoyale.desc') },
+    { type: GameType.EMOJI_CAROL, name: t('room.games.emojiCarol.name'), desc: t('room.games.emojiCarol.desc') },
+    { type: GameType.NAUGHTY_OR_NICE, name: t('room.games.naughtyOrNice.name'), desc: t('room.games.naughtyOrNice.desc') },
+    { type: GameType.PRICE_IS_RIGHT, name: t('room.games.priceIsRight.name'), desc: t('room.games.priceIsRight.desc') },
   ];
 
-  onMount(async () => {
-    connectSocket();
+  // Computed: sorted players by score
+  $: sortedPlayers = [...$players].sort((a, b) => (b.score || 0) - (a.score || 0));
 
-    // Set origin for display
-    if (browser) {
-      origin = window.location.origin;
+  onMount(async () => {
+    try {
+      await connectSocket();
+    } catch (err) {
+      console.error('[Room] Failed to connect socket:', err);
+      connectionError = 'Failed to connect to server. Please refresh the page.';
     }
 
-    // Generate QR code for joining
+    // Add a fallback timeout to show error if connection takes too long
+    connectionTimeout = setTimeout(() => {
+      if (!$connected) {
+        console.error('[Room] Connection timeout after 15 seconds');
+        connectionError = 'Connection timeout. Please check your internet connection and refresh the page.';
+      }
+    }, 15000);
+
+    // Set origin and join URL
     if (browser) {
-      const joinUrl = `${window.location.origin}/join?code=${roomCode}`;
+      origin = window.location.origin;
+      joinUrl = `${origin}/join?code=${roomCode}`;
+    }
+
+    // Generate QR code for joining - larger for projector display
+    if (browser) {
       qrCodeDataUrl = await QRCode.toDataURL(joinUrl, {
-        width: 300,
-        margin: 2,
+        width: 400,
+        margin: 3,
         color: { dark: '#c41e3a', light: '#ffffff' },
       });
     }
 
-    // Check if we're the host by checking URL params or sessionStorage
-    // If we created the room, we should have isHost info
+    // Check if we're the host
     if (browser) {
       const storedIsHost = sessionStorage.getItem(`host_${roomCode}`);
       if (storedIsHost === 'true') {
         isHost = true;
       } else {
-        // If not stored, assume we're the host (this page is for hosts)
-        // In production, you'd verify this with the server
-        isHost = true;
+        isHost = true; // Assume host for room page
       }
     } else {
-      // SSR fallback
       isHost = true;
     }
 
-    // If players list is empty, we might need to rejoin to get it
-    // But if we just created the room, we should already be in it
-    // The players list should be populated via socket events
+    // Verify host connection to room with retry logic
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+    const RECONNECT_DELAY = 1000; // 1 second
 
-    // Listen for game start
-    $socket.on('game_started', (gameType: GameType) => {
-      playSound('gameStart');
-      goto(`/host/${roomCode}`);
+    const verifyHostConnection = (attempt: number = 0) => {
+      if (!$socket || !$connected) {
+        console.log('[Room] Cannot verify host connection: socket not ready', {
+          hasSocket: !!$socket,
+          isConnected: $connected,
+        });
+        // Retry after a short delay if socket becomes available
+        if (attempt < MAX_RECONNECT_ATTEMPTS) {
+          setTimeout(() => {
+            if ($socket && $connected) {
+              verifyHostConnection(attempt + 1);
+            }
+          }, RECONNECT_DELAY);
+        }
+        return;
+      }
+
+      verifyingConnection = true;
+      connectionError = '';
+
+      if (browser) {
+        const hostToken = localStorage.getItem('christmas_hostToken');
+        const savedRoomCode = localStorage.getItem('christmas_roomCode');
+
+        if (hostToken && savedRoomCode === roomCode) {
+          console.log(`[Room] Verifying host connection (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+          const currentLanguage = get(language);
+          $socket.emit('reconnect_host', roomCode, hostToken, currentLanguage, (response: any) => {
+            verifyingConnection = false;
+            if (response && response.success) {
+              console.log('[Room] ✅ Host successfully connected to room');
+              console.log('[Room] Response players:', response.room?.players || []);
+              reconnectAttempts = 0; // Reset attempts on success
+              
+              // Manually update players store from response if room_update hasn't arrived yet
+              if (response.room?.players && Array.isArray(response.room.players)) {
+                console.log(`[Room] Manually setting players from reconnect response: ${response.room.players.length} player(s)`);
+                players.set(response.room.players);
+              }
+              
+              loadRoomSettings();
+            } else {
+              const errorMsg = response?.error || 'Failed to reconnect as host';
+              console.error(`[Room] ❌ Host reconnection failed (attempt ${attempt + 1}):`, errorMsg);
+              
+              // Retry if we haven't exceeded max attempts
+              if (attempt < MAX_RECONNECT_ATTEMPTS - 1) {
+                console.log(`[Room] Retrying host reconnection in ${RECONNECT_DELAY}ms...`);
+                setTimeout(() => {
+                  verifyHostConnection(attempt + 1);
+                }, RECONNECT_DELAY);
+              } else {
+                connectionError = errorMsg;
+                console.error('[Room] ❌ Max reconnection attempts reached');
+              }
+            }
+          });
+        } else {
+          verifyingConnection = false;
+          console.warn('[Room] ⚠️ Missing host token or room code mismatch', {
+            hasToken: !!hostToken,
+            savedRoomCode,
+            currentRoomCode: roomCode,
+          });
+        }
+      }
+    };
+
+    // Setup socket event listeners - wait for socket to be available
+    const setupSocketListeners = () => {
+      if (!$socket) {
+        // Wait for socket to be available
+        const unsubscribe = socket.subscribe((sock) => {
+          if (sock) {
+            unsubscribe();
+            setupSocketListeners();
+          }
+        });
+        return;
+      }
+
+      // NOTE: room_update events are handled by socket.ts (line 273-282)
+      // which updates the players store. We don't need a duplicate listener here.
+      // The $players store will automatically update when socket.ts receives room_update.
+
+      // Listen for game start
+      $socket.on('game_started', (gameType: GameType) => {
+        playSound('gameStart');
+        goto(`/host/${roomCode}`);
+      });
+
+      // Listen for room settings updates
+      $socket.on('room_settings_updated', (settings: any) => {
+        if (settings.roomName !== undefined) roomName = settings.roomName || '';
+        if (settings.description !== undefined) roomDescription = settings.description || '';
+      });
+    };
+
+    // Setup listeners immediately or wait for socket
+    setupSocketListeners();
+
+    // Watch for connection success to clear timeout and verify host connection
+    const unsubscribeConnected = connected.subscribe((isConnected) => {
+      if (isConnected && connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
+      // When connected, verify host connection
+      if (isConnected && $socket) {
+        verifyHostConnection();
+      }
     });
 
-    // Listen for room settings updates
-    $socket.on('room_settings_updated', (settings: any) => {
-      if (settings.roomName !== undefined) roomName = settings.roomName || '';
-      if (settings.description !== undefined) roomDescription = settings.description || '';
-      if (settings.isPublic !== undefined) isPublic = settings.isPublic;
-    });
-
-    // Load room settings if host
-    if (isHost && $socket) {
-      loadRoomSettings();
-      loadQuestionSets();
+    // Initial check - if already connected, verify immediately
+    if ($socket && $connected) {
+      verifyHostConnection();
     }
+
+    // Load room settings
+    loadRoomSettings();
+
+    // Cleanup subscription on destroy
+    return () => {
+      unsubscribeConnected();
+    };
   });
 
   function loadRoomSettings() {
-    // Settings will be loaded from socket events or we can emit a get_room_settings event
-    // For now, initialize with defaults
+    loadRoomTheme(roomCode);
     roomName = '';
     roomDescription = '';
-    isPublic = false;
-  }
-
-  function saveRoomSettings() {
-    if (!$socket || !isHost) return;
-    
-    loadingSettings = true;
-    $socket.emit('update_room_settings', {
-      roomName: roomName.trim() || undefined,
-      description: roomDescription.trim() || undefined,
-      isPublic: isPublic,
-    }, (response: any) => {
-      loadingSettings = false;
-      if (response.success) {
-        showRoomSettings = false;
-        // Settings will be updated via socket event
-      } else {
-        alert(response.error || 'Failed to update room settings');
-      }
-    });
   }
 
   onDestroy(() => {
-    $socket.off('game_started');
-    $socket.off('room_settings_updated');
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+    }
+    if ($socket) {
+      // NOTE: Don't remove room_update listener - it's managed by socket.ts
+      $socket.off('game_started');
+      $socket.off('room_settings_updated');
+    }
   });
 
   function startGame() {
-    if (selectedGame && isHost) {
+    if (selectedGame && isHost && $socket) {
       $socket.emit('start_game', selectedGame);
     }
   }
 
-  function copyRoomCode() {
-    if (browser && navigator.clipboard) {
-      navigator.clipboard.writeText(roomCode);
-      alert('Room code copied!');
-    }
-  }
-
-  function openGameMaster() {
-    if (browser) {
-      window.open(`/gamemaster`, '_blank');
-    }
-  }
-
-  // Trivia Questions Management Functions
-  function loadQuestionSets() {
-    if (!$socket || !isHost) return;
-    
-    loadingSets = true;
-    $socket.emit('list_question_sets', (response: any) => {
-      loadingSets = false;
-      if (response.success) {
-        questionSets = response.sets;
-        // Load the currently selected set for this room if available
-        loadRoomQuestionSet();
-      } else {
-        console.error('Failed to load question sets:', response.error);
-      }
-    });
-  }
-
-  function loadRoomQuestionSet() {
-    // Load the question set currently assigned to this room from game_settings
-    if (!$socket || !isHost) return;
-    
-    $socket.emit('get_game_settings', roomCode, GameType.TRIVIA_ROYALE, (response: any) => {
-      if (response.success && response.settings?.customQuestionSetId) {
-        selectedQuestionSet = response.settings.customQuestionSetId;
-        loadQuestionsForSet(selectedQuestionSet);
-      } else {
-        selectedQuestionSet = null;
-        currentQuestions = [];
-      }
-    });
-  }
-
-  function createQuestionSet() {
-    if (!$socket || !isHost || !newSetName.trim()) return;
-    
-    creatingSet = true;
-    $socket.emit('create_question_set', newSetName.trim(), newSetDescription.trim() || undefined, (response: any) => {
-      creatingSet = false;
-      if (response.success) {
-        questionSets.push(response.set);
-        selectedQuestionSet = response.set.id;
-        newSetName = '';
-        newSetDescription = '';
-        // Close dialog
-        const dialog = document.getElementById('create-set-dialog') as HTMLDialogElement;
-        dialog?.close();
-        // Load questions and save selection
-        loadQuestionsForSet(response.set.id);
-        saveRoomQuestionSet(response.set.id);
-        showMessage('Question set created!');
-      } else {
-        alert(response.error || 'Failed to create question set');
-      }
-    });
-  }
-
-  function loadQuestionsForSet(setId: string | null) {
-    if (!$socket || !isHost || !setId) {
-      currentQuestions = [];
-      return;
-    }
-    
-    loadingQuestions = true;
-    $socket.emit('get_questions_for_set', setId, (response: any) => {
-      loadingQuestions = false;
-      if (response.success) {
-        currentQuestions = response.questions;
-      } else {
-        console.error('Failed to load questions:', response.error);
-        currentQuestions = [];
-      }
-    });
-  }
-
-  function onQuestionSetChange(setId: string | null) {
-    selectedQuestionSet = setId;
-    if (setId) {
-      loadQuestionsForSet(setId);
-      // Save selection to room settings
-      saveRoomQuestionSet(setId);
-    } else {
-      currentQuestions = [];
-      // Clear selection (use default questions)
-      saveRoomQuestionSet(null);
-    }
-  }
-
-  function saveRoomQuestionSet(setId: string | null) {
-    if (!$socket || !isHost) return;
-    
-    $socket.emit('set_room_question_set', roomCode, setId, (response: any) => {
-      if (!response.success) {
-        console.error('Failed to save question set selection:', response.error);
-      }
-    });
-  }
-
-  function addQuestion() {
-    if (!$socket || !isHost || !selectedQuestionSet) {
-      alert('Please select a question set first');
-      return;
-    }
-
-    if (!newQuestion.question.trim() || newQuestion.answers.filter(a => a.trim()).length < 2) {
-      alert('Please fill in the question and at least 2 answers');
-      return;
-    }
-
-    const question = {
-      question: newQuestion.question.trim(),
-      answers: newQuestion.answers.filter(a => a.trim()),
-      correctIndex: newQuestion.correctIndex,
-      difficulty: newQuestion.difficulty,
-      category: newQuestion.category.trim() || undefined,
-    };
-
-    addingQuestion = true;
-    $socket.emit('add_question_to_set', selectedQuestionSet, question, (response: any) => {
-      addingQuestion = false;
-      if (response.success) {
-        currentQuestions.push(response.question);
-        // Reset form
-        newQuestion = {
-          question: '',
-          answers: ['', '', '', ''],
-          correctIndex: 0,
-          difficulty: 'medium',
-          category: '',
-        };
-        showMessage('Question added!');
-      } else {
-        alert(response.error || 'Failed to add question');
-      }
-    });
-  }
-
-  function deleteQuestion(questionId: string) {
-    if (!$socket || !isHost || !confirm('Delete this question?')) return;
-    
-    $socket.emit('delete_custom_question', questionId, (response: any) => {
-      if (response.success) {
-        currentQuestions = currentQuestions.filter(q => q.id !== questionId);
-        showMessage('Question deleted');
-        // Reload questions to update count
-        if (selectedQuestionSet) {
-          loadQuestionsForSet(selectedQuestionSet);
-        }
-      } else {
-        alert(response.error || 'Failed to delete question');
-      }
-    });
-  }
-
-  function deleteQuestionSet(setId: string) {
-    if (!$socket || !isHost || !confirm('Delete this question set and all its questions? This cannot be undone.')) return;
-    
-    $socket.emit('delete_question_set', setId, (response: any) => {
-      if (response.success) {
-        questionSets = questionSets.filter(s => s.id !== setId);
-        if (selectedQuestionSet === setId) {
-          selectedQuestionSet = null;
-          currentQuestions = [];
-          saveRoomQuestionSet(null);
-        }
-        showMessage('Question set deleted');
-      } else {
-        alert(response.error || 'Failed to delete question set');
-      }
-    });
-  }
-
-  function showMessage(message: string) {
-    // Simple toast message - could be enhanced with a proper toast component
-    const msgEl = document.createElement('div');
-    msgEl.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg z-50';
-    msgEl.textContent = message;
-    document.body.appendChild(msgEl);
-    setTimeout(() => {
-      msgEl.remove();
-    }, 3000);
-  }
-
-  // Watch for selectedGame changes to show/hide trivia panel
-  $: if (selectedGame === GameType.TRIVIA_ROYALE && isHost) {
-    // Auto-show trivia questions panel when Trivia Royale is selected
-    if (!showTriviaQuestions) {
-      showTriviaQuestions = true;
-    }
-  } else if (selectedGame !== GameType.TRIVIA_ROYALE) {
-    showTriviaQuestions = false;
+  function selectGame(gameType: GameType) {
+    selectedGame = gameType;
   }
 </script>
 
 <svelte:head>
-  <title>Room {roomCode} | Christmas Party Games</title>
+  <title>{t('room.title', { code: roomCode })} | {t('home.title')}</title>
 </svelte:head>
 
-<div class="min-h-screen p-4 md:p-8">
-  <div class="max-w-6xl mx-auto">
+<div class="room-page min-h-screen p-4 md:p-6 lg:p-8">
+  <div class="max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="text-center mb-8">
-      <h1 class="text-6xl font-bold text-christmas-gold mb-4">
-        Room {roomCode}
+    <div class="text-center mb-8 md:mb-12">
+      <h1 class="text-5xl md:text-7xl lg:text-8xl font-bold text-christmas-gold mb-4 drop-shadow-2xl">
+        {roomName || t('room.title', { code: roomCode })}
       </h1>
-      <button on:click={copyRoomCode} class="btn-secondary">
-        📋 Copy Code
-      </button>
+      {#if roomDescription}
+        <p class="text-2xl md:text-3xl text-white/80 mb-6">{roomDescription}</p>
+      {/if}
+      {#if isHost}
+        <a href="/room/{roomCode}/settings" class="btn-secondary text-xl md:text-2xl px-6 md:px-8 py-3 md:py-4 inline-flex items-center gap-2">
+          ⚙️ {t('room.gameSettings')}
+        </a>
+      {/if}
     </div>
 
-    <div class="grid md:grid-cols-2 gap-8">
-      <!-- Left Column: QR Code & Info -->
-      <div class="space-y-6">
+    <!-- Connection Status -->
+    {#if connectionError}
+      <div class="card bg-red-500/20 border-red-500 mb-6 text-center">
+        <p class="text-xl text-red-200 mb-2">⚠️ {t('room.connection.error')}</p>
+        <p class="text-lg text-white/80">{connectionError}</p>
+      </div>
+    {:else if !$connected || verifyingConnection}
+      <div class="card bg-yellow-500/20 border-yellow-500 mb-6 text-center">
+        <p class="text-xl text-yellow-200">🟡 {t('room.connection.connecting')}</p>
+      </div>
+    {:else if $connected}
+      <div class="card bg-green-500/20 border-green-500 mb-6 text-center">
+        <p class="text-xl text-green-200">🟢 {t('room.connection.connected')}</p>
+      </div>
+    {/if}
+
+    <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <!-- Left Column: Jukebox & QR Code -->
+      <div class="lg:col-span-1 space-y-4 md:space-y-5">
+        <!-- Jukebox (Host Only) - Compact at Top -->
+        {#if isHost}
+          <Jukebox {roomCode} {isHost} />
+        {/if}
+
         <!-- QR Code Card -->
-        <div class="card text-center">
-          <h2 class="text-2xl font-bold mb-4">📱 Join with Phone</h2>
+        <div class="card text-center frosted-glass">
+          <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5">📱 {t('room.scanToJoin')}</h2>
           {#if qrCodeDataUrl}
-            <div class="bg-white p-4 rounded-lg inline-block mb-4">
-              <img src={qrCodeDataUrl} alt="QR Code" class="w-64 h-64" />
+            <div class="bg-white p-3 md:p-5 rounded-xl inline-block mb-4 md:mb-5 shadow-2xl">
+              <img src={qrCodeDataUrl} alt="QR Code" class="w-56 md:w-72 h-56 md:h-72" />
             </div>
           {/if}
-          <p class="text-white/70 text-sm">
-            Scan QR code or visit:<br />
-            {#if origin}
-              <code class="text-christmas-gold">{origin}/join</code>
-            {:else}
-              <code class="text-christmas-gold">/join</code>
-            {/if}
+          <p class="text-lg md:text-xl text-white/80 mb-2">{t('room.orVisit')}</p>
+          <p class="text-base md:text-lg text-christmas-gold font-mono break-all px-3 md:px-4">
+            {joinUrl || `${origin}/join?code=${roomCode}`}
           </p>
         </div>
 
-        <!-- Players Card -->
-        <div class="card">
-          <h2 class="text-2xl font-bold mb-4">
-            👥 Players ({$players.length})
+        <!-- Share Room Component -->
+        <ShareRoom {roomCode} {joinUrl} />
+      </div>
+
+      <!-- Middle Column: Players -->
+      <div class="lg:col-span-1">
+        <div class="card frosted-glass">
+          <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5 text-center">
+            👥 {t('room.players')}
+            <span class="text-christmas-gold">({$players.length})</span>
           </h2>
-          <div class="space-y-2 max-h-64 overflow-y-auto">
-            {#each $players as player}
-              <div class="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                <span class="text-3xl">{player.avatar}</span>
-                <span class="font-medium">{player.name}</span>
-                {#if player.id === $socket?.id}
-                  <span class="ml-auto text-xs bg-christmas-gold text-black px-2 py-1 rounded">
-                    You
-                  </span>
-                {/if}
+          
+          <div class="space-y-2 md:space-y-3 max-h-[500px] md:max-h-[600px] overflow-y-auto pr-2">
+            {#if !$connected || verifyingConnection}
+              <!-- Connection loading state -->
+              <div class="text-center py-12">
+                <div class="inline-block animate-spin text-4xl md:text-5xl mb-4">⏳</div>
+                <p class="text-2xl md:text-3xl text-white/50">{t('common.status.connecting')}</p>
+              </div>
+            {:else if $players.length === 0}
+              <!-- Empty state: no players yet -->
+              <div class="text-center py-12">
+                <div class="text-6xl md:text-7xl mb-4">👥</div>
+                <p class="text-2xl md:text-3xl text-white/50 mb-4">{t('room.waitingPlayers')}</p>
+                <p class="text-xl md:text-2xl text-white/40">{t('room.scanQrCode')}</p>
               </div>
             {:else}
-              <p class="text-white/50 text-center py-8">
-                Waiting for players to join...
-              </p>
-            {/each}
+              <!-- Player list -->
+              {#each sortedPlayers as player, index}
+                <div 
+                  class="player-card flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-white/10 rounded-lg md:rounded-xl hover:bg-white/15 transition-all" 
+                  class:top-player={index < 3 && (player.score || 0) > 0}
+                >
+                  <!-- Rank/Medal -->
+                  <div class="flex-shrink-0 w-10 md:w-12 text-center">
+                    {#if index === 0 && (player.score || 0) > 0}
+                      <span class="text-2xl md:text-3xl">🥇</span>
+                    {:else if index === 1 && (player.score || 0) > 0}
+                      <span class="text-2xl md:text-3xl">🥈</span>
+                    {:else if index === 2 && (player.score || 0) > 0}
+                      <span class="text-2xl md:text-3xl">🥉</span>
+                    {:else}
+                      <span class="text-base md:text-lg text-white/60 font-bold">#{index + 1}</span>
+                    {/if}
+                  </div>
+                  
+                  <!-- Avatar -->
+                  <span class="text-3xl md:text-4xl flex-shrink-0">{player.avatar || '🎄'}</span>
+                  
+                  <!-- Name -->
+                  <span class="text-lg md:text-xl font-medium flex-1 truncate" title={player.name}>
+                    {player.name}
+                  </span>
+                  
+                  <!-- Score -->
+                  <div class="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                    <span class="text-base md:text-lg font-bold text-christmas-gold">
+                      {player.score || 0}
+                    </span>
+                    <span class="text-xs md:text-sm text-white/60">{t('common.label.pts')}</span>
+                  </div>
+                  
+                  <!-- You indicator -->
+                  {#if player.id === $socket?.id}
+                    <span class="text-xs md:text-sm bg-christmas-gold text-black px-2 md:px-3 py-1 rounded-full font-bold flex-shrink-0">
+                      {t('common.label.you')}
+                    </span>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
           </div>
         </div>
       </div>
 
       <!-- Right Column: Game Selection -->
-      <div class="space-y-6">
-        <div class="card">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-2xl font-bold">🎮 Select Game</h2>
-            {#if isHost}
-              <div class="flex gap-2">
-                <button on:click={() => showRoomSettings = !showRoomSettings} class="text-sm btn-secondary">
-                  {showRoomSettings ? '📋 Hide Settings' : '⚙️ Room Settings'}
-                </button>
-                <button on:click={openGameMaster} class="text-sm btn-secondary">
-                  🎛️ Game Settings
-                </button>
-              </div>
-            {/if}
-          </div>
-
-          {#if isHost && showRoomSettings}
-            <div class="room-settings-panel">
-              <h3 class="text-xl font-bold mb-4">🏠 Room Settings</h3>
-              
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium mb-2">Room Name (optional)</label>
-                  <input
-                    type="text"
-                    bind:value={roomName}
-                    placeholder="e.g., Christmas Party 2024"
-                    class="input"
-                    maxlength="100"
-                  />
-                </div>
-
-                <div>
-                  <label class="block text-sm font-medium mb-2">Description (optional)</label>
-                  <textarea
-                    bind:value={roomDescription}
-                    placeholder="Describe your room..."
-                    class="input"
-                    rows="3"
-                    maxlength="500"
-                  ></textarea>
-                </div>
-
-                <div class="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    bind:checked={isPublic}
-                    class="w-5 h-5"
-                  />
-                  <label for="isPublic" class="text-sm font-medium cursor-pointer">
-                    Make this room public (appears in public rooms list)
-                  </label>
-                </div>
-
-                <button
-                  on:click={saveRoomSettings}
-                  disabled={loadingSettings}
-                  class="btn-primary w-full"
-                >
-                  {loadingSettings ? 'Saving...' : '💾 Save Settings'}
-                </button>
-              </div>
-            </div>
-          {/if}
-
-          <div class="space-y-3">
+      <div class="lg:col-span-1">
+        <div class="card frosted-glass">
+          <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5 text-center">🎮 {t('room.selectGame')}</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3 md:gap-4">
             {#each games as game}
-              <button
-                on:click={() => (selectedGame = game.type)}
-                class="w-full p-4 rounded-lg text-left transition-all {selectedGame === game.type ? 'bg-christmas-red ring-2 ring-christmas-gold' : 'bg-white/10'}"
-              >
-                <div class="font-bold text-lg mb-1">{game.name}</div>
-                <div class="text-sm text-white/70">{game.desc}</div>
-              </button>
+              <GameTile
+                gameType={game.type}
+                name={game.name}
+                description={game.desc}
+                playerCount={$players.length}
+                isHost={isHost}
+                selected={selectedGame === game.type}
+                onSelect={() => selectGame(game.type)}
+                onStart={startGame}
+              />
             {/each}
           </div>
 
-          {#if isHost && selectedGame === GameType.TRIVIA_ROYALE}
-            <!-- Trivia Questions Management Panel -->
-            <div class="trivia-questions-panel mt-4">
-              <button
-                on:click={() => showTriviaQuestions = !showTriviaQuestions}
-                class="w-full p-3 bg-christmas-gold/20 hover:bg-christmas-gold/30 rounded-lg text-left transition-all mb-4"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="font-bold">❓ Manage Trivia Questions</span>
-                  <span class="text-sm">{showTriviaQuestions ? '▼' : '▶'}</span>
-                </div>
-              </button>
-
-              {#if showTriviaQuestions}
-                <div class="trivia-panel-content space-y-4">
-                  <!-- Question Set Selector -->
-                  <div>
-                    <label class="block text-sm font-medium mb-2">Question Set</label>
-                    <div class="flex gap-2">
-                      <select
-                        bind:value={selectedQuestionSet}
-                        on:change={(e) => onQuestionSetChange(e.target.value || null)}
-                        class="input flex-1"
-                      >
-                        <option value={null}>Default Questions</option>
-                        {#each questionSets as set}
-                          <option value={set.id}>
-                            {set.name} ({set.questionCount} questions)
-                          </option>
-                        {/each}
-                      </select>
-                      <button
-                        on:click={() => {
-                          newSetName = '';
-                          newSetDescription = '';
-                          creatingSet = false;
-                          const dialog = document.getElementById('create-set-dialog') as HTMLDialogElement;
-                          dialog?.showModal();
-                        }}
-                        class="btn-secondary text-sm whitespace-nowrap"
-                      >
-                        + New Set
-                      </button>
-                    </div>
-                  </div>
-
-                  {#if selectedQuestionSet}
-                    <!-- Questions List -->
-                    <div>
-                      <h4 class="font-bold mb-2">Questions ({currentQuestions.length})</h4>
-                      {#if loadingQuestions}
-                        <p class="text-white/50 text-center py-4">Loading questions...</p>
-                      {:else if currentQuestions.length === 0}
-                        <p class="text-white/50 text-center py-4">No questions yet. Add your first question below!</p>
-                      {:else}
-                        <div class="space-y-2 max-h-64 overflow-y-auto">
-                          {#each currentQuestions as question, index}
-                            <div class="p-3 bg-white/5 rounded-lg">
-                              <div class="flex justify-between items-start mb-2">
-                                <div class="flex-1">
-                                  <p class="font-medium">{index + 1}. {question.question}</p>
-                                  {#if question.category}
-                                    <span class="text-xs text-white/50">{question.category}</span>
-                                  {/if}
-                                </div>
-                                <button
-                                  on:click={() => deleteQuestion(question.id)}
-                                  class="text-red-400 hover:text-red-300 text-sm ml-2"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                              <div class="grid grid-cols-2 gap-2 mt-2">
-                                {#each question.answers as answer, i}
-                                  <div class="text-xs p-2 rounded {i === question.correctIndex ? 'bg-green-500/20 border border-green-500' : 'bg-white/5'}">
-                                    {String.fromCharCode(65 + i)}: {answer}
-                                  </div>
-                                {/each}
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-
-                    <!-- Add Question Form -->
-                    <div class="p-4 bg-white/5 rounded-lg">
-                      <h4 class="font-bold mb-3">Add New Question</h4>
-                      <div class="space-y-3">
-                        <div>
-                          <label class="block text-sm font-medium mb-1">Question</label>
-                          <input
-                            type="text"
-                            bind:value={newQuestion.question}
-                            placeholder="Enter your question..."
-                            class="input w-full"
-                          />
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                          {#each newQuestion.answers as answer, index}
-                            <div>
-                              <label class="block text-sm font-medium mb-1">
-                                Answer {String.fromCharCode(65 + index)}
-                                {#if index === newQuestion.correctIndex}
-                                  <span class="text-green-400">✓ Correct</span>
-                                {/if}
-                              </label>
-                              <div class="flex gap-1">
-                                <input
-                                  type="text"
-                                  bind:value={newQuestion.answers[index]}
-                                  placeholder="Answer text"
-                                  class="input flex-1"
-                                />
-                                <button
-                                  on:click={() => newQuestion.correctIndex = index}
-                                  class="btn-secondary text-xs px-2 {newQuestion.correctIndex === index ? 'bg-green-500' : ''}"
-                                  title="Mark as correct"
-                                >
-                                  ✓
-                                </button>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                          <div>
-                            <label class="block text-sm font-medium mb-1">Difficulty</label>
-                            <select bind:value={newQuestion.difficulty} class="input w-full">
-                              <option value="easy">Easy</option>
-                              <option value="medium">Medium</option>
-                              <option value="hard">Hard</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label class="block text-sm font-medium mb-1">Category (optional)</label>
-                            <input
-                              type="text"
-                              bind:value={newQuestion.category}
-                              placeholder="e.g., Christmas"
-                              class="input w-full"
-                            />
-                          </div>
-                        </div>
-                        <button
-                          on:click={addQuestion}
-                          disabled={addingQuestion || !newQuestion.question.trim()}
-                          class="btn-primary w-full"
-                        >
-                          {addingQuestion ? 'Adding...' : '+ Add Question'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Delete Set Button -->
-                    <button
-                      on:click={() => deleteQuestionSet(selectedQuestionSet!)}
-                      class="btn-secondary w-full text-red-400 hover:bg-red-500/20"
-                    >
-                      🗑️ Delete This Set
-                    </button>
-                  {/if}
-                </div>
+          {#if isHost && selectedGame}
+            <div class="mt-6 text-center">
+              {#if $players.length < 2}
+                <p class="text-xl md:text-2xl text-yellow-300 mb-4">
+                  ⚠️ {t('room.needPlayers')}
+                </p>
               {/if}
             </div>
-          {/if}
-
-          {#if isHost}
-            <button
-              on:click={startGame}
-              disabled={!selectedGame || $players.length < 2}
-              class="btn-primary w-full mt-6 text-xl py-4"
-            >
-              🚀 Start Game
-            </button>
-            {#if $players.length < 2}
-              <p class="text-center text-sm text-white/50 mt-2">
-                Need at least 2 players to start
-              </p>
-            {/if}
-          {:else}
-            <div class="mt-6 p-4 bg-white/5 rounded-lg text-center">
-              <p class="text-white/70">
-                Waiting for host to start the game...
+          {:else if !isHost}
+            <div class="mt-6 p-6 bg-white/10 rounded-xl text-center">
+              <p class="text-xl md:text-2xl text-white/80">
+                {t('room.waitingHost')}
               </p>
             </div>
           {/if}
         </div>
       </div>
     </div>
-
-    <!-- Create Set Dialog -->
-    <dialog id="create-set-dialog" class="create-set-dialog">
-      <div class="dialog-content">
-        <h3 class="text-xl font-bold mb-4">Create New Question Set</h3>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium mb-2">Set Name *</label>
-            <input
-              type="text"
-              bind:value={newSetName}
-              placeholder="e.g., Christmas Party 2024"
-              class="input w-full"
-              maxlength="255"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-2">Description (optional)</label>
-            <textarea
-              bind:value={newSetDescription}
-              placeholder="Describe this question set..."
-              class="input w-full"
-              rows="2"
-            ></textarea>
-          </div>
-          <div class="flex gap-2">
-            <button
-              on:click={createQuestionSet}
-              disabled={creatingSet || !newSetName.trim()}
-              class="btn-primary flex-1"
-            >
-              {creatingSet ? 'Creating...' : 'Create Set'}
-            </button>
-            <button
-              on:click={() => {
-                const dialog = document.getElementById('create-set-dialog') as HTMLDialogElement;
-                dialog?.close();
-              }}
-              class="btn-secondary"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </dialog>
   </div>
 </div>
 
 <style>
-  :global(body) {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  .room-page {
+    /* Projector-friendly: large text, high contrast, spacious */
+    font-size: 1.25rem; /* Base 20px */
   }
 
-  .room-settings-panel {
-    background: rgba(0, 0, 0, 0.3);
+  @media (min-width: 768px) {
+    .room-page {
+      font-size: 1.5rem; /* Base 24px on larger screens */
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .room-page {
+      font-size: 1.75rem; /* Base 28px on projector screens */
+    }
+  }
+
+  /* Ensure all interactive elements are large enough */
+  :global(.room-page button),
+  :global(.room-page a.btn-primary),
+  :global(.room-page a.btn-secondary) {
+    min-height: 60px;
+    font-size: 1.25rem;
+    padding: 1rem 2rem;
+  }
+
+  @media (min-width: 768px) {
+    :global(.room-page button),
+    :global(.room-page a.btn-primary),
+    :global(.room-page a.btn-secondary) {
+      min-height: 70px;
+      font-size: 1.5rem;
+      padding: 1.25rem 2.5rem;
+    }
+  }
+
+  /* High contrast for projector visibility */
+  .room-page {
+    color: #ffffff;
+  }
+
+  /* Clear visual hierarchy */
+  .room-page h1,
+  .room-page h2,
+  .room-page h3 {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Large QR code for projector */
+  :global(.room-page .card img) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Spacious layout for projector */
+  :global(.room-page .card) {
+    padding: 2rem;
+  }
+
+  @media (min-width: 768px) {
+    :global(.room-page .card) {
+      padding: 2.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    :global(.room-page .card) {
+      padding: 3rem;
+    }
+  }
+
+  /* Top player styling */
+  :global(.top-player) {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05));
     border: 2px solid rgba(255, 215, 0, 0.3);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.2);
   }
 
-  .room-settings-panel label {
-    color: rgba(255, 255, 255, 0.9);
+  :global(.top-player:hover) {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 215, 0, 0.1));
+    border-color: rgba(255, 215, 0, 0.5);
   }
 
-  .room-settings-panel input[type="text"],
-  .room-settings-panel textarea {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    width: 100%;
-    font-size: 1rem;
+  /* Player list improvements */
+  :global(.room-page .player-card) {
+    animation: fadeIn 0.3s ease-in;
   }
 
-  .room-settings-panel input[type="text"]:focus,
-  .room-settings-panel textarea:focus {
-    outline: none;
-    border-color: #ffd700;
-  }
-
-  .room-settings-panel input[type="checkbox"] {
-    cursor: pointer;
-  }
-
-  .trivia-questions-panel {
-    border: 2px solid rgba(255, 215, 0, 0.3);
-    border-radius: 1rem;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.2);
-  }
-
-  .trivia-panel-content {
-    animation: slideDown 0.3s ease-out;
-  }
-
-  @keyframes slideDown {
+  @keyframes fadeIn {
     from {
       opacity: 0;
       transform: translateY(-10px);
@@ -789,42 +521,26 @@
     }
   }
 
-  .create-set-dialog {
-    background: rgba(0, 0, 0, 0.8);
-    border: 2px solid rgba(255, 215, 0, 0.5);
-    border-radius: 1rem;
-    padding: 0;
-    max-width: 500px;
-    width: 90%;
+  /* Smooth scrollbar styling */
+  :global(.room-page .card > div[class*="overflow-y-auto"]) {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 215, 0, 0.3) transparent;
   }
 
-  .create-set-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+  :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar) {
+    width: 8px;
   }
 
-  .dialog-content {
-    padding: 2rem;
-    color: white;
+  :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-track) {
+    background: transparent;
   }
 
-  .dialog-content label {
-    color: rgba(255, 255, 255, 0.9);
+  :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb) {
+    background: rgba(255, 215, 0, 0.3);
+    border-radius: 4px;
   }
 
-  .dialog-content input,
-  .dialog-content textarea {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    width: 100%;
-  }
-
-  .dialog-content input:focus,
-  .dialog-content textarea:focus {
-    outline: none;
-    border-color: #ffd700;
+  :global(.room-page .card > div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover) {
+    background: rgba(255, 215, 0, 0.5);
   }
 </style>

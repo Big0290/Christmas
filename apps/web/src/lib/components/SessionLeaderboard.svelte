@@ -1,6 +1,7 @@
 <script lang="ts">
   import { socket } from '$lib/socket';
   import { onMount } from 'svelte';
+  import { t } from '$lib/i18n';
 
   export let roomCode: string;
 
@@ -22,7 +23,7 @@
       if (response.success) {
         sessionLeaderboard = response.leaderboard || [];
       } else {
-        error = response.error || 'Failed to load leaderboard';
+        error = response.error || t('leaderboard.errors.failedLoad');
       }
     });
   }
@@ -41,7 +42,7 @@
 
 <div class="session-leaderboard">
   <div class="leaderboard-header">
-    <h3>📊 Session Leaderboard</h3>
+    <h3>📊 {t('leaderboard.session')}</h3>
     <button on:click={loadSessionLeaderboard} class="refresh-btn" disabled={loading}>
       {loading ? '⏳' : '🔄'}
     </button>
@@ -50,9 +51,9 @@
   {#if error}
     <div class="error-message">{error}</div>
   {:else if loading}
-    <div class="loading">Loading...</div>
+    <div class="loading">{t('common.status.loading')}</div>
   {:else if sessionLeaderboard.length === 0}
-    <div class="empty">No scores yet this session</div>
+    <div class="empty">{t('leaderboard.noData')}</div>
   {:else}
     <div class="leaderboard-list">
       {#each sessionLeaderboard.slice(0, 20) as player, i}

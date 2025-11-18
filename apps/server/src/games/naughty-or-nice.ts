@@ -6,7 +6,9 @@ import {
   NaughtyPrompt,
   Player,
   shuffleArray,
+  calculateSpeedBonus,
 } from '@christmas/core';
+import { translatePrompt } from '../utils/translations.js';
 
 const DEFAULT_PROMPTS: NaughtyPrompt[] = [
   { id: '1', prompt: 'Someone who talks during movies', category: 'Social', contentRating: 'pg' },
@@ -23,12 +25,19 @@ const DEFAULT_PROMPTS: NaughtyPrompt[] = [
 
 export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
   private prompts: NaughtyPrompt[] = [];
+  private timePerRound: number = 15000; // 15 seconds
 
-  constructor(players: Map<string, Player>) {
+  constructor(players: Map<string, Player>, customPrompts?: NaughtyPrompt[], timePerRoundSeconds?: number) {
     super(GameType.NAUGHTY_OR_NICE, players);
-    this.prompts = shuffleArray(DEFAULT_PROMPTS);
+    this.prompts = customPrompts && customPrompts.length > 0
+      ? shuffleArray(customPrompts)
+      : shuffleArray(DEFAULT_PROMPTS);
     // Update maxRounds now that prompts are initialized
     this.state.maxRounds = Math.min(this.prompts.length, 10);
+    // Set time per round if provided (convert seconds to milliseconds)
+    if (timePerRoundSeconds !== undefined) {
+      this.timePerRound = timePerRoundSeconds * 1000;
+    }
   }
 
   protected createInitialState(): NaughtyOrNiceGameState {
@@ -47,6 +56,8 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
       currentPrompt: null,
       votes: {},
       votingClosed: false,
+      roundStartTime: 0,
+      voteTimes: {},
     };
   }
 
@@ -71,12 +82,14 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
     }
     this.state.currentPrompt = this.prompts[promptIndex];
     this.state.votes = {};
+    this.state.voteTimes = {};
     this.state.votingClosed = false;
+    this.state.roundStartTime = Date.now();
 
     // Timer to end voting
     this.setTimer(() => {
       this.endVoting();
-    }, 15000);
+    }, this.timePerRound);
   }
 
   private endVoting(): void {
@@ -91,11 +104,22 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
       else niceCount++;
     });
 
-    // Award points to majority voters
+    // Award points to majority voters with speed bonus
     const majority = naughtyCount > niceCount ? 'naughty' : 'nice';
+    const speedBonusMultiplier = 0.5; // Lower multiplier for voting game
+    
     Object.entries(this.state.votes).forEach(([playerId, vote]) => {
       if (vote === majority) {
-        this.updateScore(playerId, 10);
+        let points = 10;
+        
+        // Speed bonus
+        if (this.state.voteTimes[playerId]) {
+          const voteTime = this.state.voteTimes[playerId] - this.state.roundStartTime;
+          const speedBonus = calculateSpeedBonus(voteTime, this.timePerRound, speedBonusMultiplier);
+          points += speedBonus;
+        }
+        
+        this.updateScore(playerId, points);
       }
     });
 
@@ -111,6 +135,7 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
     if (action === 'vote' && this.state.state === GameState.PLAYING && !this.state.votingClosed) {
       if (!this.state.votes[playerId]) {
         this.state.votes[playerId] = data.choice;
+        this.state.voteTimes[playerId] = Date.now();
 
         // If all players voted, end voting early
         if (Object.keys(this.state.votes).length === this.players.size) {
@@ -122,8 +147,18 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
   }
 
   getClientState(playerId: string): any {
+    // Get player's language preference, default to English
+    const player = this.players.get(playerId);
+    const language = player?.language || 'en';
+
+    // Translate current prompt if it exists
+    const translatedPrompt = this.state.currentPrompt
+      ? translatePrompt(this.state.currentPrompt, language)
+      : null;
+
     return {
       ...this.state,
+      currentPrompt: translatedPrompt,
       hasVoted: this.state.votes[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
     };

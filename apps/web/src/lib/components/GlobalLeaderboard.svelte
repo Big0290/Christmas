@@ -1,6 +1,7 @@
 <script lang="ts">
   import { socket } from '$lib/socket';
   import { onMount } from 'svelte';
+  import { t } from '$lib/i18n';
 
   export let roomCode: string;
 
@@ -25,7 +26,7 @@
       if (response.success) {
         globalLeaderboard = response.leaderboard || [];
       } else {
-        error = response.error || 'Failed to load leaderboard';
+        error = response.error || t('leaderboard.errors.failedLoad');
       }
     });
   }
@@ -37,7 +38,7 @@
 
 <div class="global-leaderboard">
   <div class="leaderboard-header">
-    <h3>🏆 Global Leaderboard</h3>
+    <h3>🏆 {t('leaderboard.global')}</h3>
     <button on:click={loadGlobalLeaderboard} class="refresh-btn" disabled={loading}>
       {loading ? '⏳' : '🔄'}
     </button>
@@ -46,9 +47,9 @@
   {#if error}
     <div class="error-message">{error}</div>
   {:else if loading}
-    <div class="loading">Loading...</div>
+    <div class="loading">{t('common.status.loading')}</div>
   {:else if globalLeaderboard.length === 0}
-    <div class="empty">No scores yet</div>
+    <div class="empty">{t('leaderboard.noData')}</div>
   {:else}
     <div class="leaderboard-list">
       {#each globalLeaderboard.slice(0, 20) as player, i}
@@ -58,7 +59,7 @@
           </span>
           <span class="name">{player.player_name}</span>
           <span class="score">{player.total_score.toLocaleString()}</span>
-          <span class="games">{player.games_played} games</span>
+          <span class="games">{player.games_played} {t('leaderboard.games')}</span>
         </div>
       {/each}
     </div>

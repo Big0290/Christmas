@@ -1,0 +1,661 @@
+{
+  "common": {
+    "button": {
+      "join": "Join",
+      "create": "Create",
+      "start": "Start",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "edit": "Edit",
+      "close": "Close",
+      "retry": "Retry",
+      "reconnect": "Reconnect",
+      "signIn": "Sign In",
+      "signUp": "Sign Up",
+      "signOut": "Sign Out",
+      "back": "Back",
+      "next": "Next",
+      "previous": "Previous",
+      "submit": "Submit",
+      "confirm": "Confirm",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "status": {
+      "connected": "Connected",
+      "connecting": "Connecting",
+      "disconnected": "Disconnected",
+      "loading": "Loading",
+      "saving": "Saving",
+      "error": "Error",
+      "success": "Success"
+    },
+    "errors": {
+      "notConnected": "Not connected",
+      "authenticationRequired": "Authentication required",
+      "failedToUpdateRoom": "Failed to update room",
+      "failedToDeleteRoom": "Failed to delete room",
+      "failedToReactivateRoom": "Failed to reactivate room"
+    },
+    "label": {
+      "name": "Name",
+      "roomCode": "Room Code",
+      "avatar": "Avatar",
+      "optional": "Optional",
+      "round": "Round",
+      "score": "Score",
+      "points": "Points",
+      "pts": "pts",
+      "players": "Players",
+      "player": "Player",
+      "host": "Host",
+      "you": "You",
+      "session": "Session",
+      "global": "Global",
+      "rank": "Rank"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{minutes}m ago",
+      "hoursAgo": "{hours}h ago",
+      "daysAgo": "{days}d ago"
+    }
+  },
+  "home": {
+    "title": "Christmas Party Games",
+    "subtitle": "Multiplayer games for 30-50 players!",
+    "connection": {
+      "connecting": "Connecting to server...",
+      "connected": "Connected"
+    },
+    "namePlaceholder": "Your Name",
+    "avatarLabel": "Avatar (Optional)",
+    "avatarStyles": {
+      "festive": "Festive",
+      "emoji": "Emoji"
+    },
+    "auth": {
+      "signInRequired": "Sign in required to create rooms",
+      "loadingAuth": "Loading authentication...",
+      "signedInAs": "Signed in as",
+      "playersCanJoin": "Players can join rooms without an account"
+    },
+    "createRoom": {
+      "button": "Create New Room",
+      "creating": "Creating...",
+      "connecting": "Connecting..."
+    },
+    "joinRoom": {
+      "codePlaceholder": "Room Code (e.g., ABC7)",
+      "button": "Join Room",
+      "joining": "Joining..."
+    },
+    "goToRoom": "Go to My Room",
+    "loadingRoom": "Checking for your room...",
+    "loading": "Loading...",
+    "footer": "6 Games | 50 Players | Real-time Multiplayer",
+    "errors": {
+      "enterName": "Please enter your name",
+      "validCode": "Please enter a valid 4-letter room code",
+      "notConnected": "Not connected to server. Please wait and try again.",
+      "timeout": "Request timed out. Please check your connection and try again.",
+      "mustSignIn": "You must be signed in to create a room. Please sign in first.",
+      "failedCreate": "Failed to create room",
+      "failedJoin": "Failed to join room",
+      "failedRejoin": "Failed to rejoin room",
+      "connectionError": "Unable to connect to server. Please check your connection."
+    }
+  },
+  "join": {
+    "title": "Join Game",
+    "subtitle": "Enter your name and room code",
+    "nameLabel": "Your Name",
+    "namePlaceholder": "Enter your name",
+    "codeLabel": "Room Code",
+    "codePlaceholder": "ABCD",
+    "avatarLabel": "Avatar (Optional)",
+    "avatarStyles": {
+      "festive": "Festive",
+      "emoji": "Emoji"
+    },
+    "button": "Join Game",
+    "joining": "Joining...",
+    "footer": "No code? Ask the host to share it!",
+    "errors": {
+      "enterName": "Please enter your name",
+      "validCode": "Please enter a valid 4-letter room code",
+      "notConnected": "Not connected to server. Please wait...",
+      "connectionFailed": "Failed to connect to server. Please refresh the page."
+    }
+  },
+  "room": {
+    "title": "Room {code}",
+    "gameSettings": "Game Settings",
+    "connection": {
+      "error": "Connection Error",
+      "connecting": "Connecting...",
+      "connected": "Connected"
+    },
+    "room": "Room",
+    "scanToJoin": "Scan to Join",
+    "orVisit": "Or visit:",
+    "players": "Players",
+    "selectGame": "Select a Game",
+    "needPlayers": "Need at least 2 players to start",
+    "waitingPlayers": "Waiting for players...",
+    "scanQrCode": "Scan the QR code to join!",
+    "waitingHost": "Waiting for host to start the game...",
+    "games": {
+      "triviaRoyale": {
+        "name": "Christmas Trivia Royale",
+        "desc": "Fast-paced quiz game"
+      },
+      "emojiCarol": {
+        "name": "Emoji Carol Battle",
+        "desc": "Strategic voting game"
+      },
+      "naughtyOrNice": {
+        "name": "Naughty or Nice",
+        "desc": "Social voting game"
+      },
+      "priceIsRight": {
+        "name": "Price Is Right",
+        "desc": "Guess the price game"
+      }
+    }
+  },
+  "player": {
+    "title": "Playing in {code}",
+    "room": "Room: {code}",
+    "connection": {
+      "lost": "Connection Lost",
+      "reconnecting": "Trying to reconnect...",
+      "retry": "Retry Connection",
+      "reconnectNow": "Reconnect Now",
+      "connecting": "Connecting...",
+      "pleaseWait": "Please wait",
+      "waitingStart": "Waiting to Start",
+      "hostWillStart": "The host will start the game soon!"
+    },
+    "sessionRank": "Session: #{rank}",
+    "globalRank": "Global: #{rank}",
+    "errors": {
+      "notConnected": "Not connected to room. Please rejoin.",
+      "pleaseRejoin": "Please join the room first.",
+      "noCredentials": "No saved credentials found. Please rejoin the room."
+    }
+  },
+  "host": {
+    "title": "Hosting {code}",
+    "room": "Room: {code}",
+    "players": "Players",
+    "controlPanel": "Host Controls",
+    "gameControls": "Game Controls",
+    "pause": "Pause",
+    "resume": "Resume",
+    "endGame": "End Game",
+    "confirmEndGame": "Are you sure you want to end the current game?",
+    "currentGame": "Current Game",
+    "noGame": "No game active",
+    "round": "Round {round}/{maxRounds}",
+    "startNewGame": "Start New Game",
+    "returnToLobby": "Return to Lobby",
+    "roomManagement": "Room Management",
+    "copyRoomCode": "Copy Room Code",
+    "joinUrl": "Join URL",
+    "gameStatus": "Game Status",
+    "state": "State",
+    "leaderboards": "Leaderboards",
+    "removePlayer": "Remove {name} from the room?",
+    "removePlayerTitle": "Remove player",
+    "failedRemovePlayer": "Failed to remove player",
+    "roomCodeCopied": "Room code copied!",
+    "reconnectHost": "Reconnect Host",
+    "settingUp": "Setting up host screen...",
+    "waitingGameState": "Waiting for game state...",
+    "readyToStart": "Ready to start a game!",
+    "selectStartGame": "Select & Start Game",
+    "gameState": {
+      "lobby": "Lobby",
+      "starting": "Starting",
+      "playing": "Playing",
+      "paused": "PAUSED",
+      "roundend": "Round End",
+      "gameend": "Game End"
+    },
+    "leaderboard": {
+      "session": "Session",
+      "global": "Global"
+    }
+  },
+  "games": {
+    "triviaRoyale": {
+      "loading": "Loading game...",
+      "getReady": "Get Ready!",
+      "startingIn": "Starting in {seconds}...",
+      "round": "Round {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "answerSubmitted": "Answer submitted! Waiting for others...",
+      "correct": "Correct!",
+      "wrong": "Wrong!",
+      "correctAnswer": "Correct Answer",
+      "yourAnswer": "Your Answer",
+      "waitingResults": "Waiting for results...",
+      "roundComplete": "Round Complete!",
+      "gameOver": "Game Over!",
+      "votingBreakdown": "Voting Breakdown",
+      "voters": "Voters",
+      "top5": "Top 5"
+    },
+    "emojiCarol": {
+      "loading": "Loading game...",
+      "getReady": "Get Ready!",
+      "round": "Round {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "voteSubmitted": "Vote submitted! Waiting for others...",
+      "waitingResults": "Waiting for results...",
+      "roundComplete": "Round Complete!",
+      "pickEmoji": "Pick an emoji that you think most people will choose!"
+    },
+    "naughtyOrNice": {
+      "loading": "Loading game...",
+      "getReady": "Get Ready!",
+      "startingSoon": "Starting soon...",
+      "round": "Round {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "question": "Naughty or Nice?",
+      "naughty": "NAUGHTY",
+      "nice": "NICE",
+      "voteSubmitted": "Vote submitted! Waiting for others...",
+      "waitingResults": "Waiting for results..."
+    },
+    "priceIsRight": {
+      "loading": "Loading game...",
+      "getReady": "Get Ready!",
+      "round": "Round {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "guessPrice": "Guess the Price",
+      "enterPrice": "Enter price",
+      "submit": "Submit Guess",
+      "guessSubmitted": "Submitted",
+      "waitingResults": "Waiting for results...",
+      "yourGuess": "Your Guess",
+      "actualPrice": "Actual Price",
+      "difference": "Difference",
+      "allGuesses": "All Guesses"
+    }
+  },
+  "notifications": {
+    "gameStarting": "Game Starting!",
+    "roundComplete": "Round {round} Complete!",
+    "gameOver": "Game Over!",
+    "reconnected": "Reconnected!",
+    "scoreRestored": "Score restored: {score} pts",
+    "reconnectionFailed": "Reconnection attempt {attempt} failed. Retrying...",
+    "reconnectionError": "{error}. Please rejoin the room."
+  },
+  "finalResults": {
+    "title": "Final Results",
+    "game": "Game: {gameType}",
+    "startNewGame": "Start New Game",
+    "returnToLobby": "Return to Lobby"
+  },
+  "leaderboard": {
+    "session": "Session Leaderboard",
+    "global": "Global Leaderboard",
+    "rank": "Rank",
+    "name": "Name",
+    "score": "Score",
+    "noData": "No data available",
+    "games": "games",
+    "errors": {
+      "failedLoad": "Failed to load leaderboard"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "loading": "Loading profile...",
+    "editProfile": "Edit Profile",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "Optional display name",
+    "bio": "Bio",
+    "bioPlaceholder": "Tell us about yourself...",
+    "noBio": "No bio yet",
+    "avatarStyle": "Avatar Style",
+    "chooseAvatar": "Choose Avatar",
+    "saveChanges": "Save Changes",
+    "statistics": "Statistics",
+    "totalScore": "Total Score",
+    "gamesPlayed": "Games Played",
+    "bestGameScore": "Best Game Score",
+    "favoriteGame": "Favorite Game",
+    "achievements": "Achievements",
+    "noAchievements": "No achievements yet. Keep playing to unlock them!",
+    "unlocked": "Unlocked",
+    "gameStatistics": "Game Statistics",
+    "game": "Game",
+    "games": "Games",
+    "wins": "Wins",
+    "bestScore": "Best Score",
+    "avgScore": "Avg Score",
+    "errors": {
+      "noPlayerName": "No player name found. Please join a room first.",
+      "failedLoad": "Failed to load profile",
+      "failedUpdate": "Failed to update profile"
+    }
+  },
+  "settings": {
+    "title": "Game Settings",
+    "general": "General",
+    "room": "Room",
+    "games": "Games",
+    "trivia": "Trivia",
+    "price": "Price",
+    "naughty": "Naughty",
+    "emoji": "Emoji",
+    "backToRoom": "Back to Room",
+    "hostOnly": "Only the room host can access settings.",
+    "goToRoom": "Go to Room",
+    "saved": "Settings saved!",
+    "timeSettingSaved": "Time setting saved!",
+    "errors": {
+      "failedUpdate": "Failed to update room settings",
+      "themeNotLoaded": "Theme not loaded. Please refresh the page.",
+      "failedSave": "Failed to save settings",
+      "failedSaveTime": "Failed to save time setting"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign In",
+      "subtitle": "Sign in to create and host game rooms",
+      "email": "Email",
+      "password": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "button": "Sign In",
+      "signingIn": "Signing in...",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign Up",
+      "errors": {
+        "bothRequired": "Please enter both email and password",
+        "invalidEmail": "Please enter a valid email address",
+        "failed": "Failed to sign in. Please check your credentials."
+      }
+    },
+    "signup": {
+      "title": "Sign Up",
+      "subtitle": "Create an account to host game rooms",
+      "email": "Email",
+      "password": "Password",
+      "passwordPlaceholder": "At least 6 characters",
+      "confirmPassword": "Confirm Password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "playerName": "Player Name (Optional)",
+      "playerNamePlaceholder": "Your game name",
+      "playerNameHint": "If you've played before, enter your player name to link your profile",
+      "button": "Sign Up",
+      "creating": "Creating account...",
+      "hasAccount": "Already have an account?",
+      "signIn": "Sign In",
+      "errors": {
+        "bothRequired": "Please enter both email and password",
+        "invalidEmail": "Please enter a valid email address",
+        "passwordLength": "Password must be at least 6 characters",
+        "passwordMatch": "Passwords do not match",
+        "failedCreate": "Failed to create account",
+        "failedTryAgain": "Failed to create account. Please try again."
+      },
+      "success": {
+        "created": "Account created successfully!",
+        "checkEmail": "Please check your email to confirm your account before creating rooms.",
+        "profileLinked": "Your existing player profile has been linked to your account."
+      }
+    }
+  },
+  "errors": {
+    "generic": "An error occurred",
+    "goHome": "Go Home"
+  },
+  "shareRoom": {
+    "title": "Share Room",
+    "roomCode": "Room Code",
+    "joinUrl": "Join URL",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "copyUrl": "Copy URL",
+    "copyCode": "Copy room code",
+    "shareVia": "Share via...",
+    "copiedToClipboard": "Copied to clipboard!",
+    "shareTitle": "Join Room {code} - Christmas Party Games",
+    "shareText": "Join me in room {code} for Christmas Party Games!"
+  },
+  "jukebox": {
+    "title": "Christmas Jukebox",
+    "noTrack": "No track selected",
+    "refreshPlaylist": "Refresh Playlist",
+    "minimize": "Minimize",
+    "play": "Play",
+    "pause": "Pause",
+    "stop": "Stop",
+    "next": "Next",
+    "previous": "Previous",
+    "shuffle": "Shuffle",
+    "repeat": "Repeat: {mode}",
+    "playlist": "Playlist ({count})",
+    "showPlaylist": "Show Playlist ({count} tracks)"
+  },
+  "gameTile": {
+    "player": "player",
+    "players": "players",
+    "startGame": "Start Game",
+    "selected": "Selected"
+  },
+  "roomSettings": {
+    "title": "Room Settings",
+    "roomName": "Room Name (optional)",
+    "roomNamePlaceholder": "e.g., Christmas Party 2024",
+    "description": "Description (optional)",
+    "descriptionPlaceholder": "Describe your room...",
+    "saveSettings": "Save Settings",
+    "saving": "Saving..."
+  },
+  "createSet": {
+    "setName": "Set Name *",
+    "setNamePlaceholder": "e.g., Christmas Party 2024",
+    "description": "Description (optional)",
+    "descriptionPlaceholder": "Describe this set...",
+    "createSet": "Create Set",
+    "creating": "Creating..."
+  },
+  "generalSettings": {
+    "title": "General Settings",
+    "backgroundMusic": "Background Music",
+    "backgroundMusicDesc": "Enable or disable background music for all players",
+    "snowEffects": "Snow Effects",
+    "snowEffectsDesc": "Enable or disable snow animation effects",
+    "sparkles": "Sparkles",
+    "sparklesDesc": "Add magical sparkle effects throughout the room",
+    "icicles": "Icicles",
+    "iciclesDesc": "Add decorative icicles hanging from the top",
+    "frostPattern": "Frost Pattern",
+    "frostPatternDesc": "Add a subtle frost pattern overlay",
+    "colorScheme": "Color Scheme",
+    "colorSchemeDesc": "Choose the overall color theme for the room",
+    "colorSchemeTraditional": "Traditional Christmas",
+    "colorSchemeWinter": "Winter Wonderland",
+    "colorSchemeMixed": "Mixed Theme",
+    "saveSettings": "Save Settings",
+    "saving": "Saving..."
+  },
+  "triviaTab": {
+    "title": "Trivia Royale Customization",
+    "timePerQuestion": "Time Per Question (seconds)",
+    "timeRange": "Range: 5-60 seconds",
+    "questionSet": "Question Set",
+    "defaultQuestions": "Default Questions",
+    "questions": "questions",
+    "newSet": "New Set",
+    "createNewSet": "Create New Question Set",
+    "loadingQuestions": "Loading questions...",
+    "noQuestions": "No questions yet. Add your first question below!",
+    "question": "Question",
+    "questionPlaceholder": "Enter your question...",
+    "answer": "Answer {letter}",
+    "answerPlaceholder": "Answer text",
+    "correct": "Correct",
+    "markCorrect": "Mark as correct",
+    "difficulty": "Difficulty",
+    "difficultyEasy": "Easy",
+    "difficultyMedium": "Medium",
+    "difficultyHard": "Hard",
+    "category": "Category (optional)",
+    "categoryPlaceholder": "e.g., Christmas",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "editQuestion": "Edit question",
+    "deleteQuestion": "Delete question",
+    "addNewQuestion": "Add New Question",
+    "adding": "Adding...",
+    "addQuestion": "Add Question",
+    "deleteSet": "Delete This Set",
+    "success": {
+      "setCreated": "Question set created!",
+      "questionAdded": "Question added!",
+      "questionUpdated": "Question updated!",
+      "questionDeleted": "Question deleted",
+      "setDeleted": "Question set deleted"
+    },
+    "confirm": {
+      "deleteQuestion": "Delete this question?",
+      "deleteSet": "Delete this question set and all its questions? This cannot be undone."
+    },
+    "errors": {
+      "failedCreateSet": "Failed to create question set",
+      "selectSetFirst": "Please select a question set first",
+      "fillQuestionAndAnswers": "Please fill in the question and at least 2 answers",
+      "failedAddQuestion": "Failed to add question",
+      "failedUpdateQuestion": "Failed to update question",
+      "failedDeleteQuestion": "Failed to delete question",
+      "failedDeleteSet": "Failed to delete question set"
+    }
+  },
+  "priceTab": {
+    "title": "Price Is Right Customization",
+    "timePerRound": "Time Per Round (seconds)",
+    "timeRange": "Range: 10-60 seconds",
+    "itemSet": "Item Set",
+    "defaultItems": "Default Items",
+    "items": "items",
+    "newSet": "New Set",
+    "createNewSet": "Create New Item Set",
+    "loadingItems": "Loading items...",
+    "noItems": "No items yet. Add your first item below!",
+    "addNewItem": "Add New Item",
+    "itemName": "Item Name *",
+    "itemNamePlaceholder": "e.g., iPhone 15 Pro",
+    "description": "Description",
+    "descriptionPlaceholder": "Item description...",
+    "price": "Price *",
+    "category": "Category",
+    "categoryPlaceholder": "e.g., Electronics",
+    "image": "Image *",
+    "adding": "Adding...",
+    "addItem": "Add Item",
+    "deleteSet": "Delete This Set",
+    "success": {
+      "setCreated": "Item set created!",
+      "itemAdded": "Item added!",
+      "itemDeleted": "Item deleted",
+      "setDeleted": "Item set deleted"
+    },
+    "confirm": {
+      "deleteItem": "Delete this item?",
+      "deleteSet": "Delete this item set and all its items? This cannot be undone."
+    },
+    "errors": {
+      "failedCreateSet": "Failed to create item set",
+      "selectSetFirst": "Please select an item set first",
+      "fillRequiredFields": "Please fill in name, price, and upload an image",
+      "failedAddItem": "Failed to add item",
+      "failedDeleteItem": "Failed to delete item",
+      "failedDeleteSet": "Failed to delete item set"
+    }
+  },
+  "naughtyTab": {
+    "title": "Naughty or Nice Customization",
+    "timePerRound": "Time Per Round (seconds)",
+    "timeRange": "Range: 5-30 seconds",
+    "promptSet": "Prompt Set",
+    "defaultPrompts": "Default Prompts",
+    "prompts": "prompts",
+    "newSet": "New Set",
+    "createNewSet": "Create New Prompt Set",
+    "loadingPrompts": "Loading prompts...",
+    "noPrompts": "No prompts yet. Add your first prompt below!",
+    "rating": "Rating",
+    "addNewPrompt": "Add New Prompt",
+    "prompt": "Prompt *",
+    "promptPlaceholder": "e.g., Someone who talks during movies",
+    "category": "Category",
+    "categoryPlaceholder": "e.g., Social",
+    "contentRating": "Content Rating",
+    "contentRatingPG": "PG",
+    "contentRatingPG13": "PG-13",
+    "adding": "Adding...",
+    "addPrompt": "Add Prompt",
+    "deleteSet": "Delete This Set",
+    "success": {
+      "setCreated": "Prompt set created!",
+      "promptAdded": "Prompt added!",
+      "promptDeleted": "Prompt deleted",
+      "setDeleted": "Prompt set deleted"
+    },
+    "confirm": {
+      "deletePrompt": "Delete this prompt?",
+      "deleteSet": "Delete this prompt set and all its prompts? This cannot be undone."
+    },
+    "errors": {
+      "failedCreateSet": "Failed to create prompt set",
+      "selectSetFirst": "Please select a prompt set first",
+      "enterPrompt": "Please enter a prompt",
+      "failedAddPrompt": "Failed to add prompt",
+      "failedDeletePrompt": "Failed to delete prompt",
+      "failedDeleteSet": "Failed to delete prompt set"
+    }
+  },
+  "emojiTab": {
+    "title": "Emoji Carol Battle Settings",
+    "timePerRound": "Time Per Round (seconds)",
+    "timeRange": "Range: 10-30 seconds"
+  },
+  "imageUpload": {
+    "uploading": "Uploading...",
+    "dragDrop": "Drag & drop an image here",
+    "or": "or",
+    "chooseFile": "Choose File",
+    "fileInfo": "Max 5MB • JPEG, PNG, GIF, WebP",
+    "removeImage": "Remove image",
+    "errors": {
+      "invalidFileType": "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.",
+      "fileSizeExceeded": "File size exceeds 5MB limit",
+      "socketNotConnected": "Socket not connected",
+      "failedUpload": "Failed to upload image",
+      "failedProcess": "Failed to process image",
+      "failedRead": "Failed to read file"
+    }
+  },
+  "roomManagement": {
+    "editRoom": "Edit Room",
+    "deleteRoom": "Delete Room",
+    "reactivateRoom": "Reactivate Room",
+    "reactivate": "Reactivate",
+    "roomName": "Room Name",
+    "roomNamePlaceholder": "e.g., Christmas Party 2024",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe your room...",
+    "deleteConfirm": "Are you sure you want to delete room {code} ({name})? This action cannot be undone.",
+    "reactivateConfirm": "Reactivate room {code} ({name})? This will generate a new host token and extend the room's expiration."
+  }
+}
+

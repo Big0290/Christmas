@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
+  
   // Accept params to suppress warning
   export const params: Record<string, string> = {};
   
@@ -8,11 +10,11 @@
   
   // Provide defaults if not set
   $: statusCode = status ?? 500;
-  $: errorMessage = error?.message ?? 'An error occurred';
+  $: errorMessage = error?.message ?? t('errors.generic');
 </script>
 
 <svelte:head>
-  <title>Error {statusCode}</title>
+  <title>{t('errors.generic')} {statusCode}</title>
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center p-4">
@@ -21,7 +23,7 @@
     <p class="text-2xl text-white mb-8">
       {errorMessage}
     </p>
-    <a href="/" class="btn-primary">Go Home</a>
+    <a href="/" class="btn-primary">{t('errors.goHome')}</a>
   </div>
 </div>
 

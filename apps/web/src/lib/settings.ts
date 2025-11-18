@@ -18,10 +18,14 @@ export function initializeSettings() {
   // Import socket dynamically to avoid circular dependencies
   import('./socket').then(({ socket }) => {
     // Listen for settings updates from server
+    // Use get() to get current value and set up listener once
+    let listenerSetup = false;
     socket.subscribe(($sock) => {
-      if ($sock) {
+      // Only set up listener once when socket becomes available
+      if ($sock && !listenerSetup) {
+        listenerSetup = true;
         $sock.on('settings_updated', (data: any) => {
-          if (data.global) {
+          if (data && data.global) {
             try {
               const validated = GlobalSettingsSchema.parse(data.global);
               globalSettings.set(validated);

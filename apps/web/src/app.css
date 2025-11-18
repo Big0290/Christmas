@@ -3,14 +3,58 @@
 @tailwind utilities;
 
 :root {
+  /* Traditional Christmas Colors */
   --christmas-red: #c41e3a;
   --christmas-green: #0f8644;
   --christmas-gold: #ffd700;
+  
+  /* Winter Colors */
+  --winter-blue: #87ceeb;
+  --winter-silver: #c0c0c0;
+  --ice-blue: #b0e0e6;
+  --frost-white: #f0f8ff;
+  --snow-white: #ffffff;
+  --twilight-blue: #191970;
+  --arctic-blue: #e0f6ff;
+  --crystal-blue: #add8e6;
+  
+  /* Mixed Theme Colors */
+  --holiday-crimson: #dc143c;
+  --evergreen: #2d5016;
+  --golden-yellow: #ffd700;
+  --silver-frost: #e8e8e8;
+  --winter-mint: #b0e0d6;
 }
 
 body {
-  @apply bg-gradient-to-br from-christmas-red via-christmas-green to-blue-900;
   @apply min-h-screen text-white font-sans;
+  background: linear-gradient(135deg, var(--christmas-red) 0%, var(--christmas-green) 50%, #0f3460 100%);
+  transition: background 0.5s ease;
+}
+
+/* Theme Variants */
+body.theme-traditional {
+  background: linear-gradient(135deg, var(--christmas-red) 0%, var(--christmas-green) 50%, var(--evergreen) 100%);
+}
+
+body.theme-winter {
+  background: linear-gradient(135deg, var(--twilight-blue) 0%, var(--winter-blue) 50%, var(--ice-blue) 100%);
+}
+
+body.theme-mixed {
+  background: linear-gradient(135deg, var(--christmas-red) 0%, var(--winter-blue) 30%, var(--christmas-green) 60%, var(--ice-blue) 100%);
+}
+
+[data-theme="traditional"] body {
+  background: linear-gradient(135deg, var(--christmas-red) 0%, var(--christmas-green) 50%, var(--evergreen) 100%);
+}
+
+[data-theme="winter"] body {
+  background: linear-gradient(135deg, var(--twilight-blue) 0%, var(--winter-blue) 50%, var(--ice-blue) 100%);
+}
+
+[data-theme="mixed"] body {
+  background: linear-gradient(135deg, var(--christmas-red) 0%, var(--winter-blue) 30%, var(--christmas-green) 60%, var(--ice-blue) 100%);
 }
 
 @layer components {
@@ -20,22 +64,114 @@ body {
   }
 
   .btn-primary {
-    @apply btn bg-christmas-red hover:bg-red-700 text-white shadow-lg;
+    @apply btn text-white shadow-lg;
+    background: linear-gradient(135deg, var(--christmas-red), #a01a2e);
+    border: 2px solid var(--christmas-gold);
+    box-shadow: 0 4px 15px rgba(196, 30, 58, 0.4),
+                0 0 20px rgba(255, 215, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #a01a2e, var(--christmas-red));
+    box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6),
+                0 0 30px rgba(255, 215, 0, 0.4);
+    transform: translateY(-2px);
+  }
+  
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.3) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  
+  .btn-primary:hover::before {
+    opacity: 1;
+    animation: sparkle-rotate 2s linear infinite;
   }
 
   .btn-secondary {
-    @apply btn bg-christmas-green hover:bg-green-700 text-white shadow-lg;
+    @apply btn text-white shadow-lg;
+    background: linear-gradient(135deg, var(--christmas-green), #0a5d2e);
+    border: 2px solid var(--winter-silver);
+    box-shadow: 0 4px 15px rgba(15, 134, 68, 0.4),
+                0 0 20px rgba(192, 192, 192, 0.2);
+  }
+  
+  .btn-secondary:hover {
+    background: linear-gradient(135deg, #0a5d2e, var(--christmas-green));
+    box-shadow: 0 6px 20px rgba(15, 134, 68, 0.6),
+                0 0 30px rgba(192, 192, 192, 0.4);
+    transform: translateY(-2px);
+  }
+  
+  .btn-winter {
+    @apply btn text-white shadow-lg;
+    background: linear-gradient(135deg, var(--winter-blue), var(--ice-blue));
+    border: 2px solid var(--frost-white);
+    box-shadow: 0 4px 15px rgba(135, 206, 235, 0.4),
+                0 0 20px rgba(240, 248, 255, 0.2);
+  }
+  
+  .btn-winter:hover {
+    background: linear-gradient(135deg, var(--ice-blue), var(--winter-blue));
+    box-shadow: 0 6px 20px rgba(135, 206, 235, 0.6),
+                0 0 30px rgba(240, 248, 255, 0.4);
+    transform: translateY(-2px);
   }
 
   .card {
     @apply bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-2xl;
     @apply border border-white/20;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  
+  .frosted-glass {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  
+  .icy-border {
+    border: 2px solid rgba(176, 224, 230, 0.5);
+    box-shadow: 0 0 10px rgba(176, 224, 230, 0.3),
+                inset 0 0 10px rgba(176, 224, 230, 0.1);
   }
 
   .input {
-    @apply w-full px-4 py-3 rounded-lg bg-white/20 border-2 border-white/30;
-    @apply focus:border-christmas-gold focus:outline-none;
-    @apply text-white placeholder-white/60;
+    @apply w-full px-4 py-3 rounded-lg text-white placeholder-white/60;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1),
+                0 0 10px rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+  
+  .input:focus {
+    outline: none;
+    border-color: var(--christmas-gold);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1),
+                0 0 20px rgba(255, 215, 0, 0.4),
+                0 0 10px rgba(255, 215, 0, 0.2);
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  .input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
   }
 }
 
@@ -45,8 +181,59 @@ body {
   color: white;
   font-size: 1em;
   user-select: none;
+  pointer-events: none;
+  z-index: 1;
   animation: snowfall linear infinite;
-  opacity: 0.8;
+  opacity: 0.9;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+  will-change: transform;
+}
+
+.snowflake.small {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.snowflake.medium {
+  font-size: 1.2em;
+  opacity: 0.85;
+}
+
+.snowflake.large {
+  font-size: 1.8em;
+  opacity: 0.95;
+}
+
+@keyframes snowfall {
+  0% {
+    transform: translateY(-100vh) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.9;
+  }
+  95% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(100vh) translateX(var(--drift, 20px)) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes snowflake-glow {
+  0%, 100% {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+    filter: brightness(1);
+  }
+  50% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 1), 0 0 20px rgba(255, 255, 255, 0.8), 0 0 30px rgba(255, 255, 255, 0.6);
+    filter: brightness(1.3);
+  }
+}
+
+.snowflake.glow {
+  animation: snowfall linear infinite, snowflake-glow 3s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
@@ -55,5 +242,59 @@ body {
   }
   50% {
     box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+  }
+}
+
+@keyframes sparkle-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes frost-crystallize {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+}
+
+@keyframes icicle-sway {
+  0%, 100% {
+    transform: rotate(-1deg);
+  }
+  50% {
+    transform: rotate(1deg);
+  }
+}
+
+@keyframes sparkle-twinkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

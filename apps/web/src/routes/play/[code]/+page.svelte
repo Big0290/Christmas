@@ -5,15 +5,17 @@
   import { GameType, GameState } from '@christmas/core';
   import ScoreAnimation from '$lib/components/ScoreAnimation.svelte';
   import NotificationToast from '$lib/components/NotificationToast.svelte';
+  import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import { browser } from '$app/environment';
+  import { t } from '$lib/i18n';
+  import { language } from '$lib/i18n';
   
   import TriviaRoyale from '$lib/games/TriviaRoyale.svelte';
-  import GiftGrabber from '$lib/games/GiftGrabber.svelte';
-  import WorkshopTycoon from '$lib/games/WorkshopTycoon.svelte';
   import EmojiCarol from '$lib/games/EmojiCarol.svelte';
   import NaughtyOrNice from '$lib/games/NaughtyOrNice.svelte';
   import PriceIsRight from '$lib/games/PriceIsRight.svelte';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
+  import FinalResults from '$lib/components/FinalResults.svelte';
 
   const roomCode = $page.params.code;
 
@@ -26,6 +28,9 @@
   let notificationId = 0;
   let animationId = 0;
   let hasAttemptedReconnect = false;
+  let isReconnecting = false; // Track if reconnection is in progress
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 3;
   let showFinalLeaderboard = false;
 
   function loadLeaderboardRanks() {
@@ -61,82 +66,258 @@
     });
   }
 
+  function attemptReconnection(roomCodeToReconnect: string, playerToken: string) {
+    if (!$socket || isReconnecting || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      return;
+    }
+
+    hasAttemptedReconnect = true;
+    isReconnecting = true;
+    isConnecting = true;
+    reconnectAttempts++;
+    
+    $socket.emit('reconnect_player', roomCodeToReconnect, playerToken, $language, (response: any) => {
+      isReconnecting = false;
+      isConnecting = false;
+      
+      if (response && response.success) {
+        // Successfully reconnected
+        reconnectAttempts = 0; // Reset attempts on success
+        sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+        
+        // Show reconnection message with score info
+        let message = `✅ ${t('notifications.reconnected')}`;
+        if (response.restoredScore !== undefined && response.restoredScore > 0) {
+          message += ` ${t('notifications.scoreRestored', { score: response.restoredScore })}`;
+        }
+        notifications = [
+          ...notifications,
+          { id: notificationId++, message, type: 'success' },
+        ];
+        
+        // Reload leaderboard ranks after reconnection
+        loadLeaderboardRanks();
+        
+        // Game state will be sent via game_state_update event
+      } else {
+        // Reconnection failed
+        const errorMsg = response?.error || 'Reconnection failed';
+        
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          // Retry after a delay
+          notifications = [
+            ...notifications,
+            { id: notificationId++, message: t('notifications.reconnectionFailed', { attempt: reconnectAttempts }), type: 'warning' },
+          ];
+          
+          setTimeout(() => {
+            attemptReconnection(roomCodeToReconnect, playerToken);
+          }, 2000 * reconnectAttempts); // Exponential backoff
+        } else {
+          // Max attempts reached
+          connectionError = true;
+          notifications = [
+            ...notifications,
+            { id: notificationId++, message: t('notifications.reconnectionError', { error: errorMsg }), type: 'error' },
+          ];
+        }
+      }
+    });
+  }
+
   onMount(() => {
     connectSocket();
     
+    // Setup socket event listeners
+    const setupSocketListeners = () => {
+      if (!$socket) {
+        // Wait for socket to be available
+        const unsubscribe = socket.subscribe((sock) => {
+          if (sock) {
+            unsubscribe();
+            setupSocketListeners();
+          }
+        });
+        return;
+      }
+
+      // Listen for socket disconnect/reconnect events
+      $socket.on('disconnect', () => {
+        console.log('[Player] Socket disconnected');
+        isConnecting = true;
+        connectionError = false;
+        // Reset reconnection state on disconnect
+        isReconnecting = false;
+        reconnectAttempts = 0;
+      });
+
+      $socket.on('reconnect', () => {
+        console.log('[Player] Socket reconnected');
+        // Attempt reconnection when socket reconnects
+        if (browser) {
+          const savedRoomCode = localStorage.getItem('christmas_roomCode');
+          const playerToken = localStorage.getItem('christmas_playerToken');
+          
+          if (savedRoomCode === roomCode && playerToken && !isReconnecting) {
+            // Reset flags to allow reconnection attempt
+            hasAttemptedReconnect = false;
+            reconnectAttempts = 0;
+            attemptReconnection(savedRoomCode, playerToken);
+          }
+        }
+      });
+
+      // Listen for player reconnected event from server
+      $socket.on('player_reconnected', (data: any) => {
+        console.log('[Player] Reconnected event received:', data);
+        if (data.newPlayerId === $socket?.id) {
+          // This is us - we successfully reconnected
+          isReconnecting = false;
+          reconnectAttempts = 0;
+        }
+      });
+
+      // Listen for game state updates - update the store directly
+      // This is a backup in case the socket.ts listener doesn't fire
+      $socket.on('game_state_update', (data: any) => {
+        console.log('[Player] ✅ Game state update received:', {
+          state: data?.state,
+          gameType: data?.gameType,
+          round: data?.round,
+          hasQuestion: !!data?.currentQuestion,
+          hasItem: !!data?.currentItem,
+          hasPrompt: !!data?.currentPrompt,
+          hasEmojis: !!data?.availableEmojis,
+        });
+        // Update the store directly to ensure it's always synced
+        gameState.set(data);
+      });
+    };
+
+    // Setup listeners immediately or wait for socket
+    setupSocketListeners();
+    
+    // Verify player connection to room
+    const verifyPlayerConnection = () => {
+      const isConnected = $connected;
+      if (!$socket || !isConnected) {
+        // Wait for connection
+        const unsubscribe = connected.subscribe((isConnectedNow) => {
+          if (isConnectedNow && $socket) {
+            unsubscribe();
+            verifyPlayerConnection();
+          }
+        });
+        return;
+      }
+
+      isConnecting = false;
+      connectionError = false;
+
+      if (browser && !hasAttemptedReconnect && !isReconnecting) {
+        const savedRoomCode = localStorage.getItem('christmas_roomCode');
+        const playerToken = localStorage.getItem('christmas_playerToken');
+        const playerName = localStorage.getItem('christmas_playerName');
+        
+        if (playerToken && savedRoomCode === roomCode && $socket?.id) {
+          // Attempt to reconnect player with token
+          attemptReconnection(savedRoomCode, playerToken);
+        } else if (playerName && savedRoomCode === roomCode) {
+          // No token - might be first time entering after joining
+          // Wait a moment to see if we receive room_update or game_state_update events
+          hasAttemptedReconnect = true;
+          setTimeout(() => {
+            // If we don't receive any updates within 2 seconds, show error
+            const timeout = setTimeout(() => {
+              if (!$gameState && !connectionError) {
+                connectionError = true;
+                notifications = [
+                  ...notifications,
+                  { id: notificationId++, message: t('player.errors.notConnected'), type: 'error' },
+                ];
+              }
+            }, 2000);
+            
+            // Clear timeout if we get room_update or game_state_update
+            const roomUpdateHandler = () => {
+              clearTimeout(timeout);
+              if ($socket) {
+                $socket.off('room_update', roomUpdateHandler);
+                $socket.off('game_state_update', gameStateHandler);
+              }
+            };
+            const gameStateHandler = () => {
+              clearTimeout(timeout);
+              if ($socket) {
+                $socket.off('room_update', roomUpdateHandler);
+                $socket.off('game_state_update', gameStateHandler);
+              }
+            };
+            if ($socket) {
+              $socket.on('room_update', roomUpdateHandler);
+              $socket.on('game_state_update', gameStateHandler);
+            }
+          }, 500);
+        } else {
+          // No saved credentials - might be direct navigation
+          connectionError = true;
+          notifications = [
+            ...notifications,
+            { id: notificationId++, message: t('player.errors.pleaseRejoin'), type: 'error' },
+          ];
+        }
+      }
+    };
+
     // Check connection status
     const unsubscribe = connected.subscribe((isConnected) => {
       isConnecting = !isConnected;
       if (!isConnected && $socket) {
-        connectionError = true;
+        connectionError = false; // Don't show error immediately, wait for reconnect attempt
       } else {
         connectionError = false;
         
-        // Load leaderboard ranks when connected
+        // Start verification when connected
         if (isConnected && $socket) {
+          verifyPlayerConnection();
+          
+          // Load leaderboard ranks when connected
           setTimeout(() => {
             loadLeaderboardRanks();
           }, 500); // Wait a bit for socket to be ready
-        }
-        
-        // Auto-reconnect if we have stored credentials
-        if (isConnected && !hasAttemptedReconnect && browser) {
-          const savedName = localStorage.getItem('christmas_playerName');
-          const savedRoomCode = sessionStorage.getItem('christmas_roomCode');
-          const previousPlayerId = sessionStorage.getItem('christmas_playerId');
-          
-          if (savedName && savedRoomCode && savedRoomCode === roomCode && $socket?.id) {
-            // Attempt to reconnect with score recovery
-            $socket.emit('reconnect_player', savedRoomCode, savedName, previousPlayerId, (response: any) => {
-              if (response.success) {
-                // Update stored player ID
-                sessionStorage.setItem('christmas_playerId', $socket?.id || '');
-                
-                // Show reconnection message with score info
-                let message = '✅ Reconnected!';
-                if (response.restoredScore !== undefined && response.restoredScore > 0) {
-                  message += ` Score restored: ${response.restoredScore} pts`;
-                }
-                notifications = [
-                  ...notifications,
-                  { id: notificationId++, message, type: 'success' },
-                ];
-                
-                // Reload leaderboard ranks after reconnection
-                loadLeaderboardRanks();
-                
-                // If game is in progress, restore player state
-                if (response.room?.currentGame && $gameState) {
-                  // Game state will be updated via socket events
-                }
-              } else {
-                // Reconnection failed, try to join normally (new player)
-                $socket.emit('join_room', savedRoomCode, savedName, (joinResponse: any) => {
-                  if (joinResponse.success) {
-                    sessionStorage.setItem('christmas_playerId', $socket?.id || '');
-                    notifications = [
-                      ...notifications,
-                      { id: notificationId++, message: 'Joined as new player', type: 'info' },
-                    ];
-                    loadLeaderboardRanks();
-                  }
-                });
-              }
-            });
-            hasAttemptedReconnect = true;
-          }
         }
       }
     });
 
     return () => {
       unsubscribe();
+      if ($socket) {
+        $socket.off('disconnect');
+        $socket.off('reconnect');
+        $socket.off('player_reconnected');
+        $socket.off('game_state_update');
+      }
     };
   });
 
   $: currentGame = $gameState?.gameType;
   $: playerScore = $gameState?.scores?.[$socket?.id] || 0;
   $: currentState = $gameState?.state;
+
+  // Log game state changes for debugging
+  $: if (currentState !== previousState) {
+    console.log(`[Player] Game state changed: ${previousState} -> ${currentState}`);
+    if (currentState === GameState.PLAYING) {
+      console.log('[Player] ✅ Game is now PLAYING', {
+        hasQuestion: !!$gameState?.currentQuestion,
+        hasItem: !!$gameState?.currentItem,
+        hasPrompt: !!$gameState?.currentPrompt,
+        hasEmojis: !!$gameState?.availableEmojis,
+        round: $gameState?.round
+      });
+    }
+    previousState = currentState;
+  }
   
   // Leaderboard ranks (will be populated from socket events)
   let sessionRank = 0;
@@ -180,18 +361,18 @@
       if (currentState === GameState.STARTING) {
         notifications = [
           ...notifications,
-          { id: notificationId++, message: '🎮 Game Starting!', type: 'info' },
+          { id: notificationId++, message: `🎮 ${t('notifications.gameStarting')}`, type: 'info' },
         ];
       } else if (currentState === GameState.ROUND_END) {
         const roundNum = $gameState?.round || 0;
         notifications = [
           ...notifications,
-          { id: notificationId++, message: `🎉 Round ${roundNum} Complete!`, type: 'success' },
+          { id: notificationId++, message: `🎉 ${t('notifications.roundComplete', { round: roundNum })}`, type: 'success' },
         ];
       } else if (currentState === GameState.GAME_END) {
         notifications = [
           ...notifications,
-          { id: notificationId++, message: '🏆 Game Over!', type: 'success' },
+          { id: notificationId++, message: `🏆 ${t('notifications.gameOver')}`, type: 'success' },
         ];
         // Refresh leaderboard ranks after game ends
         setTimeout(() => {
@@ -210,7 +391,7 @@
 </script>
 
 <svelte:head>
-  <title>Playing in {roomCode} | Christmas Party Games</title>
+  <title>{t('player.title', { code: roomCode })} | {t('home.title')}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 </svelte:head>
 
@@ -234,23 +415,26 @@
   <div class="mobile-header">
     <div class="flex justify-between items-center">
       <div>
-        <div class="text-xs text-white/60">Room: {roomCode}</div>
-        <div class="text-2xl font-bold score-display">🎄 {playerScore} pts</div>
+        <div class="text-xs text-white/60">{t('player.room', { code: roomCode })}</div>
+        <div class="text-2xl font-bold score-display">🎄 {playerScore} {t('common.label.pts')}</div>
         {#if currentState === GameState.GAME_END}
           {#if sessionRank > 0 || globalRank > 0}
             <div class="text-xs text-white/50 mt-1">
               {#if sessionRank > 0}
-                Session: #{sessionRank}
+                {t('player.sessionRank', { rank: sessionRank })}
               {/if}
               {#if globalRank > 0}
-                {#if sessionRank > 0} • {/if}Global: #{globalRank}
+                {#if sessionRank > 0} • {/if}{t('player.globalRank', { rank: globalRank })}
               {/if}
             </div>
           {/if}
         {/if}
       </div>
-      <div class="text-3xl">
-        {$socket?.id ? '🟢' : '🔴'}
+      <div class="flex flex-col items-end gap-2">
+        <div class="text-3xl">
+          {$socket?.id ? '🟢' : '🔴'}
+        </div>
+        <LanguageSwitcher />
       </div>
     </div>
   </div>
@@ -261,22 +445,44 @@
       <div class="flex items-center justify-center h-full">
         <div class="text-center">
           <div class="text-6xl mb-4">⚠️</div>
-          <h2 class="text-2xl font-bold mb-2">Connection Lost</h2>
+          <h2 class="text-2xl font-bold mb-2">{t('player.connection.lost')}</h2>
           <p class="text-white/70 mb-4">
-            Trying to reconnect...
+            {t('player.connection.reconnecting')}
           </p>
-          <button on:click={() => { connectSocket(); connectionError = false; }} class="btn-primary">
-            Retry Connection
-          </button>
+          <div class="flex gap-2 justify-center">
+            <button on:click={() => { connectSocket(); connectionError = false; }} class="btn-primary">
+              {t('player.connection.retry')}
+            </button>
+            <button on:click={() => {
+              if (browser && $socket) {
+                const savedRoomCode = localStorage.getItem('christmas_roomCode');
+                const token = localStorage.getItem('christmas_playerToken');
+                if (savedRoomCode === roomCode && token) {
+                  // Reset reconnection state and attempt reconnection
+                  hasAttemptedReconnect = false;
+                  reconnectAttempts = 0;
+                  isReconnecting = false;
+                  attemptReconnection(savedRoomCode, token);
+                } else {
+                  notifications = [
+                    ...notifications,
+                    { id: notificationId++, message: t('player.errors.noCredentials'), type: 'error' },
+                  ];
+                }
+              }
+            }} class="btn-secondary">
+              {t('player.connection.reconnectNow')}
+            </button>
+          </div>
         </div>
       </div>
     {:else if isConnecting}
       <div class="flex items-center justify-center h-full">
         <div class="text-center">
           <div class="text-6xl mb-4 animate-spin">⏳</div>
-          <h2 class="text-2xl font-bold mb-2">Connecting...</h2>
+          <h2 class="text-2xl font-bold mb-2">{t('player.connection.connecting')}</h2>
           <p class="text-white/70">
-            Please wait
+            {t('player.connection.pleaseWait')}
           </p>
         </div>
       </div>
@@ -284,18 +490,14 @@
       <div class="flex items-center justify-center h-full">
         <div class="text-center">
           <div class="text-6xl mb-4">⏳</div>
-          <h2 class="text-2xl font-bold mb-2">Waiting to Start</h2>
+          <h2 class="text-2xl font-bold mb-2">{t('player.connection.waitingStart')}</h2>
           <p class="text-white/70">
-            The host will start the game soon!
+            {t('player.connection.hostWillStart')}
           </p>
         </div>
       </div>
     {:else if currentGame === GameType.TRIVIA_ROYALE}
       <TriviaRoyale />
-    {:else if currentGame === GameType.GIFT_GRABBER}
-      <GiftGrabber />
-    {:else if currentGame === GameType.WORKSHOP_TYCOON}
-      <WorkshopTycoon />
     {:else if currentGame === GameType.EMOJI_CAROL}
       <EmojiCarol />
     {:else if currentGame === GameType.NAUGHTY_OR_NICE}
@@ -305,24 +507,8 @@
     {/if}
   </div>
 
-  <!-- Final Leaderboard Modal (only shown at game end) -->
-  {#if currentState === GameState.GAME_END && showFinalLeaderboard}
-    <div class="leaderboard-overlay" on:click={() => showFinalLeaderboard = false}>
-      <div class="leaderboard-modal" on:click|stopPropagation>
-        <div class="leaderboard-modal-header">
-          <h2 class="text-2xl font-bold text-christmas-gold">🏆 Final Results</h2>
-          <button on:click={() => showFinalLeaderboard = false} class="close-modal-btn">✕</button>
-        </div>
-        <div class="leaderboard-modal-content">
-          <SessionLeaderboard {roomCode} />
-        </div>
-        <div class="leaderboard-modal-footer">
-          <button on:click={() => showFinalLeaderboard = false} class="btn-primary">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+  {#if currentState === GameState.GAME_END}
+    <FinalResults {roomCode} scoreboard={$gameState?.scoreboard || []} gameType={$gameState?.gameType} isHost={false} />
   {/if}
 </div>
 
@@ -362,7 +548,11 @@
   .mobile-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 1rem;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    width: 100%;
   }
 
   /* Disable text selection for better mobile UX */

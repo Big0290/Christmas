@@ -2,28 +2,68 @@
   import { socket, gameState } from '$lib/socket';
   import { GameState } from '@christmas/core';
   import { playSound } from '$lib/audio';
-  import { onMount } from 'svelte';
-  import AchievementBadge from '$lib/components/AchievementBadge.svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { t } from '$lib/i18n';
 
   $: question = $gameState?.currentQuestion;
   $: hasAnswered = $gameState?.hasAnswered;
   $: state = $gameState?.state;
   $: round = $gameState?.round;
   $: maxRounds = $gameState?.maxRounds;
+  $: questionStartTime = $gameState?.questionStartTime || 0;
+
+  let timeRemaining = 15;
+  const timePerQuestion = 15000; // 15 seconds
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
+  let countdownPlayed = false;
+
+  // Update timer
+  $: if (state === GameState.PLAYING && questionStartTime > 0) {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    // Reset countdown flag when round starts
+    countdownPlayed = false;
+    const updateTimer = () => {
+      const elapsed = Date.now() - questionStartTime;
+      const newTimeRemaining = Math.max(0, Math.ceil((timePerQuestion - elapsed) / 1000));
+      
+      // Play countdown sound when reaching 5 seconds (only once per round)
+      if (newTimeRemaining <= 5 && newTimeRemaining > 0 && !countdownPlayed) {
+        playSound('countdown');
+        countdownPlayed = true;
+      }
+      
+      timeRemaining = newTimeRemaining;
+    };
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 100);
+  } else {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    countdownPlayed = false;
+  }
+
+  onDestroy(() => {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+  });
   $: scoreboard = $gameState?.scoreboard || [];
-  $: currentScore = $gameState?.scores?.[$socket?.id] || 0;
+  $: socketId = $socket?.id;
+  $: currentScore = socketId ? $gameState?.scores?.[socketId] || 0 : 0;
   $: answerCounts = $gameState?.answerCounts || {};
   $: answerPercentages = $gameState?.answerPercentages || {};
   $: playersByAnswer = $gameState?.playersByAnswer || {};
   $: showReveal = $gameState?.showReveal || false;
-  $: playerAnswer = $gameState?.answers?.[$socket?.id];
+  $: playerAnswer = socketId ? $gameState?.answers?.[socketId] : undefined;
 
   let previousState = GameState.LOBBY;
   let previousScore = 0;
   let previousRound = 0;
   let correctAnswers = 0;
-  let achievements: Array<{ title: string; description: string; icon: string }> = [];
-  let achievementId = 0;
 
   onMount(() => {
     // Play sound when game starts
@@ -55,60 +95,21 @@
     }
   }
 
-  // Track achievements and score changes
+  // Track score changes
   $: {
     // Check for correct answer
-    if (state === GameState.ROUND_END && question && hasAnswered) {
-      const wasCorrect = question.correctIndex !== undefined && 
-        $gameState?.answers?.[$socket?.id] === question.correctIndex;
-      
+    if (state === GameState.ROUND_END && question && hasAnswered && socketId) {
+      const wasCorrect =
+        question.correctIndex !== undefined &&
+        $gameState?.answers?.[socketId] === question.correctIndex;
+
       if (wasCorrect) {
         playSound('correct');
         correctAnswers++;
-        
-        // First correct answer achievement
-        if (correctAnswers === 1) {
-          achievements = [
-            ...achievements,
-            {
-              title: 'First Correct!',
-              description: 'You got your first answer right!',
-              icon: '🎯',
-            },
-          ];
-        }
-        
-        // Perfect round achievement (all correct so far)
-        if (round === correctAnswers && round > 0) {
-          achievements = [
-            ...achievements,
-            {
-              title: 'Perfect Round!',
-              description: `You got all ${round} questions correct!`,
-              icon: '⭐',
-            },
-          ];
-        }
       } else {
         playSound('wrong');
         correctAnswers = 0; // Reset streak
       }
-    }
-
-    // High score milestone
-    if (currentScore > previousScore) {
-      const scoreDiff = currentScore - previousScore;
-      if (scoreDiff >= 100) {
-        achievements = [
-          ...achievements,
-          {
-            title: 'High Score!',
-            description: `You gained ${scoreDiff} points!`,
-            icon: '🚀',
-          },
-        ];
-      }
-      previousScore = currentScore;
     }
 
     // Round change notification
@@ -119,31 +120,25 @@
 </script>
 
 <div class="trivia-container">
-  <!-- Achievement Badges -->
-  {#each achievements as achievement, index (index)}
-    <AchievementBadge
-      achievement={achievement}
-      on:close={() => {
-        achievements = achievements.filter((_, i) => i !== index);
-      }}
-    />
-  {/each}
-
   {#if !state}
     <div class="loading-overlay">
       <div class="text-6xl mb-4 animate-spin">⏳</div>
-      <p class="text-xl text-white/70">Loading game...</p>
+      <p class="text-xl text-white/70">{t('games.triviaRoyale.loading')}</p>
     </div>
   {:else if state === GameState.STARTING}
     <div class="countdown-overlay">
       <div class="text-8xl mb-4">🎄</div>
-      <h1 class="text-4xl font-bold">Get Ready!</h1>
-      <p class="text-xl text-white/70 mt-2">Starting in 3...</p>
+      <h1 class="text-4xl font-bold">{t('games.triviaRoyale.getReady')}</h1>
+      <p class="text-xl text-white/70 mt-2">{t('games.triviaRoyale.startingIn', { seconds: 3 })}</p>
     </div>
   {:else if state === GameState.PLAYING && question}
     <div class="question-card">
       <div class="question-header">
-        <span class="round-badge">Round {round}/{maxRounds}</span>
+        <span class="round-badge">{t('games.triviaRoyale.round', { round, maxRounds })}</span>
+        <div class="timer-display">
+          <span class="timer-label">⏱️</span>
+          <span class="timer-value" class:warning={timeRemaining <= 5}>{t('games.triviaRoyale.timeRemaining', { seconds: timeRemaining })}</span>
+        </div>
         {#if question.imageUrl}
           <img src={question.imageUrl} alt="Question" class="question-image" />
         {/if}
@@ -170,30 +165,36 @@
       </div>
 
       {#if hasAnswered}
-        <div class="waiting-message">
-          ✅ Answer submitted! Waiting for others...
-        </div>
+        <div class="waiting-message">✅ {t('games.triviaRoyale.answerSubmitted')}</div>
       {/if}
     </div>
   {:else if state === GameState.ROUND_END && question && showReveal}
     <div class="result-card">
       <div class="text-6xl mb-4">
-        {hasAnswered && question.correctIndex !== undefined && playerAnswer === question.correctIndex ? '🎉' : '❌'}
+        {hasAnswered &&
+        question.correctIndex !== undefined &&
+        playerAnswer === question.correctIndex
+          ? '🎉'
+          : '❌'}
       </div>
       <h2 class="text-2xl font-bold mb-4">
-        Correct Answer: {question.answers[question.correctIndex]}
+        {t('games.triviaRoyale.correctAnswer')}: {question.answers[question.correctIndex]}
       </h2>
-      
+
       <!-- Voting Breakdown -->
       <div class="voting-breakdown">
-        <h3 class="breakdown-title">📊 Voting Breakdown</h3>
+        <h3 class="breakdown-title">📊 {t('games.triviaRoyale.votingBreakdown')}</h3>
         <div class="answers-reveal">
           {#each question.answers as answer, index}
             {@const count = answerCounts[index] || 0}
             {@const percentage = answerPercentages[index] || 0}
             {@const isCorrect = index === question.correctIndex}
             {@const playerNames = playersByAnswer[index] || []}
-            <div class="answer-reveal" class:correct={isCorrect} class:selected={playerAnswer === index}>
+            <div
+              class="answer-reveal"
+              class:correct={isCorrect}
+              class:selected={playerAnswer === index}
+            >
               <div class="answer-reveal-header">
                 <span class="answer-letter-reveal">{String.fromCharCode(65 + index)}</span>
                 <span class="answer-text-reveal">{answer}</span>
@@ -202,11 +203,7 @@
                 {/if}
               </div>
               <div class="percentage-bar-container">
-                <div 
-                  class="percentage-bar" 
-                  class:correct={isCorrect}
-                  style="width: {percentage}%"
-                >
+                <div class="percentage-bar" class:correct={isCorrect} style="width: {percentage}%">
                   <span class="percentage-text">{percentage}% ({count})</span>
                 </div>
               </div>
@@ -218,14 +215,16 @@
               {:else if playerNames.length > 5}
                 <div class="voters-list">
                   <span class="voters-label">Voters:</span>
-                  <span class="voters-names">{playerNames.slice(0, 5).join(', ')} and {playerNames.length - 5} more</span>
+                  <span class="voters-names"
+                    >{playerNames.slice(0, 5).join(', ')} and {playerNames.length - 5} more</span
+                  >
                 </div>
               {/if}
             </div>
           {/each}
         </div>
       </div>
-      
+
       <div class="scoreboard-mini">
         <h3 class="text-lg font-bold mb-2">Top 5</h3>
         {#each scoreboard.slice(0, 5) as player, i}
@@ -237,32 +236,23 @@
         {/each}
       </div>
     </div>
-  {:else if state === GameState.GAME_END}
-    <div class="game-end">
-      <div class="text-8xl mb-6">🏆</div>
-      <h1 class="text-4xl font-bold mb-4">Game Over!</h1>
-      <div class="final-scoreboard">
-        {#each scoreboard.slice(0, 10) as player, i}
-          <div class="final-score-row" class:winner={i === 0}>
-            <span class="rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-            <span class="name">{player.name}</span>
-            <span class="score">{player.score}</span>
-          </div>
-        {/each}
-      </div>
-    </div>
   {/if}
 </div>
 
 <style>
   .trivia-container {
-    height: 100%;
+    min-height: 100%;
+    height: auto;
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
-  .loading-overlay, .countdown-overlay {
+  .loading-overlay,
+  .countdown-overlay {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -288,6 +278,8 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    width: 100%;
+    padding-bottom: 1rem;
   }
 
   .question-header {
@@ -313,37 +305,46 @@
   }
 
   .question-text {
-    font-size: 1.5rem;
+    font-size: clamp(1.125rem, 4vw, 1.5rem);
     font-weight: bold;
-    line-height: 1.4;
+    line-height: 1.5;
     text-align: center;
-    padding: 1rem;
+    padding: 1.25rem;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 1rem;
+    word-wrap: break-word;
   }
 
   .answers-grid {
     display: grid;
     gap: 1rem;
+    width: 100%;
   }
 
   .answer-button {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.25rem;
+    padding: 1.5rem 1.25rem;
+    min-height: 60px;
     background: rgba(15, 134, 68, 0.2);
     border: 3px solid #0f8644;
     border-radius: 1rem;
-    font-size: 1.125rem;
+    font-size: clamp(1rem, 3.5vw, 1.125rem);
     font-weight: 600;
     color: white;
-    transition: all 0.2s;
+    transition: all 0.15s;
     text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    width: 100%;
   }
 
-  .answer-button:active:not(:disabled) {
-    transform: scale(0.95);
+  .answer-button:active:not(:disabled),
+  .answer-button:hover:not(:disabled) {
+    transform: scale(0.98);
     background: rgba(15, 134, 68, 0.4);
   }
 
@@ -355,11 +356,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 2.5rem;
     width: 2.5rem;
     height: 2.5rem;
     background: #0f8644;
     border-radius: 0.5rem;
     flex-shrink: 0;
+    font-size: 1.125rem;
   }
 
   .answer-text {
@@ -368,22 +371,27 @@
 
   .waiting-message {
     text-align: center;
-    padding: 1rem;
+    padding: 1.25rem;
     background: rgba(255, 215, 0, 0.2);
     border: 2px solid #ffd700;
     border-radius: 1rem;
     font-weight: bold;
+    font-size: clamp(0.875rem, 3vw, 1rem);
   }
 
-  .result-card, .game-end {
+  .result-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 2rem;
+    padding: 1.5rem;
+    width: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: 100%;
   }
 
-  .scoreboard-mini, .final-scoreboard {
+  .scoreboard-mini {
     width: 100%;
     max-width: 400px;
     background: rgba(0, 0, 0, 0.3);
@@ -391,7 +399,7 @@
     padding: 1rem;
   }
 
-  .score-row, .final-score-row {
+  .score-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -399,11 +407,6 @@
     margin-bottom: 0.5rem;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 0.5rem;
-  }
-
-  .final-score-row.winner {
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.3), rgba(255, 215, 0, 0.1));
-    border: 2px solid #ffd700;
   }
 
   .rank {
@@ -424,10 +427,12 @@
   .voting-breakdown {
     width: 100%;
     max-width: 500px;
-    margin: 2rem 0;
+    margin: 1.5rem 0;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 1rem;
-    padding: 1.5rem;
+    padding: 1.25rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .breakdown-title {
@@ -549,5 +554,85 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .timer-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    min-height: 44px;
+    background: rgba(255, 215, 0, 0.2);
+    border: 2px solid #ffd700;
+    border-radius: 9999px;
+    font-weight: bold;
+    touch-action: manipulation;
+  }
+
+  .timer-label {
+    font-size: 1rem;
+  }
+
+  .timer-value {
+    font-size: 1.25rem;
+    color: #ffd700;
+    min-width: 2.5rem;
+    text-align: center;
+  }
+
+  .timer-value.warning {
+    color: #ff3d3d;
+    animation: pulse-warning 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-warning {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .question-text {
+      font-size: 1.125rem;
+      padding: 1rem;
+    }
+
+    .answer-button {
+      padding: 1.25rem 1rem;
+      min-height: 56px;
+      font-size: 1rem;
+    }
+
+    .answer-letter {
+      min-width: 2rem;
+      width: 2rem;
+      height: 2rem;
+      font-size: 1rem;
+    }
+
+    .question-header {
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: stretch;
+    }
+
+    .timer-display {
+      width: 100%;
+      margin: 0;
+    }
+
+    .voting-breakdown {
+      padding: 1rem;
+    }
+
+    .breakdown-title {
+      font-size: 1.25rem;
+    }
   }
 </style>

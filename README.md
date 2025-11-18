@@ -78,26 +78,59 @@ ADMIN_PASSWORD=your-secure-password
 
 ### Database Setup
 
-Run the Supabase migration:
+#### Option 1: Local Development (Recommended for Testing)
+
+Set up Supabase locally for fast development:
+
+```bash
+# Quick setup (requires Docker)
+./setup-local-supabase.sh
+
+# Or manually:
+pnpm supabase:start
+pnpm supabase:status  # Copy connection details
+
+# Create .env with local Supabase credentials
+# See LOCAL_SUPABASE_SETUP.md for details
+```
+
+**Benefits:**
+- No deployment needed
+- Fast iteration
+- Free local testing
+- See [LOCAL_SUPABASE_SETUP.md](./LOCAL_SUPABASE_SETUP.md) for full guide
+
+#### Option 2: Production Supabase
 
 ```bash
 # Using Supabase CLI
 supabase db push
 
-# Or manually run:
+# Or manually run migrations in Supabase dashboard:
 # supabase/migrations/20240101000000_initial_schema.sql
 ```
 
 ### Development
 
 ```bash
-# Start all services (web + server)
-pnpm dev
+# Start with local Supabase (recommended)
+pnpm dev:local   # Starts Supabase + web + server
 
-# Or individually
+# Or start individually
 pnpm dev:web     # SvelteKit on http://localhost:5173
 pnpm dev:server  # Socket.IO server on http://localhost:3000
+
+# Supabase commands
+pnpm supabase:start   # Start local Supabase
+pnpm supabase:stop    # Stop local Supabase
+pnpm supabase:status  # Show connection details
+pnpm supabase:reset   # Reset database and re-run migrations
 ```
+
+**Local Supabase Services:**
+- Studio: http://127.0.0.1:54323 (Database browser)
+- Inbucket: http://127.0.0.1:54324 (Email testing)
+- API: http://127.0.0.1:54321
 
 ---
 

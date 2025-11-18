@@ -1,0 +1,682 @@
+{
+  "common": {
+    "button": {
+      "join": "Rejoindre",
+      "create": "Créer",
+      "start": "Démarrer",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "close": "Fermer",
+      "retry": "Réessayer",
+      "reconnect": "Reconnecter",
+      "signIn": "Se connecter",
+      "signUp": "S'inscrire",
+      "signOut": "Se déconnecter",
+      "back": "Retour",
+      "next": "Suivant",
+      "previous": "Précédent",
+      "submit": "Soumettre",
+      "confirm": "Confirmer",
+      "yes": "Oui",
+      "no": "Non"
+    },
+    "status": {
+      "connected": "Connecté",
+      "connecting": "Connexion en cours",
+      "disconnected": "Déconnecté",
+      "loading": "Chargement",
+      "saving": "Enregistrement",
+      "error": "Erreur",
+      "success": "Succès"
+    },
+    "errors": {
+      "notConnected": "Non connecté",
+      "authenticationRequired": "Authentification requise",
+      "failedToUpdateRoom": "Échec de la mise à jour de la salle",
+      "failedToDeleteRoom": "Échec de la suppression de la salle",
+      "failedToReactivateRoom": "Échec de la réactivation de la salle"
+    },
+    "label": {
+      "name": "Nom",
+      "roomCode": "Code de la salle",
+      "avatar": "Avatar",
+      "optional": "Optionnel",
+      "round": "Manche",
+      "score": "Score",
+      "points": "Points",
+      "pts": "pts",
+      "players": "Joueurs",
+      "player": "Joueur",
+      "host": "Hôte",
+      "you": "Vous",
+      "session": "Session",
+      "global": "Global",
+      "rank": "Rang"
+    },
+    "time": {
+      "justNow": "À l'instant",
+      "minutesAgo": "Il y a {minutes} min",
+      "hoursAgo": "Il y a {hours} h",
+      "daysAgo": "Il y a {days} j"
+    }
+  },
+  "home": {
+    "title": "Jeux de Noël",
+    "subtitle": "Jeux multijoueurs pour 30-50 joueurs !",
+    "tabs": {
+      "join": "Rejoindre",
+      "history": "Historique",
+      "publicRooms": "Salles publiques"
+    },
+    "connection": {
+      "connecting": "Connexion au serveur...",
+      "connected": "Connecté"
+    },
+    "namePlaceholder": "Votre nom",
+    "avatarLabel": "Avatar (Optionnel)",
+    "avatarStyles": {
+      "festive": "Festif",
+      "emoji": "Emoji"
+    },
+    "auth": {
+      "signInRequired": "Connexion requise pour créer des salles",
+      "loadingAuth": "Chargement de l'authentification...",
+      "signedInAs": "Connecté en tant que",
+      "playersCanJoin": "Les joueurs peuvent rejoindre des salles sans compte"
+    },
+    "createRoom": {
+      "button": "Créer une nouvelle salle",
+      "creating": "Création...",
+      "connecting": "Connexion..."
+    },
+    "joinRoom": {
+      "codePlaceholder": "Code de la salle (ex. ABC7)",
+      "button": "Rejoindre la salle",
+      "joining": "Rejoindre..."
+    },
+    "history": {
+      "empty": "Aucun historique de salle",
+      "emptyDescription": "Les salles que vous rejoignez apparaîtront ici pour un retour facile"
+    },
+    "publicRooms": {
+      "connectToSee": "Connectez-vous au serveur pour voir les salles publiques",
+      "loading": "Chargement des salles publiques...",
+      "empty": "Aucune salle publique disponible",
+      "emptyDescription": "Les hôtes peuvent marquer leurs salles comme publiques pour les rendre découvrables",
+      "public": "Public",
+      "playerCount": "{count} joueur",
+      "playerCountPlural": "{count} joueurs"
+    },
+    "footer": "6 Jeux | 50 Joueurs | Multijoueur en temps réel",
+    "errors": {
+      "enterName": "Veuillez entrer votre nom",
+      "validCode": "Veuillez entrer un code de salle valide à 4 lettres",
+      "notConnected": "Non connecté au serveur. Veuillez attendre et réessayer.",
+      "timeout": "La requête a expiré. Veuillez vérifier votre connexion et réessayer.",
+      "mustSignIn": "Vous devez être connecté pour créer une salle. Veuillez vous connecter d'abord.",
+      "failedCreate": "Échec de la création de la salle",
+      "failedJoin": "Échec de la jonction à la salle",
+      "failedRejoin": "Échec de la reconnexion à la salle",
+      "connectionError": "Impossible de se connecter au serveur. Veuillez vérifier votre connexion."
+    }
+  },
+  "join": {
+    "title": "Rejoindre le jeu",
+    "subtitle": "Entrez votre nom et le code de la salle",
+    "nameLabel": "Votre nom",
+    "namePlaceholder": "Entrez votre nom",
+    "codeLabel": "Code de la salle",
+    "codePlaceholder": "ABCD",
+    "avatarLabel": "Avatar (Optionnel)",
+    "avatarStyles": {
+      "festive": "Festif",
+      "emoji": "Emoji"
+    },
+    "button": "Rejoindre le jeu",
+    "joining": "Rejoindre...",
+    "footer": "Pas de code ? Demandez à l'hôte de le partager !",
+    "errors": {
+      "enterName": "Veuillez entrer votre nom",
+      "validCode": "Veuillez entrer un code de salle valide à 4 lettres",
+      "notConnected": "Non connecté au serveur. Veuillez attendre...",
+      "connectionFailed": "Échec de la connexion au serveur. Veuillez actualiser la page."
+    }
+  },
+  "room": {
+    "title": "Salle {code}",
+    "gameSettings": "Paramètres du jeu",
+    "connection": {
+      "error": "Erreur de connexion",
+      "connecting": "Connexion...",
+      "connected": "Connecté"
+    },
+    "room": "Salle",
+    "scanToJoin": "Scanner pour rejoindre",
+    "orVisit": "Ou visitez :",
+    "players": "Joueurs",
+    "selectGame": "Sélectionner un jeu",
+    "needPlayers": "Il faut au moins 2 joueurs pour commencer",
+    "waitingPlayers": "En attente de joueurs...",
+    "scanQrCode": "Scannez le code QR pour rejoindre !",
+    "waitingHost": "En attente que l'hôte démarre le jeu...",
+    "games": {
+      "triviaRoyale": {
+        "name": "Trivia Royale de Noël",
+        "desc": "Jeu de quiz rapide"
+      },
+      "emojiCarol": {
+        "name": "Bataille de Chants Emoji",
+        "desc": "Jeu de vote stratégique"
+      },
+      "naughtyOrNice": {
+        "name": "Méchant ou Gentil",
+        "desc": "Jeu de vote social"
+      },
+      "priceIsRight": {
+        "name": "Le Juste Prix",
+        "desc": "Jeu de devinette de prix"
+      }
+    }
+  },
+  "player": {
+    "title": "Jouer dans {code}",
+    "room": "Salle : {code}",
+    "connection": {
+      "lost": "Connexion perdue",
+      "reconnecting": "Tentative de reconnexion...",
+      "retry": "Réessayer la connexion",
+      "reconnectNow": "Reconnecter maintenant",
+      "connecting": "Connexion...",
+      "pleaseWait": "Veuillez patienter",
+      "waitingStart": "En attente du début",
+      "hostWillStart": "L'hôte va démarrer le jeu bientôt !"
+    },
+    "sessionRank": "Session : #{rank}",
+    "globalRank": "Global : #{rank}",
+    "errors": {
+      "notConnected": "Non connecté à la salle. Veuillez rejoindre à nouveau.",
+      "pleaseRejoin": "Veuillez d'abord rejoindre la salle.",
+      "noCredentials": "Aucune information d'identification sauvegardée trouvée. Veuillez rejoindre la salle."
+    }
+  },
+  "host": {
+    "title": "Hébergement {code}",
+    "room": "Salle : {code}",
+    "players": "Joueurs",
+    "controlPanel": "Contrôles de l'hôte",
+    "gameControls": "Contrôles du jeu",
+    "pause": "Pause",
+    "resume": "Reprendre",
+    "endGame": "Terminer le jeu",
+    "confirmEndGame": "Êtes-vous sûr de vouloir terminer le jeu ?",
+    "currentGame": "Jeu actuel",
+    "noGame": "Aucun jeu actif",
+    "round": "Manche {round}/{maxRounds}",
+    "startNewGame": "Démarrer un nouveau jeu",
+    "returnToLobby": "Retour au hall",
+    "roomManagement": "Gestion de la salle",
+    "copyRoomCode": "Copier le code de la salle",
+    "joinUrl": "URL de connexion",
+    "gameStatus": "Statut du jeu",
+    "state": "État",
+    "leaderboards": "Classements",
+    "removePlayer": "Retirer {name} de la salle ?",
+    "removePlayerTitle": "Retirer le joueur",
+    "failedRemovePlayer": "Échec du retrait du joueur",
+    "roomCodeCopied": "Code de la salle copié !",
+    "reconnectHost": "Reconnecter l'hôte",
+    "settingUp": "Configuration de l'écran hôte...",
+    "waitingGameState": "En attente de l'état du jeu...",
+    "readyToStart": "Prêt à démarrer un jeu !",
+    "selectStartGame": "Sélectionner et démarrer le jeu",
+    "gameState": {
+      "lobby": "Hall",
+      "starting": "Démarrage",
+      "playing": "En cours",
+      "paused": "EN PAUSE",
+      "roundend": "Fin de manche",
+      "gameend": "Fin du jeu"
+    },
+    "leaderboard": {
+      "session": "Session",
+      "global": "Global"
+    }
+  },
+  "games": {
+    "triviaRoyale": {
+      "loading": "Chargement du jeu...",
+      "getReady": "Préparez-vous !",
+      "startingIn": "Démarrage dans {seconds}...",
+      "round": "Manche {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "answerSubmitted": "Réponse soumise ! En attente des autres...",
+      "correct": "Correct !",
+      "wrong": "Faux !",
+      "correctAnswer": "Bonne réponse",
+      "yourAnswer": "Votre réponse",
+      "waitingResults": "En attente des résultats...",
+      "roundComplete": "Manche terminée !",
+      "gameOver": "Jeu terminé !",
+      "votingBreakdown": "Répartition des votes",
+      "voters": "Votants",
+      "top5": "Top 5"
+    },
+    "emojiCarol": {
+      "loading": "Chargement du jeu...",
+      "getReady": "Préparez-vous !",
+      "round": "Manche {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "voteSubmitted": "Vote soumis ! En attente des autres...",
+      "waitingResults": "En attente des résultats...",
+      "roundComplete": "Manche terminée !",
+      "pickEmoji": "Choisissez un emoji que vous pensez que la plupart des gens choisiront !"
+    },
+    "naughtyOrNice": {
+      "loading": "Chargement du jeu...",
+      "getReady": "Préparez-vous !",
+      "startingSoon": "Démarrage bientôt...",
+      "round": "Manche {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "question": "Méchant ou Gentil ?",
+      "naughty": "MÉCHANT",
+      "nice": "GENTIL",
+      "voteSubmitted": "Vote soumis ! En attente des autres...",
+      "waitingResults": "En attente des résultats..."
+    },
+    "priceIsRight": {
+      "loading": "Chargement du jeu...",
+      "getReady": "Préparez-vous !",
+      "round": "Manche {round}/{maxRounds}",
+      "timeRemaining": "{seconds}s",
+      "guessPrice": "Devinez le prix",
+      "enterPrice": "Entrez le prix",
+      "submit": "Soumettre la devinette",
+      "guessSubmitted": "Soumis",
+      "waitingResults": "En attente des résultats...",
+      "yourGuess": "Votre devinette",
+      "actualPrice": "Prix réel",
+      "difference": "Différence",
+      "allGuesses": "Toutes les devinettes"
+    }
+  },
+  "notifications": {
+    "gameStarting": "Démarrage du jeu !",
+    "roundComplete": "Manche {round} terminée !",
+    "gameOver": "Jeu terminé !",
+    "reconnected": "Reconnecté !",
+    "scoreRestored": "Score restauré : {score} pts",
+    "reconnectionFailed": "Tentative de reconnexion {attempt} échouée. Nouvelle tentative...",
+    "reconnectionError": "{error}. Veuillez rejoindre la salle."
+  },
+  "finalResults": {
+    "title": "Résultats finaux",
+    "game": "Jeu : {gameType}",
+    "startNewGame": "Démarrer un nouveau jeu",
+    "returnToLobby": "Retour au hall"
+  },
+  "leaderboard": {
+    "session": "Classement de session",
+    "global": "Classement global",
+    "rank": "Rang",
+    "name": "Nom",
+    "score": "Score",
+    "noData": "Aucune donnée disponible",
+    "games": "jeux",
+    "errors": {
+      "failedLoad": "Échec du chargement du classement"
+    }
+  },
+  "profile": {
+    "title": "Profil",
+    "loading": "Chargement du profil...",
+    "editProfile": "Modifier le profil",
+    "displayName": "Nom d'affichage",
+    "displayNamePlaceholder": "Nom d'affichage optionnel",
+    "bio": "Biographie",
+    "bioPlaceholder": "Parlez-nous de vous...",
+    "noBio": "Pas encore de biographie",
+    "avatarStyle": "Style d'avatar",
+    "chooseAvatar": "Choisir un avatar",
+    "saveChanges": "Enregistrer les modifications",
+    "statistics": "Statistiques",
+    "totalScore": "Score total",
+    "gamesPlayed": "Parties jouées",
+    "bestGameScore": "Meilleur score de jeu",
+    "favoriteGame": "Jeu favori",
+    "achievements": "Succès",
+    "noAchievements": "Aucun succès pour le moment. Continuez à jouer pour les débloquer !",
+    "unlocked": "Débloqué",
+    "gameStatistics": "Statistiques de jeu",
+    "game": "Jeu",
+    "games": "Parties",
+    "wins": "Victoires",
+    "bestScore": "Meilleur score",
+    "avgScore": "Score moyen",
+    "errors": {
+      "noPlayerName": "Aucun nom de joueur trouvé. Veuillez d'abord rejoindre une salle.",
+      "failedLoad": "Échec du chargement du profil",
+      "failedUpdate": "Échec de la mise à jour du profil"
+    }
+  },
+  "settings": {
+    "title": "Paramètres du jeu",
+    "general": "Général",
+    "room": "Salle",
+    "games": "Jeux",
+    "trivia": "Trivia",
+    "price": "Prix",
+    "naughty": "Méchant",
+    "emoji": "Émoji",
+    "backToRoom": "Retour à la salle",
+    "hostOnly": "Seul l'hôte de la salle peut accéder aux paramètres.",
+    "goToRoom": "Aller à la salle",
+    "saved": "Paramètres enregistrés !",
+    "timeSettingSaved": "Paramètre de temps enregistré !",
+    "errors": {
+      "failedUpdate": "Échec de la mise à jour des paramètres de la salle",
+      "themeNotLoaded": "Thème non chargé. Veuillez actualiser la page.",
+      "failedSave": "Échec de l'enregistrement des paramètres",
+      "failedSaveTime": "Échec de l'enregistrement du paramètre de temps"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Se connecter",
+      "subtitle": "Connectez-vous pour créer et héberger des salles de jeu",
+      "email": "Email",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Entrez votre mot de passe",
+      "button": "Se connecter",
+      "signingIn": "Connexion...",
+      "noAccount": "Vous n'avez pas de compte ?",
+      "signUp": "S'inscrire",
+      "errors": {
+        "bothRequired": "Veuillez entrer l'email et le mot de passe",
+        "invalidEmail": "Veuillez entrer une adresse email valide",
+        "failed": "Échec de la connexion. Veuillez vérifier vos identifiants."
+      }
+    },
+    "signup": {
+      "title": "S'inscrire",
+      "subtitle": "Créez un compte pour héberger des salles de jeu",
+      "email": "Email",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Au moins 6 caractères",
+      "confirmPassword": "Confirmer le mot de passe",
+      "confirmPasswordPlaceholder": "Ré-entrez votre mot de passe",
+      "playerName": "Nom de joueur (Optionnel)",
+      "playerNamePlaceholder": "Votre nom de jeu",
+      "playerNameHint": "Si vous avez déjà joué, entrez votre nom de joueur pour lier votre profil",
+      "button": "S'inscrire",
+      "creating": "Création du compte...",
+      "hasAccount": "Vous avez déjà un compte ?",
+      "signIn": "Se connecter",
+      "errors": {
+        "bothRequired": "Veuillez entrer l'email et le mot de passe",
+        "invalidEmail": "Veuillez entrer une adresse email valide",
+        "passwordLength": "Le mot de passe doit contenir au moins 6 caractères",
+        "passwordMatch": "Les mots de passe ne correspondent pas",
+        "failedCreate": "Échec de la création du compte",
+        "failedTryAgain": "Échec de la création du compte. Veuillez réessayer."
+      },
+      "success": {
+        "created": "Compte créé avec succès !",
+        "checkEmail": "Veuillez vérifier votre email pour confirmer votre compte avant de créer des salles.",
+        "profileLinked": "Votre profil de joueur existant a été lié à votre compte."
+      }
+    }
+  },
+  "errors": {
+    "generic": "Une erreur s'est produite",
+    "goHome": "Retour à l'accueil"
+  },
+  "shareRoom": {
+    "title": "Partager la salle",
+    "roomCode": "Code de la salle",
+    "joinUrl": "URL de connexion",
+    "copy": "Copier",
+    "copied": "Copié !",
+    "copyUrl": "Copier l'URL",
+    "copyCode": "Copier le code de la salle",
+    "shareVia": "Partager via...",
+    "copiedToClipboard": "Copié dans le presse-papiers !",
+    "shareTitle": "Rejoindre la salle {code} - Jeux de Fête de Noël",
+    "shareText": "Rejoignez-moi dans la salle {code} pour les Jeux de Fête de Noël !"
+  },
+  "jukebox": {
+    "title": "Jukebox de Noël",
+    "noTrack": "Aucune piste sélectionnée",
+    "refreshPlaylist": "Actualiser la liste de lecture",
+    "minimize": "Réduire",
+    "play": "Lire",
+    "pause": "Pause",
+    "stop": "Arrêter",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "shuffle": "Mélanger",
+    "repeat": "Répéter : {mode}",
+    "playlist": "Liste de lecture ({count})",
+    "showPlaylist": "Afficher la liste de lecture ({count} pistes)"
+  },
+  "gameTile": {
+    "player": "joueur",
+    "players": "joueurs",
+    "startGame": "Démarrer le jeu",
+    "selected": "Sélectionné"
+  },
+  "roomSettings": {
+    "title": "Paramètres de la salle",
+    "roomName": "Nom de la salle (optionnel)",
+    "roomNamePlaceholder": "ex: Fête de Noël 2024",
+    "description": "Description (optionnelle)",
+    "descriptionPlaceholder": "Décrivez votre salle...",
+    "saveSettings": "Enregistrer les paramètres",
+    "saving": "Enregistrement..."
+  },
+  "createSet": {
+    "setName": "Nom du jeu *",
+    "setNamePlaceholder": "ex: Fête de Noël 2024",
+    "description": "Description (optionnelle)",
+    "descriptionPlaceholder": "Décrivez ce jeu...",
+    "createSet": "Créer le jeu",
+    "creating": "Création..."
+  },
+  "generalSettings": {
+    "title": "Paramètres généraux",
+    "backgroundMusic": "Musique de fond",
+    "backgroundMusicDesc": "Activer ou désactiver la musique de fond pour tous les joueurs",
+    "snowEffects": "Effets de neige",
+    "snowEffectsDesc": "Activer ou désactiver les effets d'animation de neige",
+    "sparkles": "Étincelles",
+    "sparklesDesc": "Ajouter des effets d'étincelles magiques dans toute la salle",
+    "icicles": "Glaçons",
+    "iciclesDesc": "Ajouter des glaçons décoratifs suspendus en haut",
+    "frostPattern": "Motif de givre",
+    "frostPatternDesc": "Ajouter un motif de givre subtil en superposition",
+    "colorScheme": "Schéma de couleurs",
+    "colorSchemeDesc": "Choisissez le thème de couleur général de la salle",
+    "colorSchemeTraditional": "Noël traditionnel",
+    "colorSchemeWinter": "Pays des merveilles hivernal",
+    "colorSchemeMixed": "Thème mixte",
+    "saveSettings": "Enregistrer les paramètres",
+    "saving": "Enregistrement..."
+  },
+  "triviaTab": {
+    "title": "Personnalisation Trivia Royale",
+    "timePerQuestion": "Temps par question (secondes)",
+    "timeRange": "Plage : 5-60 secondes",
+    "questionSet": "Jeu de questions",
+    "defaultQuestions": "Questions par défaut",
+    "questions": "questions",
+    "newSet": "Nouveau jeu",
+    "createNewSet": "Créer un nouveau jeu de questions",
+    "loadingQuestions": "Chargement des questions...",
+    "noQuestions": "Aucune question pour le moment. Ajoutez votre première question ci-dessous !",
+    "question": "Question",
+    "questionPlaceholder": "Entrez votre question...",
+    "answer": "Réponse {letter}",
+    "answerPlaceholder": "Texte de la réponse",
+    "correct": "Correct",
+    "markCorrect": "Marquer comme correct",
+    "difficulty": "Difficulté",
+    "difficultyEasy": "Facile",
+    "difficultyMedium": "Moyen",
+    "difficultyHard": "Difficile",
+    "category": "Catégorie (optionnelle)",
+    "categoryPlaceholder": "ex: Noël",
+    "saveChanges": "Enregistrer les modifications",
+    "saving": "Enregistrement...",
+    "editQuestion": "Modifier la question",
+    "deleteQuestion": "Supprimer la question",
+    "addNewQuestion": "Ajouter une nouvelle question",
+    "adding": "Ajout...",
+    "addQuestion": "Ajouter la question",
+    "deleteSet": "Supprimer ce jeu"
+  },
+  "priceTab": {
+    "title": "Personnalisation Price Is Right",
+    "timePerRound": "Temps par manche (secondes)",
+    "timeRange": "Plage : 10-60 secondes",
+    "itemSet": "Jeu d'articles",
+    "defaultItems": "Articles par défaut",
+    "items": "articles",
+    "newSet": "Nouveau jeu",
+    "createNewSet": "Créer un nouveau jeu d'articles",
+    "loadingItems": "Chargement des articles...",
+    "noItems": "Aucun article pour le moment. Ajoutez votre premier article ci-dessous !",
+    "addNewItem": "Ajouter un nouvel article",
+    "itemName": "Nom de l'article *",
+    "itemNamePlaceholder": "ex: iPhone 15 Pro",
+    "description": "Description",
+    "descriptionPlaceholder": "Description de l'article...",
+    "price": "Prix *",
+    "category": "Catégorie",
+    "categoryPlaceholder": "ex: Électronique",
+    "image": "Image *",
+    "adding": "Ajout...",
+    "addItem": "Ajouter l'article",
+    "deleteSet": "Supprimer ce jeu"
+  },
+  "naughtyTab": {
+    "title": "Personnalisation Méchant ou Gentil",
+    "timePerRound": "Temps par manche (secondes)",
+    "timeRange": "Plage : 5-30 secondes",
+    "promptSet": "Jeu d'invites",
+    "defaultPrompts": "Invites par défaut",
+    "prompts": "invites",
+    "newSet": "Nouveau jeu",
+    "createNewSet": "Créer un nouveau jeu d'invites",
+    "loadingPrompts": "Chargement des invites...",
+    "noPrompts": "Aucune invite pour le moment. Ajoutez votre première invite ci-dessous !",
+    "rating": "Classement",
+    "addNewPrompt": "Ajouter une nouvelle invite",
+    "prompt": "Invite *",
+    "promptPlaceholder": "ex: Quelqu'un qui parle pendant les films",
+    "category": "Catégorie",
+    "categoryPlaceholder": "ex: Social",
+    "contentRating": "Classement du contenu",
+    "contentRatingPG": "PG",
+    "contentRatingPG13": "PG-13",
+    "adding": "Ajout...",
+    "addPrompt": "Ajouter l'invite",
+    "deleteSet": "Supprimer ce jeu"
+  },
+  "emojiTab": {
+    "title": "Paramètres Emoji Carol Battle",
+    "timePerRound": "Temps par manche (secondes)",
+    "timeRange": "Plage : 10-30 secondes"
+  },
+  "imageUpload": {
+    "uploading": "Téléchargement...",
+    "dragDrop": "Glissez-déposez une image ici",
+    "or": "ou",
+    "chooseFile": "Choisir un fichier",
+    "fileInfo": "Max 5 Mo • JPEG, PNG, GIF, WebP",
+    "removeImage": "Supprimer l'image",
+    "errors": {
+      "invalidFileType": "Type de fichier invalide. Seuls JPEG, PNG, GIF et WebP sont autorisés.",
+      "fileSizeExceeded": "La taille du fichier dépasse la limite de 5 Mo",
+      "socketNotConnected": "Socket non connecté",
+      "failedUpload": "Échec du téléchargement de l'image",
+      "failedProcess": "Échec du traitement de l'image",
+      "failedRead": "Échec de la lecture du fichier"
+    }
+  },
+  "triviaTab": {
+    "success": {
+      "setCreated": "Jeu de questions créé !",
+      "questionAdded": "Question ajoutée !",
+      "questionUpdated": "Question mise à jour !",
+      "questionDeleted": "Question supprimée",
+      "setDeleted": "Jeu de questions supprimé"
+    },
+    "confirm": {
+      "deleteQuestion": "Supprimer cette question ?",
+      "deleteSet": "Supprimer ce jeu de questions et toutes ses questions ? Cette action est irréversible."
+    },
+    "errors": {
+      "failedCreateSet": "Échec de la création du jeu de questions",
+      "selectSetFirst": "Veuillez d'abord sélectionner un jeu de questions",
+      "fillQuestionAndAnswers": "Veuillez remplir la question et au moins 2 réponses",
+      "failedAddQuestion": "Échec de l'ajout de la question",
+      "failedUpdateQuestion": "Échec de la mise à jour de la question",
+      "failedDeleteQuestion": "Échec de la suppression de la question",
+      "failedDeleteSet": "Échec de la suppression du jeu de questions"
+    }
+  },
+  "priceTab": {
+    "success": {
+      "setCreated": "Jeu d'articles créé !",
+      "itemAdded": "Article ajouté !",
+      "itemDeleted": "Article supprimé",
+      "setDeleted": "Jeu d'articles supprimé"
+    },
+    "confirm": {
+      "deleteItem": "Supprimer cet article ?",
+      "deleteSet": "Supprimer ce jeu d'articles et tous ses articles ? Cette action est irréversible."
+    },
+    "errors": {
+      "failedCreateSet": "Échec de la création du jeu d'articles",
+      "selectSetFirst": "Veuillez d'abord sélectionner un jeu d'articles",
+      "fillRequiredFields": "Veuillez remplir le nom, le prix et télécharger une image",
+      "failedAddItem": "Échec de l'ajout de l'article",
+      "failedDeleteItem": "Échec de la suppression de l'article",
+      "failedDeleteSet": "Échec de la suppression du jeu d'articles"
+    }
+  },
+  "naughtyTab": {
+    "success": {
+      "setCreated": "Jeu d'invites créé !",
+      "promptAdded": "Invite ajoutée !",
+      "promptDeleted": "Invite supprimée",
+      "setDeleted": "Jeu d'invites supprimé"
+    },
+    "confirm": {
+      "deletePrompt": "Supprimer cette invite ?",
+      "deleteSet": "Supprimer ce jeu d'invites et toutes ses invites ? Cette action est irréversible."
+    },
+    "errors": {
+      "failedCreateSet": "Échec de la création du jeu d'invites",
+      "selectSetFirst": "Veuillez d'abord sélectionner un jeu d'invites",
+      "enterPrompt": "Veuillez entrer une invite",
+      "failedAddPrompt": "Échec de l'ajout de l'invite",
+      "failedDeletePrompt": "Échec de la suppression de l'invite",
+      "failedDeleteSet": "Échec de la suppression du jeu d'invites"
+    }
+  },
+  "roomManagement": {
+    "editRoom": "Modifier la Salle",
+    "deleteRoom": "Supprimer la Salle",
+    "reactivateRoom": "Réactiver la Salle",
+    "reactivate": "Réactiver",
+    "roomName": "Nom de la Salle",
+    "roomNamePlaceholder": "ex: Fête de Noël 2024",
+    "description": "Description",
+    "descriptionPlaceholder": "Décrivez votre salle...",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer la salle {code} ({name}) ? Cette action est irréversible.",
+    "reactivateConfirm": "Réactiver la salle {code} ({name}) ? Cela générera un nouveau jeton d'hôte et prolongera l'expiration de la salle."
+  }
+}
+

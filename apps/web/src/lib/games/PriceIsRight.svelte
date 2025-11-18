@@ -1,12 +1,57 @@
 <script lang="ts">
   import { socket, gameState } from '$lib/socket';
   import { GameState } from '@christmas/core';
+  import { onDestroy } from 'svelte';
+  import { playSound } from '$lib/audio';
+  import { t } from '$lib/i18n';
 
   $: item = $gameState?.currentItem;
   $: hasGuessed = $gameState?.hasGuessed;
   $: state = $gameState?.state;
   $: round = $gameState?.round;
   $: maxRounds = $gameState?.maxRounds;
+  $: roundStartTime = $gameState?.roundStartTime || 0;
+  $: scoreboard = $gameState?.scoreboard || [];
+  
+  let timeRemaining = 30;
+  const timePerRound = 30000; // 30 seconds
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
+  let countdownPlayed = false;
+  
+  // Update timer
+  $: if (state === GameState.PLAYING && roundStartTime > 0) {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    // Reset countdown flag when round starts
+    countdownPlayed = false;
+    const updateTimer = () => {
+      const elapsed = Date.now() - roundStartTime;
+      const newTimeRemaining = Math.max(0, Math.ceil((timePerRound - elapsed) / 1000));
+      
+      // Play countdown sound when reaching 5 seconds (only once per round)
+      if (newTimeRemaining <= 5 && newTimeRemaining > 0 && !countdownPlayed) {
+        playSound('countdown');
+        countdownPlayed = true;
+      }
+      
+      timeRemaining = newTimeRemaining;
+    };
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 100);
+  } else {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    countdownPlayed = false;
+  }
+
+  onDestroy(() => {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+  });
 
   let guess = '';
 
@@ -43,17 +88,21 @@
   {#if !state}
     <div class="loading-overlay">
       <div class="text-6xl mb-4 animate-spin">⏳</div>
-      <p class="text-xl text-white/70">Loading game...</p>
+      <p class="text-xl text-white/70">{t('games.priceIsRight.loading')}</p>
     </div>
   {:else if state === GameState.STARTING}
     <div class="countdown-overlay">
       <div class="text-8xl mb-4">💰</div>
-      <h1 class="text-4xl font-bold">Get Ready!</h1>
-      <p class="text-xl text-white/70 mt-2">Starting soon...</p>
+      <h1 class="text-4xl font-bold">{t('games.priceIsRight.getReady')}</h1>
+      <p class="text-xl text-white/70 mt-2">{t('games.naughtyOrNice.startingSoon')}</p>
     </div>
   {:else if state === GameState.PLAYING && item}
     <div class="item-card">
-      <div class="round-badge">Round {round}/{maxRounds}</div>
+      <div class="round-badge">{t('games.priceIsRight.round', { round, maxRounds })}</div>
+      <div class="timer-display">
+        <span class="timer-label">⏱️</span>
+        <span class="timer-value" class:warning={timeRemaining <= 10}>{t('games.priceIsRight.timeRemaining', { seconds: timeRemaining })}</span>
+      </div>
 
       <div class="item-image-container">
         <img src={item.imageUrl} alt={item.name} class="item-image" />
@@ -86,51 +135,63 @@
       </div>
 
       <div class="action-buttons">
-        <button on:click={clear} class="btn-clear">Clear</button>
+        <button on:click={clear} class="btn-clear">{t('common.button.close')}</button>
         <button 
           on:click={submitGuess} 
           disabled={!guess || hasGuessed}
           class="btn-submit"
         >
-          {hasGuessed ? '✓ Submitted' : 'Submit Guess'}
+          {hasGuessed ? `✓ ${t('games.priceIsRight.guessSubmitted')}` : t('games.priceIsRight.submit')}
         </button>
       </div>
     </div>
   {:else if state === GameState.ROUND_END && item}
     <div class="result-card">
       <div class="text-6xl mb-4">💰</div>
-      <h2 class="text-2xl font-bold mb-2">Actual Price:</h2>
+      <h2 class="text-2xl font-bold mb-2">{t('games.priceIsRight.actualPrice')}:</h2>
       <div class="actual-price">${item.price.toFixed(2)}</div>
       
       <div class="guesses-list">
-        <h3 class="text-lg font-bold mb-2">All Guesses</h3>
+        <h3 class="text-lg font-bold mb-2">{t('games.priceIsRight.allGuesses')}</h3>
         {#each Object.entries($gameState?.guesses || {}) as [playerId, playerGuess]}
           <div class="guess-row">
             <span>${playerGuess.toFixed(2)}</span>
           </div>
         {/each}
       </div>
-    </div>
-  {:else if state === GameState.GAME_END}
-    <div class="game-end">
-      <div class="text-8xl mb-6">🏆</div>
-      <h1 class="text-4xl font-bold mb-4">Game Over!</h1>
-      <p class="text-xl text-white/70">Check the host screen for final results!</p>
+
+      <!-- Leaderboard -->
+      <div class="scoreboard-mini">
+        <h3 class="text-lg font-bold mb-2">📊 Leaderboard</h3>
+        {#each scoreboard.slice(0, 10) as player, i}
+          <div class="score-row">
+            <span class="rank">#{i + 1}</span>
+            <span class="name">{player.name}</span>
+            <span class="score">{player.score}</span>
+          </div>
+        {/each}
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
   .price-container {
-    height: 100%;
+    min-height: 100%;
+    height: auto;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .item-card {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    width: 100%;
+    padding-bottom: 1rem;
   }
 
   .round-badge {
@@ -159,14 +220,17 @@
   }
 
   .item-name {
-    font-size: 1.5rem;
+    font-size: clamp(1.125rem, 4vw, 1.5rem);
     font-weight: bold;
     text-align: center;
+    line-height: 1.4;
   }
 
   .item-description {
     text-align: center;
     color: rgba(255, 255, 255, 0.7);
+    font-size: clamp(0.875rem, 3vw, 1rem);
+    line-height: 1.5;
   }
 
   .guess-display {
@@ -188,7 +252,7 @@
   }
 
   .amount {
-    font-size: 3rem;
+    font-size: clamp(2rem, 8vw, 3rem);
     font-weight: bold;
     color: white;
   }
@@ -196,22 +260,30 @@
   .numpad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
+    gap: 0.875rem;
     margin: 1rem 0;
+    width: 100%;
   }
 
   .num-btn {
     aspect-ratio: 1;
-    font-size: 1.5rem;
+    min-height: 60px;
+    min-width: 60px;
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
     font-weight: bold;
     background: rgba(15, 134, 68, 0.3);
     border: 2px solid #0f8644;
     border-radius: 1rem;
     color: white;
-    transition: all 0.1s;
+    transition: all 0.15s;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
 
-  .num-btn:active {
+  .num-btn:active,
+  .num-btn:hover {
     transform: scale(0.95);
     background: rgba(15, 134, 68, 0.5);
   }
@@ -220,25 +292,49 @@
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 0.75rem;
+    width: 100%;
   }
 
   .btn-clear {
-    padding: 1rem;
+    padding: 1.25rem;
+    min-height: 52px;
     background: rgba(196, 30, 58, 0.3);
     border: 2px solid #c41e3a;
     border-radius: 1rem;
     color: white;
     font-weight: bold;
+    font-size: clamp(0.875rem, 3vw, 1rem);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: all 0.15s;
+  }
+
+  .btn-clear:active {
+    transform: scale(0.98);
+    background: rgba(196, 30, 58, 0.5);
   }
 
   .btn-submit {
-    padding: 1rem;
+    padding: 1.25rem;
+    min-height: 52px;
     background: rgba(15, 134, 68, 0.3);
     border: 2px solid #0f8644;
     border-radius: 1rem;
     color: white;
     font-weight: bold;
-    font-size: 1.125rem;
+    font-size: clamp(1rem, 3.5vw, 1.125rem);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: all 0.15s;
+  }
+
+  .btn-submit:active:not(:disabled) {
+    transform: scale(0.98);
+    background: rgba(15, 134, 68, 0.5);
   }
 
   .btn-submit:disabled {
@@ -254,12 +350,15 @@
     text-align: center;
   }
 
-  .result-card, .game-end {
+  .result-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 2rem;
+    padding: 1.5rem;
+    width: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   @keyframes spin {
@@ -276,10 +375,10 @@
   }
 
   .actual-price {
-    font-size: 3rem;
+    font-size: clamp(2rem, 8vw, 3rem);
     font-weight: bold;
     color: #ffd700;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
 
   .guesses-list {
@@ -295,5 +394,161 @@
     background: rgba(255, 255, 255, 0.05);
     border-radius: 0.5rem;
     font-weight: bold;
+  }
+
+  .timer-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    min-height: 44px;
+    background: rgba(255, 215, 0, 0.2);
+    border: 2px solid #ffd700;
+    border-radius: 9999px;
+    font-weight: bold;
+    margin: 0 auto;
+    width: fit-content;
+    touch-action: manipulation;
+  }
+
+  .timer-label {
+    font-size: 1.25rem;
+  }
+
+  .timer-value {
+    font-size: 1.5rem;
+    color: #ffd700;
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  .timer-value.warning {
+    color: #ff3d3d;
+    animation: pulse-warning 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-warning {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  .scoreboard-mini {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 1rem;
+    padding: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .score-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    font-size: clamp(0.875rem, 3vw, 1rem);
+  }
+
+  .rank {
+    font-weight: bold;
+    width: 3rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .name {
+    flex: 1;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 0.5rem;
+  }
+
+  .score {
+    font-weight: bold;
+    color: #ffd700;
+    min-width: 4rem;
+    text-align: right;
+  }
+
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .numpad {
+      gap: 0.625rem;
+    }
+
+    .num-btn {
+      min-height: 56px;
+      min-width: 56px;
+      font-size: 1.25rem;
+    }
+
+    .amount {
+      font-size: 2rem;
+    }
+
+    .dollar {
+      font-size: 1.75rem;
+    }
+
+    .item-name {
+      font-size: 1.125rem;
+    }
+
+    .item-description {
+      font-size: 0.875rem;
+    }
+
+    .action-buttons {
+      grid-template-columns: 1fr;
+      gap: 0.625rem;
+    }
+
+    .btn-clear,
+    .btn-submit {
+      width: 100%;
+      padding: 1rem;
+    }
+
+    .timer-display {
+      width: 100%;
+      margin: 0;
+    }
+
+    .guess-display {
+      padding: 1.25rem;
+    }
+
+    .scoreboard-mini {
+      padding: 0.875rem;
+      margin-top: 1rem;
+    }
+
+    .score-row {
+      padding: 0.625rem;
+      font-size: 0.875rem;
+    }
+
+    .rank {
+      width: 2.5rem;
+      font-size: 0.875rem;
+    }
+
+    .name {
+      font-size: 0.875rem;
+    }
+
+    .score {
+      min-width: 3rem;
+      font-size: 0.875rem;
+    }
   }
 </style>

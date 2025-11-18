@@ -4,13 +4,20 @@ import {
   GameState,
   EmojiCarolGameState,
   Player,
+  calculateSpeedBonus,
 } from '@christmas/core';
 
 const DEFAULT_EMOJIS = ['🎅', '🎄', '⛄', '🎁', '🔔', '⭐', '🕯️', '🦌', '🤶', '🧝', '🎿', '⛷️'];
 
 export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
-  constructor(players: Map<string, Player>) {
+  private timePerRound: number = 15000; // 15 seconds
+
+  constructor(players: Map<string, Player>, timePerRoundSeconds?: number) {
     super(GameType.EMOJI_CAROL, players);
+    // Set time per round if provided (convert seconds to milliseconds)
+    if (timePerRoundSeconds !== undefined) {
+      this.timePerRound = timePerRoundSeconds * 1000;
+    }
   }
 
   protected createInitialState(): EmojiCarolGameState {
@@ -29,6 +36,8 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       availableEmojis: [...DEFAULT_EMOJIS],
       playerPicks: {},
       roundResults: [],
+      roundStartTime: 0,
+      pickTimes: {},
     };
   }
 
@@ -46,11 +55,13 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
 
   private startRound(): void {
     this.state.playerPicks = {};
+    this.state.pickTimes = {};
+    this.state.roundStartTime = Date.now();
     
     // Timer to end round
     this.setTimer(() => {
       this.endRound();
-    }, 15000);
+    }, this.timePerRound);
   }
 
   private endRound(): void {
@@ -72,7 +83,9 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       }
     });
 
-    // Award points
+    // Award points with speed bonus
+    const speedBonusMultiplier = 0.5; // Lower multiplier for emoji game
+    
     Object.entries(picks).forEach(([playerId, emoji]) => {
       let points = 0;
 
@@ -85,6 +98,13 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       const pickCount = emojiCounts.get(emoji) || 0;
       if (pickCount === 1) {
         points += 5;
+      }
+
+      // Speed bonus (only if they got majority or uniqueness bonus)
+      if (points > 0 && this.state.pickTimes[playerId]) {
+        const pickTime = this.state.pickTimes[playerId] - this.state.roundStartTime;
+        const speedBonus = calculateSpeedBonus(pickTime, this.timePerRound, speedBonusMultiplier);
+        points += speedBonus;
       }
 
       this.updateScore(playerId, points);
@@ -109,6 +129,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
     if (action === 'pick' && this.state.state === GameState.PLAYING) {
       if (!this.state.playerPicks[playerId]) {
         this.state.playerPicks[playerId] = data.emoji;
+        this.state.pickTimes[playerId] = Date.now();
 
         // If all players picked, end round early
         if (Object.keys(this.state.playerPicks).length === this.players.size) {

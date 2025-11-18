@@ -11,12 +11,19 @@
     "dev": "turbo run dev --parallel",
     "dev:web": "pnpm --filter web dev",
     "dev:server": "pnpm --filter server dev",
+    "dev:local": "pnpm supabase:start && turbo run dev --parallel",
     "build": "turbo run build",
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,svelte,json,css}\"",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:status": "supabase status",
+    "supabase:init": "supabase init",
+    "supabase:migrate": "supabase db reset"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.1",

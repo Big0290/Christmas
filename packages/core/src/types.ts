@@ -6,8 +6,6 @@ import { z } from 'zod';
 
 export enum GameType {
   TRIVIA_ROYALE = 'trivia_royale',
-  GIFT_GRABBER = 'gift_grabber',
-  WORKSHOP_TYCOON = 'workshop_tycoon',
   EMOJI_CAROL = 'emoji_carol',
   NAUGHTY_OR_NICE = 'naughty_or_nice',
   PRICE_IS_RIGHT = 'price_is_right',
@@ -40,6 +38,7 @@ export interface Player {
   score: number;
   joinedAt: number;
   lastSeen: number;
+  language?: 'en' | 'fr'; // Player's preferred language for game content
 }
 
 export interface Room {
@@ -66,11 +65,14 @@ export const GlobalSettingsSchema = z.object({
     secondaryColor: z.string().default('#0f8644'),
     snowEffect: z.boolean().default(true),
     soundEnabled: z.boolean().default(true),
+    sparkles: z.boolean().default(true),
+    icicles: z.boolean().default(false),
+    frostPattern: z.boolean().default(true),
+    colorScheme: z.enum(['traditional', 'winter', 'mixed']).default('mixed'),
   }).default({}),
   avatarStyle: z.enum(['festive', 'emoji', 'random']).default('festive'),
   spectatorMode: z.boolean().default(true),
   // Room metadata
-  isPublic: z.boolean().default(false),
   roomName: z.string().optional(),
   description: z.string().optional(),
 });
@@ -93,29 +95,6 @@ export const TriviaRoyaleSettingsSchema = z.object({
 });
 
 export type TriviaRoyaleSettings = z.infer<typeof TriviaRoyaleSettingsSchema>;
-
-// GIFT GRABBER
-export const GiftGrabberSettingsSchema = z.object({
-  mapSize: z.enum(['small', 'medium', 'large']).default('medium'),
-  sessionDuration: z.number().min(60).max(300).default(120),
-  giftSpawnRate: z.number().min(1).max(10).default(3),
-  coalSpawnRate: z.number().min(0).max(5).default(1),
-  playerSpeed: z.number().min(0.5).max(2).default(1),
-  collisionsEnabled: z.boolean().default(true),
-});
-
-export type GiftGrabberSettings = z.infer<typeof GiftGrabberSettingsSchema>;
-
-// WORKSHOP TYCOON
-export const WorkshopTycoonSettingsSchema = z.object({
-  startingResources: z.number().min(0).max(1000).default(100),
-  sessionDuration: z.number().min(120).max(600).default(300),
-  upgradeCostCurve: z.enum(['linear', 'exponential']).default('exponential'),
-  boostFrequency: z.number().min(10).max(60).default(30),
-  productionMultiplier: z.number().min(0.5).max(3).default(1),
-});
-
-export type WorkshopTycoonSettings = z.infer<typeof WorkshopTycoonSettingsSchema>;
 
 // EMOJI CAROL BATTLE
 export const EmojiCarolSettingsSchema = z.object({
@@ -156,8 +135,6 @@ export type PriceIsRightSettings = z.infer<typeof PriceIsRightSettingsSchema>;
 // Combined settings
 export interface AllGameSettings {
   trivia_royale: TriviaRoyaleSettings;
-  gift_grabber: GiftGrabberSettings;
-  workshop_tycoon: WorkshopTycoonSettings;
   emoji_carol: EmojiCarolSettings;
   naughty_or_nice: NaughtyOrNiceSettings;
   price_is_right: PriceIsRightSettings;
@@ -175,6 +152,7 @@ export interface TriviaQuestion {
   difficulty: 'easy' | 'medium' | 'hard';
   imageUrl?: string;
   category?: string;
+  translations?: Record<string, { question: string; answers: string[] }>; // Language code -> translated content
 }
 
 export interface PriceItem {
@@ -184,6 +162,7 @@ export interface PriceItem {
   price: number;
   imageUrl: string;
   category: string;
+  translations?: Record<string, { name: string; description: string }>; // Language code -> translated content
 }
 
 export interface EmojiSet {
@@ -197,15 +176,7 @@ export interface NaughtyPrompt {
   prompt: string;
   category: string;
   contentRating: 'pg' | 'pg13';
-}
-
-export interface WorkshopUpgrade {
-  id: string;
-  name: string;
-  description: string;
-  baseCost: number;
-  productionBoost: number;
-  icon: string;
+  translations?: Record<string, { prompt: string }>; // Language code -> translated content
 }
 
 // ============================================================================
@@ -218,6 +189,7 @@ export interface ServerToClientEvents {
   player_joined: (player: Player) => void;
   player_left: (playerId: string) => void;
   room_state: (state: any) => void;
+  room_update: (data: { players: Player[]; playerCount: number }) => void;
   
   // Game events
   game_started: (gameType: GameType) => void;
@@ -234,10 +206,6 @@ export interface ServerToClientEvents {
   trivia_question: (question: TriviaQuestion, round: number) => void;
   trivia_answer_result: (correct: boolean, correctIndex: number) => void;
   
-  gift_grabber_update: (state: any) => void;
-  
-  workshop_update: (state: any) => void;
-  
   emoji_round_start: (round: number, emojis: string[]) => void;
   emoji_round_end: (results: any) => void;
   
@@ -246,13 +214,22 @@ export interface ServerToClientEvents {
   
   price_round_start: (item: PriceItem, round: number) => void;
   price_round_end: (results: any) => void;
+  
+  // Jukebox
+  jukebox_state: (state: { currentTrack: number; isPlaying: boolean; shuffle: boolean; repeat: 'none' | 'one' | 'all'; volume: number; progress?: number }) => void;
 }
 
 export interface ClientToServerEvents {
   // Room events
-  create_room: (playerName: string, callback: (response: any) => void) => void;
-  join_room: (code: string, playerName: string, callback: (response: any) => void) => void;
+  create_room: (playerName: string, authToken: string | undefined, language?: 'en' | 'fr', callback?: (response: any) => void) => void;
+  join_room: (code: string, playerName: string, preferredAvatar?: string, language?: 'en' | 'fr', callback?: (response: any) => void) => void;
   leave_room: () => void;
+  reconnect_player: (roomCode: string, playerToken: string, language?: 'en' | 'fr', callback?: (response: any) => void) => void;
+  reconnect_host: (roomCode: string, hostToken: string, language?: 'en' | 'fr', callback?: (response: any) => void) => void;
+  
+  // Room management events
+  get_my_room: (callback: (response: { success: boolean; room?: { code: string; hostToken: string; roomName?: string; description?: string; playerCount: number; isActive: boolean } | null; error?: string }) => void) => void;
+  get_room_players: (roomCode: string, callback: (response: { success: boolean; players?: Player[]; error?: string }) => void) => void;
   
   // Host events
   start_game: (gameType: GameType) => void;
@@ -265,12 +242,12 @@ export interface ClientToServerEvents {
   
   // Game actions
   trivia_answer: (answerIndex: number) => void;
-  gift_move: (direction: { x: number; y: number }) => void;
-  workshop_upgrade: (upgradeId: string) => void;
-  workshop_boost: () => void;
   emoji_pick: (emoji: string) => void;
   vote: (choice: 'naughty' | 'nice') => void;
   price_guess: (guess: number) => void;
+  
+  // Jukebox control (host only)
+  jukebox_control: (roomCode: string, action: 'play' | 'pause' | 'next' | 'previous' | 'select' | 'shuffle' | 'repeat' | 'volume' | 'seek', data?: any) => void;
 }
 
 // ============================================================================
@@ -299,25 +276,13 @@ export interface TriviaGameState extends BaseGameState {
   revealStartTime?: number; // When reveal phase started
 }
 
-export interface GiftGrabberGameState extends BaseGameState {
-  gameType: GameType.GIFT_GRABBER;
-  playerPositions: Record<string, { x: number; y: number }>;
-  gifts: Array<{ id: string; x: number; y: number; value: number }>;
-  coals: Array<{ id: string; x: number; y: number }>;
-}
-
-export interface WorkshopGameState extends BaseGameState {
-  gameType: GameType.WORKSHOP_TYCOON;
-  playerResources: Record<string, number>;
-  playerProduction: Record<string, number>;
-  playerUpgrades: Record<string, string[]>;
-}
-
 export interface EmojiCarolGameState extends BaseGameState {
   gameType: GameType.EMOJI_CAROL;
   availableEmojis: string[];
   playerPicks: Record<string, string>;
   roundResults: any[];
+  roundStartTime: number;
+  pickTimes: Record<string, number>; // Track when each player picked
 }
 
 export interface NaughtyOrNiceGameState extends BaseGameState {
@@ -325,6 +290,8 @@ export interface NaughtyOrNiceGameState extends BaseGameState {
   currentPrompt: NaughtyPrompt | null;
   votes: Record<string, 'naughty' | 'nice'>;
   votingClosed: boolean;
+  roundStartTime: number;
+  voteTimes: Record<string, number>; // Track when each player voted
 }
 
 export interface PriceIsRightGameState extends BaseGameState {
@@ -332,12 +299,12 @@ export interface PriceIsRightGameState extends BaseGameState {
   currentItem: PriceItem | null;
   guesses: Record<string, number>;
   guessingClosed: boolean;
+  roundStartTime: number;
+  guessTimes: Record<string, number>; // Track when each player guessed
 }
 
 export type AnyGameState =
   | TriviaGameState
-  | GiftGrabberGameState
-  | WorkshopGameState
   | EmojiCarolGameState
   | NaughtyOrNiceGameState
   | PriceIsRightGameState;

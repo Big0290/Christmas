@@ -9,6 +9,7 @@ import {
   calculateSpeedBonus,
   calculateAccuracyScore,
 } from '@christmas/core';
+import { translateQuestion } from '../utils/translations.js';
 
 // Default trivia questions
 const DEFAULT_QUESTIONS: TriviaQuestion[] = [
@@ -99,13 +100,17 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
   private timePerQuestion: number = 15000; // 15 seconds
   private speedBonusMultiplier: number = 1.5;
 
-  constructor(players: Map<string, Player>, customQuestions?: TriviaQuestion[]) {
+  constructor(players: Map<string, Player>, customQuestions?: TriviaQuestion[], timePerQuestionSeconds?: number) {
     super(GameType.TRIVIA_ROYALE, players);
     this.questions = customQuestions && customQuestions.length > 0 
       ? shuffleArray(customQuestions)
       : shuffleArray(DEFAULT_QUESTIONS);
     // Update maxRounds now that questions are initialized
     this.state.maxRounds = Math.min(this.questions.length, 10);
+    // Set time per question if provided (convert seconds to milliseconds)
+    if (timePerQuestionSeconds !== undefined) {
+      this.timePerQuestion = timePerQuestionSeconds * 1000;
+    }
   }
 
   protected createInitialState(): TriviaGameState {
@@ -251,18 +256,27 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
   }
 
   getClientState(playerId: string): any {
+    // Get player's language preference, default to English
+    const player = this.players.get(playerId);
+    const language = player?.language || 'en';
+
+    // Translate current question if it exists
+    let translatedQuestion = null;
+    if (this.state.currentQuestion) {
+      translatedQuestion = translateQuestion(this.state.currentQuestion, language);
+      // Don't send correct answer to clients until round ends
+      translatedQuestion = {
+        ...translatedQuestion,
+        correctIndex:
+          this.state.state === GameState.ROUND_END
+            ? translatedQuestion.correctIndex
+            : undefined,
+      };
+    }
+
     return {
       ...this.state,
-      currentQuestion: this.state.currentQuestion
-        ? {
-            ...this.state.currentQuestion,
-            // Don't send correct answer to clients until round ends
-            correctIndex:
-              this.state.state === GameState.ROUND_END
-                ? this.state.currentQuestion.correctIndex
-                : undefined,
-          }
-        : null,
+      currentQuestion: translatedQuestion,
       hasAnswered: this.state.answers[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
       // Include voting statistics for reveal phase
