@@ -4,6 +4,7 @@ import type { ServerToClientEvents, ClientToServerEvents } from '@christmas/core
 import { GameState } from '@christmas/core';
 import { browser } from '$app/environment';
 import { getAccessToken } from './supabase';
+import { normalizeGameState, normalizeGameType } from './utils/game-state';
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -257,9 +258,15 @@ function registerSocketListeners(socketInstance: TypedSocket) {
         correctIndex: state.currentQuestion.correctIndex
       });
     }
+    // Normalize state and gameType to enum values before storing
+    const normalizedState = {
+      ...state,
+      state: normalizeGameState(state?.state) ?? state?.state,
+      gameType: normalizeGameType(state?.gameType) ?? state?.gameType
+    };
     // Update the store
-    console.log('[Socket] Updating gameState store with state:', state?.state, 'hasQuestion:', !!state?.currentQuestion);
-    gameState.set(state);
+    console.log('[Socket] Updating gameState store with normalized state:', normalizedState?.state, 'hasQuestion:', !!state?.currentQuestion);
+    gameState.set(normalizedState);
     // Verify the store was updated by checking it immediately
     const updatedState = get(gameState);
     console.log('[Socket] ✅ GameState store updated, verified currentQuestion exists:', !!updatedState?.currentQuestion);

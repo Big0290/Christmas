@@ -42,9 +42,11 @@
   // Countdown timer variables - declared before reactive statements to avoid TDZ errors
   let countdownValue = 3;
   let countdownStartTime = 0;
-  let showInstructions = true; // Show instructions first, then countdown
+  let showInstructions = false; // Will be set to true when game starts
   let instructionStartTime = 0;
   let previousState: GameState | undefined = undefined;
+  let previousGameType: GameType | null = null;
+  let instructionsShownForGame: string | null = null; // Track which game we've shown instructions for
   const INSTRUCTION_DURATION = 5000; // 5 seconds for instructions
 
   // Declare derived variables before reactive statements to avoid TDZ errors
@@ -99,6 +101,39 @@
 
   onMount(() => {
     console.log('[Host] Component mounted, connecting socket...');
+    
+    // Check initial state on mount - show instructions if game is already active
+    const initialState = get(gameState);
+    console.log('[Host] onMount - checking initial state:', {
+      initialState: initialState?.state,
+      gameType: initialState?.gameType,
+      instructionsShownForGame
+    });
+    
+    if (initialState) {
+      // Only show instructions on mount if we're in STARTING state
+      // If we're in PLAYING state, the reactive statement will handle it
+      const isStarting = initialState.state === GameState.STARTING;
+      
+      if (isStarting && initialState.gameType) {
+        const gameIdentifier = `${initialState.gameType}`;
+        if (instructionsShownForGame !== gameIdentifier && !showInstructions) {
+          console.log('[Host] ✅ onMount - showing instructions for active game (STARTING):', gameIdentifier);
+          showInstructions = true;
+          instructionStartTime = Date.now();
+          instructionsShownForGame = gameIdentifier;
+          
+          // Auto-hide after duration
+          setTimeout(() => {
+            console.log('[Host] Auto-hiding instructions after duration');
+            showInstructions = false;
+          }, INSTRUCTION_DURATION);
+        } else {
+          console.log('[Host] onMount - instructions already shown for:', gameIdentifier);
+        }
+      }
+    }
+    
     connectSocket().catch((err) => {
       console.error('[Host] Failed to connect socket:', err);
       error = 'Failed to connect to server. Please refresh the page.';
@@ -730,20 +765,51 @@
     }
   }
 
-  // Handle STARTING state - show instructions first, then countdown
+  // Handle STARTING/PLAYING state - show instructions when game starts
   $: {
     // Guard against undefined currentState to avoid initialization errors
     const state = $gameState?.state;
-    // Detect state change to STARTING
-    if (state === GameState.STARTING && previousState !== GameState.STARTING) {
-      // Just entered STARTING state - show instructions first
+    const gameType = $gameState?.gameType;
+    
+    // Create a unique game identifier - use gameType only (not round) so it shows once per game type
+    const gameIdentifier = gameType ? `${gameType}` : null;
+    
+    // Detect new game start (gameType changed or state is STARTING/PLAYING)
+    // Use enum comparisons only - state is normalized in socket.ts
+    const isStartingOrPlaying = 
+      state === GameState.STARTING || state === GameState.PLAYING;
+    
+    // Debug logging
+    if (state !== undefined && state !== null) {
+      console.log('[Host] Instructions check:', {
+        state,
+        gameType,
+        gameIdentifier,
+        instructionsShownForGame,
+        showInstructions,
+        isStartingOrPlaying,
+        shouldShow: isStartingOrPlaying && gameType && gameIdentifier && instructionsShownForGame !== gameIdentifier
+      });
+    }
+    
+    // Show instructions when:
+    // 1. Game type changed (new game started)
+    // 2. State is STARTING or PLAYING
+    // 3. We haven't shown instructions for this game yet
+    // 4. Instructions are not already showing (prevent duplicate triggers)
+    // 5. Only show in STARTING state to avoid showing again when transitioning to PLAYING
+    if (isStartingOrPlaying && gameType && gameIdentifier && instructionsShownForGame !== gameIdentifier && !showInstructions && state === GameState.STARTING) {
+      console.log('[Host] ✅ Showing instructions for new game:', {
+        gameType,
+        state,
+        gameIdentifier,
+        instructionsShownForGame,
+        showInstructions
+      });
       showInstructions = true;
       instructionStartTime = Date.now();
       countdownValue = 3;
-
-      // Don't request game state - rely on game_state_update events from server
-      // The server sends game_state_update immediately when question is ready
-      // This ensures synchronization with player screens
+      instructionsShownForGame = gameIdentifier;
 
       // After instruction duration, hide instructions and start countdown
       setTimeout(() => {
@@ -771,9 +837,27 @@
           }
         }, 100);
       }, INSTRUCTION_DURATION);
-    } else if (state !== GameState.STARTING && previousState === GameState.STARTING) {
-      // Just left STARTING state - cleanup
+    } else if (isStartingOrPlaying && gameType && gameIdentifier && instructionsShownForGame !== gameIdentifier && !showInstructions && state === GameState.PLAYING) {
+      // If we're already in PLAYING state (e.g., reconnected during active game), show instructions briefly
+      console.log('[Host] ✅ Showing instructions for active game (PLAYING state):', {
+        gameType,
+        state,
+        gameIdentifier,
+        instructionsShownForGame
+      });
+      showInstructions = true;
+      instructionStartTime = Date.now();
+      instructionsShownForGame = gameIdentifier;
+      
+      // Auto-hide after duration
+      setTimeout(() => {
+        showInstructions = false;
+      }, INSTRUCTION_DURATION);
+    } else if (state === GameState.LOBBY || state === GameState.GAME_END) {
+      // Reset when game ends or returns to lobby
+      console.log('[Host] Resetting instructions state');
       showInstructions = false;
+      instructionsShownForGame = null;
       if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
@@ -781,10 +865,25 @@
       countdownStartTime = 0;
       instructionStartTime = 0;
       countdownValue = 3;
+    } else if (state !== GameState.STARTING && previousState === GameState.STARTING) {
+      // Just left STARTING state - cleanup countdown but keep instructions if they're still showing
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+      countdownStartTime = 0;
+      countdownValue = 3;
     }
 
-    // Update previous state
-    previousState = state;
+    // Track state and game type changes
+    if (state !== previousState) {
+      previousState = state;
+    }
+    if (gameType !== previousGameType) {
+      previousGameType = gameType;
+      // Reset instructions shown when game type changes
+      instructionsShownForGame = null;
+    }
   }
 
   // Fallback: If connected but no game state after a delay, set to LOBBY
@@ -869,7 +968,9 @@
           <!-- Game content is available - show it immediately with overlay -->
           <div class="playing-screen starting-with-content">
             <!-- Instructions Overlay (if showing) -->
-            <HostInstructionsOverlay gameType={currentGameType} {showInstructions} />
+            {#if showInstructions}
+              <HostInstructionsOverlay gameType={currentGameType} {showInstructions} />
+            {/if}
 
             <!-- Countdown Overlay (when not showing instructions) -->
             <HostCountdownOverlay {countdownValue} show={!showInstructions} />
@@ -889,6 +990,11 @@
         {/if}
       {:else if currentState === GameState.PLAYING}
         <div class="playing-screen">
+          <!-- Instructions Overlay (if showing) - only show if not already shown in STARTING -->
+          {#if showInstructions}
+            <HostInstructionsOverlay gameType={currentGameType} {showInstructions} />
+          {/if}
+          
           <!-- Game Display - should fill available space -->
           <div class="game-display-container">
             <HostGameDisplay {currentGameType} {currentState} {round} {maxRounds} {scoreboard} />

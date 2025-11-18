@@ -271,7 +271,31 @@
       "gameOver": "Jeu terminé !",
       "votingBreakdown": "Répartition des votes",
       "voters": "Votants",
-      "top5": "Top 5"
+      "top5": "Top 5",
+      "rules": {
+        "title": "🎄 Trivia Royale de Noël",
+        "howToPlay": {
+          "title": "Comment jouer",
+          "description1": "Répondez aux questions de trivia le plus rapidement possible !",
+          "description2": "Sélectionnez la bonne réponse sur votre téléphone."
+        },
+        "scoring": {
+          "title": "📊 Système de points",
+          "item1": {
+            "label": "✓ Bonne réponse :",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Bonus de vitesse :",
+            "points": "Jusqu'à +50 points"
+          },
+          "item3": {
+            "label": "🏆 Total (si correct) :",
+            "points": "100 + bonus de vitesse"
+          },
+          "note": "⚡ Réponses plus rapides = Plus de points bonus !"
+        }
+      }
     },
     "emojiCarol": {
       "loading": "Chargement du jeu...",
@@ -281,7 +305,35 @@
       "voteSubmitted": "Vote soumis ! En attente des autres...",
       "waitingResults": "En attente des résultats...",
       "roundComplete": "Manche terminée !",
-      "pickEmoji": "Choisissez un emoji que vous pensez que la plupart des gens choisiront !"
+      "pickEmoji": "Choisissez un emoji que vous pensez que la plupart des gens choisiront !",
+      "rules": {
+        "title": "🎶 Bataille d'Emoji Carol",
+        "howToPlay": {
+          "title": "Comment jouer",
+          "description1": "Choisissez un emoji que vous pensez que la plupart des gens choisiront !",
+          "description2": "Soyez stratégique - suivez la foule ou soyez unique !"
+        },
+        "scoring": {
+          "title": "📊 Système de points",
+          "item1": {
+            "label": "👥 Bonus majorité :",
+            "points": "10 points"
+          },
+          "item2": {
+            "label": "✨ Bonus unicité :",
+            "points": "5 points"
+          },
+          "item3": {
+            "label": "⚡ Bonus de vitesse :",
+            "points": "Jusqu'à +25 points"
+          },
+          "item4": {
+            "label": "🏆 Total maximum :",
+            "points": "15 + bonus de vitesse"
+          },
+          "note": "⚡ Le bonus de vitesse ne s'applique que si vous obtenez le bonus majorité ou unicité !"
+        }
+      }
     },
     "naughtyOrNice": {
       "loading": "Chargement du jeu...",
@@ -293,7 +345,31 @@
       "naughty": "MÉCHANT",
       "nice": "GENTIL",
       "voteSubmitted": "Vote soumis ! En attente des autres...",
-      "waitingResults": "En attente des résultats..."
+      "waitingResults": "En attente des résultats...",
+      "rules": {
+        "title": "😇 Méchant ou Gentil",
+        "howToPlay": {
+          "title": "Comment jouer",
+          "description1": "Votez si chaque prompt est Méchant 😈 ou Gentil 😇",
+          "description2": "Votez avec la majorité pour gagner des points !"
+        },
+        "scoring": {
+          "title": "📊 Système de points",
+          "item1": {
+            "label": "👥 Vote majoritaire :",
+            "points": "10 points"
+          },
+          "item2": {
+            "label": "⚡ Bonus de vitesse :",
+            "points": "Jusqu'à +25 points"
+          },
+          "item3": {
+            "label": "🏆 Total (si majorité) :",
+            "points": "10 + bonus de vitesse"
+          },
+          "note": "⚡ Votes plus rapides = Plus de points bonus !"
+        }
+      }
     },
     "priceIsRight": {
       "loading": "Chargement du jeu...",
@@ -308,7 +384,31 @@
       "yourGuess": "Votre devinette",
       "actualPrice": "Prix réel",
       "difference": "Différence",
-      "allGuesses": "Toutes les devinettes"
+      "allGuesses": "Toutes les devinettes",
+      "rules": {
+        "title": "💰 Le Juste Prix",
+        "howToPlay": {
+          "title": "Comment jouer",
+          "description1": "Devinez le prix de l'article affiché !",
+          "description2": "La devinette la plus proche gagne des points !"
+        },
+        "scoring": {
+          "title": "📊 Système de points",
+          "item1": {
+            "label": "🎯 Devinette la plus proche :",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Bonus de vitesse :",
+            "points": "Jusqu'à +50 points"
+          },
+          "item3": {
+            "label": "🏆 Total :",
+            "points": "100 + bonus de vitesse"
+          },
+          "note": "⚡ La devinette la plus proche la plus rapide obtient le bonus de vitesse !"
+        }
+      }
     }
   },
   "notifications": {

@@ -277,7 +277,9 @@
           hasEmojis: !!data?.availableEmojis,
         });
         // Update the store directly to ensure it's always synced
+        console.log('[Player] Setting gameState store with:', data?.state, data?.gameType);
         gameState.set(data);
+        console.log('[Player] Store updated, checking if component should render...');
       });
     };
 
@@ -397,6 +399,18 @@
   $: currentGame = $gameState?.gameType;
   $: playerScore = $gameState?.scores?.[$socket?.id] || 0;
   $: currentState = $gameState?.state;
+  
+  // Debug logging for game component rendering
+  $: {
+    console.log('[Player Page] Game state check:', {
+      currentGame,
+      currentGameType: typeof currentGame,
+      GameType_TRIVIA_ROYALE: GameType.TRIVIA_ROYALE,
+      matchesTrivia: currentGame === GameType.TRIVIA_ROYALE,
+      currentState,
+      hasGameState: !!$gameState
+    });
+  }
   
   // Check if player has already answered current question/round
   $: hasAlreadyAnswered = $gameState && (
@@ -620,12 +634,16 @@
         </div>
       </div>
     {:else if currentGame === GameType.TRIVIA_ROYALE}
+      {@const _ = console.log('[Player Page] Rendering TriviaRoyale component')}
       <TriviaRoyale />
     {:else if currentGame === GameType.EMOJI_CAROL}
+      {@const _ = console.log('[Player Page] Rendering EmojiCarol component')}
       <EmojiCarol />
     {:else if currentGame === GameType.NAUGHTY_OR_NICE}
+      {@const _ = console.log('[Player Page] Rendering NaughtyOrNice component')}
       <NaughtyOrNice />
     {:else if currentGame === GameType.PRICE_IS_RIGHT}
+      {@const _ = console.log('[Player Page] Rendering PriceIsRight component')}
       <PriceIsRight />
     {/if}
   </div>

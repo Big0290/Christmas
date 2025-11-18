@@ -256,7 +256,31 @@
       "gameOver": "Game Over!",
       "votingBreakdown": "Voting Breakdown",
       "voters": "Voters",
-      "top5": "Top 5"
+      "top5": "Top 5",
+      "rules": {
+        "title": "🎄 Christmas Trivia Royale",
+        "howToPlay": {
+          "title": "How to Play",
+          "description1": "Answer trivia questions as fast as you can!",
+          "description2": "Select the correct answer on your phone."
+        },
+        "scoring": {
+          "title": "📊 Scoring System",
+          "item1": {
+            "label": "✓ Correct Answer:",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Speed Bonus:",
+            "points": "Up to +50 points"
+          },
+          "item3": {
+            "label": "🏆 Total (if correct):",
+            "points": "100 + speed bonus"
+          },
+          "note": "⚡ Faster answers = More bonus points!"
+        }
+      }
     },
     "emojiCarol": {
       "loading": "Loading game...",
@@ -266,7 +290,35 @@
       "voteSubmitted": "Vote submitted! Waiting for others...",
       "waitingResults": "Waiting for results...",
       "roundComplete": "Round Complete!",
-      "pickEmoji": "Pick an emoji that you think most people will choose!"
+      "pickEmoji": "Pick an emoji that you think most people will choose!",
+      "rules": {
+        "title": "🎶 Emoji Carol Battle",
+        "howToPlay": {
+          "title": "How to Play",
+          "description1": "Pick an emoji that you think most people will choose!",
+          "description2": "Be strategic - go with the crowd or be unique!"
+        },
+        "scoring": {
+          "title": "📊 Scoring System",
+          "item1": {
+            "label": "👥 Majority Bonus:",
+            "points": "10 points"
+          },
+          "item2": {
+            "label": "✨ Uniqueness Bonus:",
+            "points": "5 points"
+          },
+          "item3": {
+            "label": "⚡ Speed Bonus:",
+            "points": "Up to +25 points"
+          },
+          "item4": {
+            "label": "🏆 Maximum Total:",
+            "points": "15 + speed bonus"
+          },
+          "note": "⚡ Speed bonus only applies if you get majority or uniqueness bonus!"
+        }
+      }
     },
     "naughtyOrNice": {
       "loading": "Loading game...",
@@ -278,7 +330,31 @@
       "naughty": "NAUGHTY",
       "nice": "NICE",
       "voteSubmitted": "Vote submitted! Waiting for others...",
-      "waitingResults": "Waiting for results..."
+      "waitingResults": "Waiting for results...",
+      "rules": {
+        "title": "😇 Naughty or Nice",
+        "howToPlay": {
+          "title": "How to Play",
+          "description1": "Vote whether each prompt is Naughty 😈 or Nice 😇",
+          "description2": "Vote with the majority to earn points!"
+        },
+        "scoring": {
+          "title": "📊 Scoring System",
+          "item1": {
+            "label": "👥 Majority Vote:",
+            "points": "10 points"
+          },
+          "item2": {
+            "label": "⚡ Speed Bonus:",
+            "points": "Up to +25 points"
+          },
+          "item3": {
+            "label": "🏆 Total (if majority):",
+            "points": "10 + speed bonus"
+          },
+          "note": "⚡ Faster votes = More bonus points!"
+        }
+      }
     },
     "priceIsRight": {
       "loading": "Loading game...",
@@ -293,7 +369,31 @@
       "yourGuess": "Your Guess",
       "actualPrice": "Actual Price",
       "difference": "Difference",
-      "allGuesses": "All Guesses"
+      "allGuesses": "All Guesses",
+      "rules": {
+        "title": "💰 Price Is Right",
+        "howToPlay": {
+          "title": "How to Play",
+          "description1": "Guess the price of the item shown!",
+          "description2": "The closest guess wins points!"
+        },
+        "scoring": {
+          "title": "📊 Scoring System",
+          "item1": {
+            "label": "🎯 Closest Guess:",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Speed Bonus:",
+            "points": "Up to +50 points"
+          },
+          "item3": {
+            "label": "🏆 Total:",
+            "points": "100 + speed bonus"
+          },
+          "note": "⚡ Fastest closest guess gets the speed bonus!"
+        }
+      }
     }
   },
   "notifications": {

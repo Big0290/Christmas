@@ -1,9 +1,11 @@
 <script lang="ts">
   import { socket, gameState, getServerTime } from '$lib/socket';
-  import { GameState } from '@christmas/core';
-  import { onDestroy } from 'svelte';
+  import { GameState, GameType } from '@christmas/core';
+  import { onMount, onDestroy } from 'svelte';
   import { playSound } from '$lib/audio';
   import { t } from '$lib/i18n';
+  import PlayerRulesModal from '$lib/components/PlayerRulesModal.svelte';
+  import { get } from 'svelte/store';
 
   $: item = $gameState?.currentItem;
   $: hasGuessed = $gameState?.hasGuessed;
@@ -17,6 +19,62 @@
   const timePerRound = 30000; // 30 seconds
   let timerInterval: ReturnType<typeof setInterval> | null = null;
   let countdownPlayed = false;
+  let showRulesModal = false;
+  let rulesShownForGameType: GameType | null = null; // Track which game type we've shown rules for
+  let lastGameType: GameType | null = null;
+  let previousState: GameState | null | undefined = undefined;
+  
+  // Watch gameState store directly to catch all state changes
+  $: currentState = $gameState?.state;
+  $: currentGameType = $gameState?.gameType;
+  
+  // Show rules modal when game starts - simplified reactive logic
+  $: {
+    const state = currentState;
+    const gameType = currentGameType;
+    
+    // Debug logging
+    if (state !== undefined && state !== null) {
+      console.log('[PriceIsRight] State changed:', {
+        state,
+        gameType,
+        previousState,
+        rulesShownForGameType,
+        showRulesModal
+      });
+    }
+    
+    if (state !== undefined && state !== null && gameType) {
+      // Use enum comparisons only - state is normalized in socket.ts
+      const isStartingOrPlaying = 
+        state === GameState.STARTING || state === GameState.PLAYING;
+      
+      // Show modal if state is STARTING/PLAYING and we haven't shown it for this gameType yet
+      if (isStartingOrPlaying && rulesShownForGameType !== gameType) {
+        console.log('[PriceIsRight] Showing rules modal for gameType:', gameType, 'state:', state);
+        showRulesModal = true;
+        rulesShownForGameType = gameType;
+        lastGameType = gameType;
+      }
+      
+      // Reset when game ends or returns to lobby
+      if (state === GameState.LOBBY || state === GameState.GAME_END) {
+        console.log('[PriceIsRight] Resetting modal state');
+        showRulesModal = false;
+        rulesShownForGameType = null;
+        lastGameType = null;
+      }
+      
+      // Track state changes
+      if (state !== previousState) {
+        previousState = state;
+      }
+    }
+  }
+  
+  function closeRulesModal() {
+    showRulesModal = false;
+  }
   
   // Update timer with server time synchronization
   $: if (state === GameState.PLAYING && roundStartTime > 0) {
@@ -82,10 +140,67 @@
     guess = guess.slice(0, -1);
   }
 
+  onMount(() => {
+    // Subscribe to gameState changes as a backup
+    const unsubscribe = gameState.subscribe((state) => {
+      if (!state) return;
+      
+      const stateValue = state.state;
+      const gameTypeValue = state.gameType;
+      
+      console.log('[PriceIsRight] gameState subscription update:', {
+        state: stateValue,
+        gameType: gameTypeValue,
+        rulesShownForGameType,
+        showRulesModal
+      });
+      
+      if (gameTypeValue === GameType.PRICE_IS_RIGHT) {
+        const isStartingOrPlaying = 
+          stateValue === GameState.STARTING || stateValue === GameState.PLAYING;
+        
+        if (isStartingOrPlaying && rulesShownForGameType !== gameTypeValue) {
+          console.log('[PriceIsRight] Subscription - showing modal');
+          showRulesModal = true;
+          rulesShownForGameType = gameTypeValue;
+          lastGameType = gameTypeValue;
+        }
+      }
+    });
+    
+    // Check initial state on mount
+    const initialState = get(gameState);
+    console.log('[PriceIsRight] onMount - checking initial state:', {
+      currentState,
+      currentGameType,
+      initialStateState: initialState?.state,
+      initialStateGameType: initialState?.gameType,
+      rulesShownForGameType
+    });
+    
+    const isStartingOrPlaying = 
+      currentState === GameState.STARTING || currentState === GameState.PLAYING;
+    
+    if (isStartingOrPlaying && 
+        currentGameType && 
+        rulesShownForGameType !== currentGameType) {
+      console.log('[PriceIsRight] onMount - showing modal');
+      showRulesModal = true;
+      rulesShownForGameType = currentGameType;
+      lastGameType = currentGameType;
+    }
+    
+    return () => {
+      unsubscribe();
+    };
+  });
+
   function clear() {
     guess = '';
   }
 </script>
+
+<PlayerRulesModal gameType={currentGameType || GameType.PRICE_IS_RIGHT} show={showRulesModal} onClose={closeRulesModal} />
 
 <div class="price-container">
   {#if !state}
