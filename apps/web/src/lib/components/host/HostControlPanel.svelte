@@ -4,7 +4,7 @@
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
   import GlobalLeaderboard from '$lib/components/GlobalLeaderboard.svelte';
   import { t } from '$lib/i18n';
-  import { playSound } from '$lib/audio';
+  import { playSound, playSoundOnce } from '$lib/audio';
   import { goto } from '$app/navigation';
 
   export let controlPanelOpen: boolean = false;
@@ -29,7 +29,7 @@
     if (!$socket) return;
     showConfirmation(t('host.confirmEndGame'), () => {
       $socket.emit('end_game');
-      playSound('gameEnd');
+      playSoundOnce('gameEnd', 1000);
       setTimeout(() => {
         goto(`/room/${roomCode}`);
       }, 1000);

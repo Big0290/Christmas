@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { socket, gameState } from '$lib/socket';
+  import { socket, gameState, getServerTime } from '$lib/socket';
   import { GameState } from '@christmas/core';
   import { onMount, onDestroy } from 'svelte';
   import { playSound } from '$lib/audio';
@@ -18,7 +18,7 @@
   let timerInterval: ReturnType<typeof setInterval> | null = null;
   let countdownPlayed = false;
   
-  // Update timer
+  // Update timer with server time synchronization
   $: if (state === GameState.PLAYING && roundStartTime > 0) {
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -26,10 +26,13 @@
     // Reset countdown flag when round starts
     countdownPlayed = false;
     const updateTimer = () => {
-      const elapsed = Date.now() - roundStartTime;
+      // Use server time for accurate calculation
+      const serverNow = getServerTime();
+      const elapsed = serverNow - roundStartTime;
       const newTimeRemaining = Math.max(0, Math.ceil((timePerRound - elapsed) / 1000));
       
       // Play countdown sound when reaching 5 seconds (only once per round)
+      // Use server time to ensure accurate timing
       if (newTimeRemaining <= 5 && newTimeRemaining > 0 && !countdownPlayed) {
         playSound('countdown');
         countdownPlayed = true;

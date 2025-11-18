@@ -6,7 +6,7 @@
   import { socket, connectSocket, players, connected } from '$lib/socket';
   import QRCode from 'qrcode';
   import { GameType } from '@christmas/core';
-  import { playSound } from '$lib/audio';
+  import { playSoundOnce } from '$lib/audio';
   import { loadRoomTheme } from '$lib/theme';
   import GameTile from '$lib/components/room/GameTile.svelte';
   import ShareRoom from '$lib/components/room/ShareRoom.svelte';
@@ -208,9 +208,9 @@
         players.update((p) => p.filter((player) => player.id !== playerId));
       });
 
-      // Listen for game start
+      // Listen for game start (use playSoundOnce to prevent duplicates with server events)
       $socket.on('game_started', (gameType: GameType) => {
-        playSound('gameStart');
+        playSoundOnce('gameStart', 1000);
         goto(`/host/${roomCode}`);
       });
 

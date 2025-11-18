@@ -6,7 +6,7 @@
   import { get } from 'svelte/store';
   import { socket, connectSocket, gameState, players, connected } from '$lib/socket';
   import { GameState, GameType, PlayerStatus } from '@christmas/core';
-  import { playSound } from '$lib/audio';
+  import { playSound, playSoundOnce } from '$lib/audio';
   import GlobalLeaderboard from '$lib/components/GlobalLeaderboard.svelte';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
   import HostChristmasAnimation from '$lib/components/host/HostChristmasAnimation.svelte';
@@ -422,9 +422,9 @@
       // Start the reconnect process
       waitForConnection();
 
-      // Listen for game state changes
+      // Listen for game state changes (use playSoundOnce to prevent duplicates with server events)
       $socket.on('game_ended', (data: any) => {
-        playSound('gameEnd');
+        playSoundOnce('gameEnd', 2000);
         // Game state will be updated via gameState store
       });
 

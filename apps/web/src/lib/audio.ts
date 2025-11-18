@@ -12,6 +12,10 @@ class AudioManager {
   private effectsVolume = 0.5;
   private musicEnabled = true;
   private effectsEnabled = true;
+  
+  // Track last played sound events to prevent duplicates
+  private lastPlayedSounds: Map<string, number> = new Map();
+  private readonly SOUND_DEBOUNCE_MS = 500; // Prevent same sound from playing within 500ms
 
   // Playlist management
   private tracks: Track[] = [];
@@ -431,6 +435,26 @@ class AudioManager {
     }
   }
 
+  playSoundOnce(effectName: string, debounceMs: number = this.SOUND_DEBOUNCE_MS) {
+    if (!browser) return;
+    if (!get(soundEnabled) || !this.effectsEnabled) return;
+    
+    const now = Date.now();
+    const lastPlayed = this.lastPlayedSounds.get(effectName);
+    
+    // Check if we should play this sound (debounce check)
+    if (lastPlayed && (now - lastPlayed) < debounceMs) {
+      // Sound was played recently, skip
+      return;
+    }
+    
+    // Update last played time
+    this.lastPlayedSounds.set(effectName, now);
+    
+    // Play the sound
+    this.playSound(effectName);
+  }
+
   setMusicVolume(volume: number) {
     this.musicVolume = Math.max(0, Math.min(1, volume));
     if (this.backgroundMusic) {
@@ -490,6 +514,12 @@ export function getAudioManager(): AudioManager {
 export function playSound(effectName: string) {
   if (browser) {
     getAudioManager().playSound(effectName);
+  }
+}
+
+export function playSoundOnce(effectName: string, debounceMs?: number) {
+  if (browser) {
+    getAudioManager().playSoundOnce(effectName, debounceMs);
   }
 }
 

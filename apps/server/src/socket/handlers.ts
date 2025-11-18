@@ -23,6 +23,12 @@ export function setupSocketHandlers(
 ) {
   // Guard to ensure finalization happens exactly once per room
   const finalizedRooms = new Set<string>();
+  
+  // Track last game state per room to detect transitions for sound events
+  const lastGameState = new Map<string, GameState>();
+  
+  // Track last sound event per room to prevent duplicates
+  const lastSoundEvent = new Map<string, { sound: string; state: GameState; timestamp: number }>();
   io.on('connection', (socket: Socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
@@ -3664,6 +3670,49 @@ export function setupSocketHandlers(
       // Sync room.gameState with game engine's current state
       // This ensures reconnections get the correct state
       const gameStateValue = game.getState().state;
+      const previousState = lastGameState.get(roomCode);
+      
+      // Detect state transitions and emit sound events
+      if (previousState !== gameStateValue) {
+        const timestamp = Date.now();
+        let soundToEmit: 'gameStart' | 'roundEnd' | 'gameEnd' | null = null;
+        
+        // Determine which sound to play based on state transition
+        if (gameStateValue === GameState.STARTING) {
+          soundToEmit = 'gameStart';
+        } else if (gameStateValue === GameState.ROUND_END) {
+          soundToEmit = 'roundEnd';
+        } else if (gameStateValue === GameState.GAME_END) {
+          soundToEmit = 'gameEnd';
+        }
+        
+        // Emit sound event if state transition warrants it and we haven't already emitted for this state
+        if (soundToEmit) {
+          const lastSound = lastSoundEvent.get(roomCode);
+          // Only emit if we haven't already emitted this sound for this state transition
+          // or if enough time has passed (prevent rapid duplicates)
+          const shouldEmit = !lastSound || 
+            lastSound.state !== gameStateValue || 
+            (timestamp - lastSound.timestamp) > 1000; // 1 second debounce
+          
+          if (shouldEmit) {
+            io.to(roomCode).emit('sound_event', {
+              sound: soundToEmit,
+              timestamp: timestamp
+            });
+            lastSoundEvent.set(roomCode, {
+              sound: soundToEmit,
+              state: gameStateValue,
+              timestamp: timestamp
+            });
+            console.log(`[Sound] Emitted ${soundToEmit} event for room ${roomCode} (state: ${gameStateValue})`);
+          }
+        }
+        
+        // Update last known state
+        lastGameState.set(roomCode, gameStateValue);
+      }
+      
       if (room.gameState !== gameStateValue) {
         room.gameState = gameStateValue;
         console.log(`[Game] Synced room.gameState to ${gameStateValue} for room ${roomCode}`);
@@ -3773,6 +3822,47 @@ export function setupSocketHandlers(
     if (rooms) {
       for (const [code, room] of rooms) {
         const game = roomManager.getGame(code);
+        if (game) {
+          const currentGameState = game.getState().state;
+          const previousState = lastGameState.get(code);
+          
+          // Check for state transitions and emit sound events
+          if (previousState !== currentGameState) {
+            const timestamp = Date.now();
+            let soundToEmit: 'gameStart' | 'roundEnd' | 'gameEnd' | null = null;
+            
+            if (currentGameState === GameState.STARTING) {
+              soundToEmit = 'gameStart';
+            } else if (currentGameState === GameState.ROUND_END) {
+              soundToEmit = 'roundEnd';
+            } else if (currentGameState === GameState.GAME_END) {
+              soundToEmit = 'gameEnd';
+            }
+            
+            if (soundToEmit) {
+              const lastSound = lastSoundEvent.get(code);
+              const shouldEmit = !lastSound || 
+                lastSound.state !== currentGameState || 
+                (timestamp - lastSound.timestamp) > 1000;
+              
+              if (shouldEmit) {
+                io.to(code).emit('sound_event', {
+                  sound: soundToEmit,
+                  timestamp: timestamp
+                });
+                lastSoundEvent.set(code, {
+                  sound: soundToEmit,
+                  state: currentGameState,
+                  timestamp: timestamp
+                });
+                console.log(`[Sound] Emitted ${soundToEmit} event for room ${code} (state: ${currentGameState})`);
+              }
+            }
+            
+            lastGameState.set(code, currentGameState);
+          }
+        }
+        
         if (game && game.getState().state === GameState.PLAYING) {
           // Only broadcast for games in PLAYING state (real-time games)
           // This optimizes bandwidth for turn-based games
@@ -3827,9 +3917,12 @@ export function setupSocketHandlers(
           }
           // Clear cache for ended games
           lastBroadcastState.delete(code);
+          lastGameState.delete(code);
+          lastSoundEvent.delete(code);
         } else {
           // Clear state cache when game ends
           lastBroadcastState.delete(code);
+          // Don't clear lastGameState or lastSoundEvent here - they might be needed for cleanup
         }
       }
     }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { playSound } from '$lib/audio';
+  import { playSoundOnce } from '$lib/audio';
   import type { GameType } from '@christmas/core';
 
   export let roomCode: string;
@@ -17,8 +17,8 @@
   const winner = scoreboard && scoreboard.length > 0 ? scoreboard[0] : null;
 
   onMount(() => {
-    // Play end sound and trigger animations
-    playSound('gameEnd');
+    // Play end sound and trigger animations (use playSoundOnce to prevent duplicates)
+    playSoundOnce('gameEnd', 2000);
     
     // Stagger reveal
     setTimeout(() => (show = true), 150);

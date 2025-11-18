@@ -197,6 +197,9 @@ export interface ServerToClientEvents {
   game_state_update: (state: any) => void;
   game_ended: (results: any) => void;
   
+  // Sound events
+  sound_event: (data: { sound: 'gameStart' | 'roundEnd' | 'gameEnd'; timestamp: number }) => void;
+  
   // Settings
   settings_updated: (settings: Partial<AllGameSettings>) => void;
   

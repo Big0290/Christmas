@@ -17,6 +17,28 @@ let listenersRegistered = false; // Track if event listeners are already registe
 let isConnecting = false; // Track if we're currently in the process of connecting
 let connectionPromise: Promise<TypedSocket | null> | null = null; // Track ongoing connection promise
 
+// Server time synchronization
+let serverTimeOffset = 0; // Difference between server time and client time (server - client)
+
+/**
+ * Get the current server time based on synchronized offset
+ */
+export function getServerTime(): number {
+  return Date.now() + serverTimeOffset;
+}
+
+/**
+ * Synchronize client time with server time
+ * Call this when receiving a timestamp from the server
+ */
+function syncServerTime(serverTimestamp: number, clientReceiveTime: number) {
+  // Calculate round-trip time estimate (simple approach)
+  // In a more sophisticated implementation, we'd do multiple round trips
+  const estimatedServerTime = serverTimestamp;
+  serverTimeOffset = estimatedServerTime - clientReceiveTime;
+  console.log('[Socket] Server time synchronized, offset:', serverTimeOffset, 'ms');
+}
+
 export async function connectSocket(url?: string, forceReconnect: boolean = false) {
   if (!browser) {
     console.log('[Socket] Not in browser environment, skipping connection');
@@ -339,6 +361,24 @@ function registerSocketListeners(socketInstance: TypedSocket) {
     if (browser) {
       window.dispatchEvent(new CustomEvent('jukebox_state_update', { detail: state }));
     }
+  });
+
+  // Sound event synchronization from server
+  socketInstance.on('sound_event', (data: { sound: 'gameStart' | 'roundEnd' | 'gameEnd'; timestamp: number }) => {
+    if (!browser) return;
+    
+    // Sync server time using the timestamp from the server
+    const clientReceiveTime = Date.now();
+    syncServerTime(data.timestamp, clientReceiveTime);
+    
+    // Import playSoundOnce dynamically to avoid circular dependencies
+    import('./audio').then(({ playSoundOnce }) => {
+      // Use playSoundOnce to prevent duplicates, with a longer debounce for server events
+      playSoundOnce(data.sound, 1000); // 1 second debounce for server events
+      console.log(`[Socket] Playing server-synced sound: ${data.sound}`);
+    }).catch((error) => {
+      console.error('[Socket] Error importing audio module:', error);
+    });
   });
 }
 

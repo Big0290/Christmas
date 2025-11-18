@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { socket, gameState } from '$lib/socket';
+  import { socket, gameState, getServerTime } from '$lib/socket';
   import { GameState } from '@christmas/core';
   import { playSound } from '$lib/audio';
   import { onMount, onDestroy } from 'svelte';
@@ -17,7 +17,7 @@
   let timerInterval: ReturnType<typeof setInterval> | null = null;
   let countdownPlayed = false;
 
-  // Update timer
+  // Update timer with server time synchronization
   $: if (state === GameState.PLAYING && questionStartTime > 0) {
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -25,10 +25,13 @@
     // Reset countdown flag when round starts
     countdownPlayed = false;
     const updateTimer = () => {
-      const elapsed = Date.now() - questionStartTime;
+      // Use server time for accurate calculation
+      const serverNow = getServerTime();
+      const elapsed = serverNow - questionStartTime;
       const newTimeRemaining = Math.max(0, Math.ceil((timePerQuestion - elapsed) / 1000));
       
       // Play countdown sound when reaching 5 seconds (only once per round)
+      // Use server time to ensure accurate timing
       if (newTimeRemaining <= 5 && newTimeRemaining > 0 && !countdownPlayed) {
         playSound('countdown');
         countdownPlayed = true;
@@ -66,27 +69,12 @@
   let correctAnswers = 0;
 
   onMount(() => {
-    // Play sound when game starts
-    if (state === GameState.STARTING) {
-      playSound('gameStart');
-    }
     previousScore = currentScore;
     previousRound = round || 0;
   });
 
-  // Watch for state changes and play sounds
-  $: {
-    if (state !== previousState) {
-      if (state === GameState.STARTING) {
-        playSound('gameStart');
-      } else if (state === GameState.ROUND_END) {
-        playSound('roundEnd');
-      } else if (state === GameState.GAME_END) {
-        playSound('gameEnd');
-      }
-      previousState = state;
-    }
-  }
+  // Note: State change sounds (gameStart, roundEnd, gameEnd) are now handled by server
+  // via sound_event socket events for synchronization
 
   function selectAnswer(index: number) {
     if (!hasAnswered && state === GameState.PLAYING) {

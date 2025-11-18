@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { playSound } from '$lib/audio';
+  import { playSoundOnce } from '$lib/audio';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
   import GlobalLeaderboard from '$lib/components/GlobalLeaderboard.svelte';
   import type { GameType } from '@christmas/core';
@@ -16,8 +16,8 @@
   let winnerElement: HTMLElement | null = null;
 
   onMount(() => {
-    // Play end sound and trigger confetti/reveal
-    playSound('gameEnd');
+    // Play end sound and trigger confetti/reveal (use playSoundOnce to prevent duplicates)
+    playSoundOnce('gameEnd', 2000);
     // Stagger reveal
     setTimeout(() => (show = true), 150);
     // Fire simple confetti bursts with Christmas colors
