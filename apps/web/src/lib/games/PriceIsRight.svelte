@@ -96,56 +96,65 @@
       <h1 class="text-4xl font-bold">{t('games.priceIsRight.getReady')}</h1>
       <p class="text-xl text-white/70 mt-2">{t('games.naughtyOrNice.startingSoon')}</p>
     </div>
-  {:else if state === GameState.PLAYING && item}
-    <div class="item-card">
-      <div class="round-badge">{t('games.priceIsRight.round', { round, maxRounds })}</div>
-      <div class="timer-display">
-        <span class="timer-label">⏱️</span>
-        <span class="timer-value" class:warning={timeRemaining <= 10}>{t('games.priceIsRight.timeRemaining', { seconds: timeRemaining })}</span>
-      </div>
+  {:else if state === GameState.PLAYING}
+    {#if item}
+      <div class="item-card">
+        <div class="round-badge">{t('games.priceIsRight.round', { round, maxRounds })}</div>
+        <div class="timer-display">
+          <span class="timer-label">⏱️</span>
+          <span class="timer-value" class:warning={timeRemaining <= 10}>{t('games.priceIsRight.timeRemaining', { seconds: timeRemaining })}</span>
+        </div>
 
-      <div class="item-image-container">
-        <img src={item.imageUrl} alt={item.name} class="item-image" />
-      </div>
+        <div class="item-image-container">
+          <img src={item.imageUrl} alt={item.name} class="item-image" />
+        </div>
 
-      <h2 class="item-name">{item.name}</h2>
-      <p class="item-description">{item.description}</p>
+        <h2 class="item-name">{item.name}</h2>
+        <p class="item-description">{item.description}</p>
 
-      <div class="guess-display">
-        <span class="dollar">$</span>
-        <span class="amount">{guess || '0.00'}</span>
-      </div>
+        <div class="guess-display">
+          <span class="dollar">$</span>
+          <span class="amount">{guess || '0.00'}</span>
+        </div>
 
-      <div class="numpad">
-        <button on:click={() => addDigit('1')} class="num-btn">1</button>
-        <button on:click={() => addDigit('2')} class="num-btn">2</button>
-        <button on:click={() => addDigit('3')} class="num-btn">3</button>
-        
-        <button on:click={() => addDigit('4')} class="num-btn">4</button>
-        <button on:click={() => addDigit('5')} class="num-btn">5</button>
-        <button on:click={() => addDigit('6')} class="num-btn">6</button>
-        
-        <button on:click={() => addDigit('7')} class="num-btn">7</button>
-        <button on:click={() => addDigit('8')} class="num-btn">8</button>
-        <button on:click={() => addDigit('9')} class="num-btn">9</button>
-        
-        <button on:click={addDecimal} class="num-btn">.</button>
-        <button on:click={() => addDigit('0')} class="num-btn">0</button>
-        <button on:click={backspace} class="num-btn">⌫</button>
-      </div>
+        <div class="numpad">
+          <button on:click={() => addDigit('1')} class="num-btn">1</button>
+          <button on:click={() => addDigit('2')} class="num-btn">2</button>
+          <button on:click={() => addDigit('3')} class="num-btn">3</button>
+          
+          <button on:click={() => addDigit('4')} class="num-btn">4</button>
+          <button on:click={() => addDigit('5')} class="num-btn">5</button>
+          <button on:click={() => addDigit('6')} class="num-btn">6</button>
+          
+          <button on:click={() => addDigit('7')} class="num-btn">7</button>
+          <button on:click={() => addDigit('8')} class="num-btn">8</button>
+          <button on:click={() => addDigit('9')} class="num-btn">9</button>
+          
+          <button on:click={addDecimal} class="num-btn">.</button>
+          <button on:click={() => addDigit('0')} class="num-btn">0</button>
+          <button on:click={backspace} class="num-btn">⌫</button>
+        </div>
 
-      <div class="action-buttons">
-        <button on:click={clear} class="btn-clear">{t('common.button.close')}</button>
-        <button 
-          on:click={submitGuess} 
-          disabled={!guess || hasGuessed}
-          class="btn-submit"
-        >
-          {hasGuessed ? `✓ ${t('games.priceIsRight.guessSubmitted')}` : t('games.priceIsRight.submit')}
-        </button>
+        <div class="action-buttons">
+          <button on:click={clear} class="btn-clear">{t('common.button.close')}</button>
+          <button 
+            on:click={submitGuess} 
+            disabled={!guess || hasGuessed}
+            class="btn-submit"
+          >
+            {hasGuessed ? `✓ ${t('games.priceIsRight.guessSubmitted')}` : t('games.priceIsRight.submit')}
+          </button>
+        </div>
       </div>
-    </div>
-  {:else if state === GameState.ROUND_END && item}
+    {:else}
+      <!-- Waiting for item to load -->
+      <div class="loading-overlay">
+        <div class="text-6xl mb-4 animate-spin">⏳</div>
+        <p class="text-xl text-white/70">{t('games.priceIsRight.loading')}</p>
+      </div>
+    {/if}
+  {:else if state === GameState.ROUND_END}
+    {#if item}
     <div class="result-card">
       <div class="text-6xl mb-4">💰</div>
       <h2 class="text-2xl font-bold mb-2">{t('games.priceIsRight.actualPrice')}:</h2>
@@ -172,6 +181,13 @@
         {/each}
       </div>
     </div>
+    {:else}
+      <!-- Waiting for item to load for results -->
+      <div class="loading-overlay">
+        <div class="text-6xl mb-4 animate-spin">⏳</div>
+        <p class="text-xl text-white/70">{t('games.priceIsRight.loading')}</p>
+      </div>
+    {/if}
   {/if}
 </div>
 

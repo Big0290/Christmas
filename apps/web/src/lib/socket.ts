@@ -302,14 +302,24 @@ function registerSocketListeners(socketInstance: TypedSocket) {
       isArray: Array.isArray(data?.players),
       playersLength: data?.players?.length,
       players: data?.players,
-      socketId: socketInstance.id
+      socketId: socketInstance.id,
+      socketConnected: socketInstance.connected
     });
     if (data && Array.isArray(data.players)) {
       console.log(`🔴 [Socket] Setting players list with ${data.players.length} player(s)`);
       // This is authoritative - replace entire list
       players.set(data.players);
-      console.log('🔴 [Socket] Players store UPDATED. New value:', data.players);
-      console.log('🔴 [Socket] Players store length after update:', $players.length);
+      // Verify update using get() since we're in a non-reactive context
+      const updatedPlayers = get(players);
+      console.log('🔴 [Socket] Players store UPDATED. New value:', updatedPlayers);
+      console.log('🔴 [Socket] Players store length after update:', updatedPlayers.length);
+      
+      // Dispatch a custom event so components can react if needed
+      if (browser) {
+        window.dispatchEvent(new CustomEvent('players_updated', { 
+          detail: { players: updatedPlayers, count: updatedPlayers.length } 
+        }));
+      }
     } else {
       console.warn('🔴 [Socket] Room update received but data.players is not an array:', data);
     }

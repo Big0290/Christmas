@@ -9,7 +9,7 @@
   import { playSound } from '$lib/audio';
   import GlobalLeaderboard from '$lib/components/GlobalLeaderboard.svelte';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
-  import FinalResults from '$lib/components/FinalResults.svelte';
+  import HostChristmasAnimation from '$lib/components/host/HostChristmasAnimation.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import HostConnectionStatus from '$lib/components/host/HostConnectionStatus.svelte';
   import HostConfirmationDialog from '$lib/components/host/HostConfirmationDialog.svelte';
@@ -440,16 +440,30 @@
           hasItem: !!data?.currentItem,
           hasPrompt: !!data?.currentPrompt,
           hasEmojis: !!data?.availableEmojis,
+          socketId: $socket?.id,
         });
 
         // Update the store directly to ensure it's always synced
         // This is a backup in case the socket.ts listener doesn't fire
-        gameState.set(data);
+        if (data && typeof data === 'object' && data.state) {
+          gameState.set(data);
+
+          // Verify the store was updated
+          const updatedState = $gameState;
+          console.log(
+            '[Host] ✅ Store updated, current state:',
+            updatedState?.state,
+            'gameType:',
+            updatedState?.gameType
+          );
+        } else {
+          console.warn('[Host] ⚠️ Invalid game_state_update data received:', data);
+        }
 
         // Handle host-specific state (pause/resume)
-        if (data.state === 'paused' || data.state === GameState.PAUSED) {
+        if (data?.state === 'paused' || data?.state === GameState.PAUSED) {
           isPaused = true;
-        } else if (data.state === 'playing' || data.state === GameState.PLAYING) {
+        } else if (data?.state === 'playing' || data?.state === GameState.PLAYING) {
           isPaused = false;
         }
 
@@ -457,7 +471,12 @@
         if (data && typeof data === 'object' && data.state) {
           const previousState = $gameState?.state;
           if (!$gameState || $gameState.state !== data.state) {
-            console.log(`[Host] State changed from ${previousState} to ${data.state}`);
+            console.log(`[Host] 🔄 State changed from ${previousState} to ${data.state}`);
+            // Force reactivity update by triggering a reactive statement
+            // This ensures the UI updates immediately when state changes
+            if (data.state === GameState.STARTING || data.state === 'starting') {
+              console.log('[Host] 🎮 Game starting! UI should update now.');
+            }
           }
         }
       });
@@ -883,7 +902,7 @@
           </div>
         </div>
       {:else if currentState === GameState.GAME_END}
-        <FinalResults {roomCode} {scoreboard} gameType={currentGameType} isHost={true} />
+        <HostChristmasAnimation {roomCode} {scoreboard} gameType={currentGameType} />
       {:else if currentState === GameState.PAUSED}
         <div class="paused-screen">
           <h1 class="mega-title">⏸️ Game Paused</h1>

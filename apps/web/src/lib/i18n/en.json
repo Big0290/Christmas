@@ -129,6 +129,13 @@
       "connectionFailed": "Failed to connect to server. Please refresh the page."
     }
   },
+  "languageModal": {
+    "title": "Select Your Language",
+    "subtitle": "Choose your preferred language for the game",
+    "english": "English",
+    "french": "French",
+    "continue": "Continue"
+  },
   "room": {
     "title": "Room {code}",
     "gameSettings": "Game Settings",
@@ -176,7 +183,10 @@
       "connecting": "Connecting...",
       "pleaseWait": "Please wait",
       "waitingStart": "Waiting to Start",
-      "hostWillStart": "The host will start the game soon!"
+      "hostWillStart": "The host will start the game soon!",
+      "waitingNextRound": "Waiting for Next Round",
+      "alreadyAnswered": "You've already answered this question",
+      "roundContinues": "The round continues with other players..."
     },
     "sessionRank": "Session: #{rank}",
     "globalRank": "Global: #{rank}",

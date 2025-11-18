@@ -12,7 +12,9 @@
   export let addingItem: boolean;
   export let newItem: {
     name: string;
+    nameFr: string;
     description: string;
+    descriptionFr: string;
     price: number;
     imageUrl: string;
     category: string;
@@ -123,7 +125,7 @@
         <h4 class="font-bold mb-3">{t('priceTab.addNewItem')}</h4>
         <div class="space-y-3">
           <div>
-            <label class="block text-sm font-medium mb-1">{t('priceTab.itemName')}</label>
+            <label class="block text-sm font-medium mb-1">🇬🇧 {t('priceTab.itemName')} (English) *</label>
             <input
               type="text"
               bind:value={newItem.name}
@@ -132,10 +134,28 @@
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{t('priceTab.description')}</label>
+            <label class="block text-sm font-medium mb-1">🇫🇷 {t('priceTab.itemName')} (Français)</label>
+            <input
+              type="text"
+              bind:value={newItem.nameFr}
+              placeholder="Nom de l'article en français (optionnel)"
+              class="input w-full"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">🇬🇧 {t('priceTab.description')} (English)</label>
             <textarea
               bind:value={newItem.description}
               placeholder={t('priceTab.descriptionPlaceholder')}
+              class="input w-full"
+              rows="2"
+            ></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">🇫🇷 {t('priceTab.description')} (Français)</label>
+            <textarea
+              bind:value={newItem.descriptionFr}
+              placeholder="Description en français (optionnel)"
               class="input w-full"
               rows="2"
             ></textarea>

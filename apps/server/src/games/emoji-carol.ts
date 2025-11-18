@@ -140,6 +140,20 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
     }
   }
 
+  protected onMigratePlayer(oldPlayerId: string, newPlayerId: string): void {
+    // Migrate pick if it exists
+    if (this.state.playerPicks && this.state.playerPicks[oldPlayerId] !== undefined) {
+      this.state.playerPicks[newPlayerId] = this.state.playerPicks[oldPlayerId];
+      delete this.state.playerPicks[oldPlayerId];
+    }
+    // Migrate pick time if it exists
+    if (this.state.pickTimes && this.state.pickTimes[oldPlayerId] !== undefined) {
+      this.state.pickTimes[newPlayerId] = this.state.pickTimes[oldPlayerId];
+      delete this.state.pickTimes[oldPlayerId];
+    }
+    console.log(`[EmojiCarol] Migrated pick from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`);
+  }
+
   getClientState(playerId: string): any {
     return {
       ...this.state,

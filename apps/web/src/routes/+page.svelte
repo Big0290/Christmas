@@ -6,6 +6,7 @@
   import { browser } from '$app/environment';
   import { t, language } from '$lib/i18n';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
+  import LanguageSelectionModal from '$lib/components/LanguageSelectionModal.svelte';
 
   // Accept params prop to suppress SvelteKit warning
   export const params: Record<string, string> = {};
@@ -19,6 +20,8 @@
   let showAvatarPicker = false;
   let selectedAvatar = '';
   let avatarStyle: 'festive' | 'emoji' = 'festive';
+  let showLanguageModal = false;
+  let pendingJoinResponse: any = null;
 
   const festiveAvatars = [
     '🎅', '🤶', '🎄', '⛄', '🦌', '🎁', '🔔', '⭐', '🕯️', '🎿',
@@ -244,6 +247,38 @@
     });
   }
 
+  function handleLanguageSelected(lang: 'en' | 'fr') {
+    if (!pendingJoinResponse) return;
+    
+    // Update language if it changed
+    if ($language !== lang) {
+      language.set(lang);
+    }
+    
+    if (browser) {
+      // Store player name and room code for persistence
+      localStorage.setItem('christmas_playerName', playerName);
+      localStorage.setItem('christmas_role', 'player');
+      localStorage.setItem('christmas_roomCode', pendingJoinResponse.roomCode || roomCode.toUpperCase());
+      if (selectedAvatar) {
+        localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
+        localStorage.setItem('christmas_avatarStyle', avatarStyle);
+      }
+      if (pendingJoinResponse.playerToken) {
+        localStorage.setItem('christmas_playerToken', pendingJoinResponse.playerToken);
+      }
+      sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+    }
+    
+    // Close modal and navigate to play page
+    showLanguageModal = false;
+    const normalizedCode = pendingJoinResponse.roomCode || roomCode.toUpperCase();
+    goto(`/play/${normalizedCode}`);
+    
+    // Clear pending response
+    pendingJoinResponse = null;
+  }
+
   async function joinRoom() {
     if (!playerName.trim()) {
       error = t('home.errors.enterName');
@@ -277,21 +312,11 @@
       loading = false;
       
       if (response && response.success) {
-        // Store player name and room code for persistence
-        if (browser) {
-          localStorage.setItem('christmas_playerName', playerName);
-          localStorage.setItem('christmas_role', 'player');
-          localStorage.setItem('christmas_roomCode', roomCode.toUpperCase());
-          if (selectedAvatar) {
-            localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
-            localStorage.setItem('christmas_avatarStyle', avatarStyle);
-          }
-          if (response.playerToken) {
-            localStorage.setItem('christmas_playerToken', response.playerToken);
-          }
-          sessionStorage.setItem('christmas_playerId', $socket?.id || '');
-        }
-        goto(`/play/${roomCode.toUpperCase()}`);
+        // Store the response temporarily
+        pendingJoinResponse = response;
+        
+        // Show language selection modal
+        showLanguageModal = true;
       } else {
         error = response?.error || t('home.errors.failedJoin');
       }
@@ -471,4 +496,10 @@
       <p>{t('home.footer')}</p>
     </div>
   </div>
+
+  <!-- Language Selection Modal -->
+  <LanguageSelectionModal 
+    show={showLanguageModal} 
+    onLanguageSelected={handleLanguageSelected}
+  />
 </div>

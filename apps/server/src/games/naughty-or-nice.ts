@@ -146,6 +146,20 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
     }
   }
 
+  protected onMigratePlayer(oldPlayerId: string, newPlayerId: string): void {
+    // Migrate vote if it exists
+    if (this.state.votes && this.state.votes[oldPlayerId] !== undefined) {
+      this.state.votes[newPlayerId] = this.state.votes[oldPlayerId];
+      delete this.state.votes[oldPlayerId];
+    }
+    // Migrate vote time if it exists
+    if (this.state.voteTimes && this.state.voteTimes[oldPlayerId] !== undefined) {
+      this.state.voteTimes[newPlayerId] = this.state.voteTimes[oldPlayerId];
+      delete this.state.voteTimes[oldPlayerId];
+    }
+    console.log(`[NaughtyOrNice] Migrated vote from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`);
+  }
+
   getClientState(playerId: string): any {
     // Get player's language preference, default to English
     const player = this.players.get(playerId);

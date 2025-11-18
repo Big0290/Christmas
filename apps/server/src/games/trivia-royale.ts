@@ -255,6 +255,15 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
     }
   }
 
+  protected onMigratePlayer(oldPlayerId: string, newPlayerId: string): void {
+    // Migrate answer if it exists
+    if (this.state.answers && this.state.answers[oldPlayerId] !== undefined) {
+      this.state.answers[newPlayerId] = this.state.answers[oldPlayerId];
+      delete this.state.answers[oldPlayerId];
+      console.log(`[Trivia] Migrated answer from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`);
+    }
+  }
+
   getClientState(playerId: string): any {
     // Get player's language preference, default to English
     const player = this.players.get(playerId);

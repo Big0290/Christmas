@@ -310,7 +310,8 @@ export function setupSocketHandlers(
             codeNormalized,
             info?.name || ''
           );
-          if (restoredScore > 0) {
+          // Always update player's score if restoredScore is valid (including 0)
+          if (restoredScore !== undefined && restoredScore >= 0) {
             // Update player's current score to match session score
             reconnected.score = restoredScore;
           }
@@ -328,15 +329,22 @@ export function setupSocketHandlers(
             playerCount: room.players.size,
           });
 
-          // Update game state if game is in progress
+          // Always send game state - either from active game or LOBBY state
           const game = roomManager.getGame(codeNormalized);
+          let clientState: any;
+
           if (game) {
-            // Restore player's score in the game
-            if (restoredScore > 0) {
+            // Game is running - restore player's score in the game and get client state
+            if (restoredScore !== undefined && restoredScore >= 0) {
               roomManager.restorePlayerScoreInGame(codeNormalized, socket.id, info?.name || '');
             }
-            // Send updated game state
-            socket.emit('game_state_update', game.getClientState(socket.id));
+
+            // Get client state (this will include hasAnswered/hasGuessed/hasVoted/hasPicked based on migrated data)
+            clientState = game.getClientState(socket.id);
+
+            console.log(
+              `[Room] Sent game state to reconnected player ${socket.id.substring(0, 8)}: state=${clientState?.state}, hasAnswered=${clientState?.hasAnswered || clientState?.hasGuessed || clientState?.hasVoted || clientState?.hasPicked || false}`
+            );
 
             // Also broadcast to room that player reconnected
             io.to(codeNormalized).emit('player_reconnected', {
@@ -344,7 +352,36 @@ export function setupSocketHandlers(
               playerName: info?.name || '',
               restoredScore: restoredScore,
             });
+          } else {
+            // No active game - send LOBBY state with player's restored score
+            clientState = {
+              state: room.gameState || GameState.LOBBY,
+              gameType: room.currentGame || null,
+              round: 0,
+              maxRounds: 0,
+              scores: {
+                [socket.id]:
+                  restoredScore !== undefined && restoredScore >= 0
+                    ? restoredScore
+                    : reconnected.score || 0,
+              },
+              scoreboard: [],
+              players: Array.from(room.players.values()).map((p) => ({
+                id: p.id,
+                name: p.name,
+                score: p.score || 0,
+                avatar: p.avatar,
+                status: p.status,
+              })),
+            };
+
+            console.log(
+              `[Room] Sent LOBBY state to reconnected player ${socket.id.substring(0, 8)}: state=${clientState.state}, score=${clientState.scores[socket.id]}`
+            );
           }
+
+          // Always send game state update to reconnecting player
+          socket.emit('game_state_update', clientState);
 
           callback({
             success: true,
@@ -840,8 +877,35 @@ export function setupSocketHandlers(
         return;
       }
 
+      console.log(
+        `[Game] Starting ${gameType} in room ${room.code}, host socket: ${room.hostId?.substring(0, 8)}`
+      );
+
       io.to(room.code).emit('game_started', gameType);
+
+      // Immediately broadcast game state to ensure host and players receive STARTING state
       broadcastGameState(room.code);
+
+      // Also send directly to the host socket as a backup (in case host isn't in room socket.io room)
+      const hostSocket = io.sockets.sockets.get(room.hostId);
+      if (hostSocket && room.hostId) {
+        const game = roomManager.getGame(room.code);
+        if (game) {
+          const firstPlayerId =
+            room.players.size > 0 ? room.players.keys().next().value : room.hostId;
+          if (firstPlayerId) {
+            const hostState = game.getClientState(firstPlayerId);
+            hostSocket.emit('game_state_update', hostState);
+            console.log(
+              `[Game] Directly sent game_state_update to host ${room.hostId.substring(0, 8)} for immediate reaction, state: ${hostState?.state}`
+            );
+          }
+        }
+      } else {
+        console.warn(
+          `[Game] Host socket ${room.hostId?.substring(0, 8) || 'unknown'} not found when starting game`
+        );
+      }
 
       // Broadcast again after game transitions to PLAYING (after 3 second countdown)
       // This ensures host and players get game content (currentQuestion, etc.) immediately
@@ -1960,6 +2024,7 @@ export function setupSocketHandlers(
           difficulty: q.difficulty,
           category: q.category,
           imageUrl: q.image_url,
+          translations: q.translations || undefined,
         }));
 
         callback({ success: true, questions });
@@ -1996,6 +2061,7 @@ export function setupSocketHandlers(
           price: parseFloat(item.price),
           imageUrl: item.image_url,
           category: item.category,
+          translations: item.translations || undefined,
         }));
 
         callback({ success: true, items });
@@ -2041,6 +2107,19 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            question: question.question.trim(),
+            answers: question.answers.filter((a: string) => a && a.trim()),
+          },
+        };
+
+        // Add French translation if provided
+        if (question.translations?.fr) {
+          translations.fr = question.translations.fr;
+        }
+
         // Update question
         const { data, error } = await supabase
           .from('trivia_questions')
@@ -2051,6 +2130,7 @@ export function setupSocketHandlers(
             difficulty: question.difficulty || 'medium',
             category: question.category?.trim() || null,
             image_url: question.imageUrl?.trim() || null,
+            translations: Object.keys(translations).length > 1 ? translations : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', questionId)
@@ -2072,6 +2152,7 @@ export function setupSocketHandlers(
             difficulty: data.difficulty,
             category: data.category,
             imageUrl: data.image_url,
+            translations: data.translations || undefined,
           },
         });
 
@@ -2290,6 +2371,19 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            question: question.question.trim(),
+            answers: question.answers.filter((a: string) => a && a.trim()),
+          },
+        };
+
+        // Add French translation if provided
+        if (question.translations?.fr) {
+          translations.fr = question.translations.fr;
+        }
+
         // Insert question
         const { data, error } = await supabase
           .from('trivia_questions')
@@ -2301,6 +2395,7 @@ export function setupSocketHandlers(
             category: question.category?.trim() || null,
             image_url: question.imageUrl?.trim() || null,
             set_id: setId,
+            translations: Object.keys(translations).length > 1 ? translations : null,
           })
           .select()
           .single();
@@ -2320,6 +2415,7 @@ export function setupSocketHandlers(
             difficulty: data.difficulty,
             category: data.category,
             imageUrl: data.image_url,
+            translations: data.translations || undefined,
           },
         });
 
@@ -2482,6 +2578,7 @@ export function setupSocketHandlers(
           difficulty: q.difficulty,
           category: q.category,
           imageUrl: q.image_url,
+          translations: q.translations || undefined,
         }));
 
         callback({ success: true, questions });
@@ -2682,6 +2779,19 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            name: item.name.trim(),
+            description: item.description?.trim() || '',
+          },
+        };
+
+        // Add French translation if provided
+        if (item.translations?.fr) {
+          translations.fr = item.translations.fr;
+        }
+
         // Insert item
         const { data, error } = await supabase
           .from('price_items')
@@ -2692,6 +2802,7 @@ export function setupSocketHandlers(
             image_url: item.imageUrl.trim(),
             category: item.category?.trim() || null,
             set_id: setId,
+            translations: Object.keys(translations).length > 1 ? translations : null,
           })
           .select()
           .single();
@@ -2710,6 +2821,7 @@ export function setupSocketHandlers(
             price: parseFloat(data.price),
             imageUrl: data.image_url,
             category: data.category || '',
+            translations: data.translations || undefined,
           },
         });
 
@@ -2752,6 +2864,19 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            name: item.name.trim(),
+            description: item.description?.trim() || '',
+          },
+        };
+
+        // Add French translation if provided
+        if (item.translations?.fr) {
+          translations.fr = item.translations.fr;
+        }
+
         // Update item
         const { data, error } = await supabase
           .from('price_items')
@@ -2761,6 +2886,7 @@ export function setupSocketHandlers(
             price: item.price,
             image_url: item.imageUrl.trim(),
             category: item.category?.trim() || null,
+            translations: Object.keys(translations).length > 1 ? translations : null,
           })
           .eq('id', itemId)
           .select()
@@ -2780,6 +2906,7 @@ export function setupSocketHandlers(
             price: parseFloat(data.price),
             imageUrl: data.image_url,
             category: data.category || '',
+            translations: data.translations || undefined,
           },
         });
 
@@ -3078,6 +3205,7 @@ export function setupSocketHandlers(
           prompt: p.prompt,
           category: p.category || '',
           contentRating: p.content_rating || 'pg',
+          translations: p.translations || undefined,
         }));
 
         callback({ success: true, prompts });
@@ -3121,6 +3249,18 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            prompt: prompt.prompt.trim(),
+          },
+        };
+
+        // Add French translation if provided
+        if (prompt.translations?.fr) {
+          translations.fr = prompt.translations.fr;
+        }
+
         // Insert prompt
         const { data, error } = await supabase
           .from('naughty_prompts')
@@ -3129,6 +3269,7 @@ export function setupSocketHandlers(
             category: prompt.category?.trim() || null,
             content_rating: prompt.contentRating || 'pg',
             set_id: setId,
+            translations: Object.keys(translations).length > 1 ? translations : null,
           })
           .select()
           .single();
@@ -3145,6 +3286,7 @@ export function setupSocketHandlers(
             prompt: data.prompt,
             category: data.category || '',
             contentRating: data.content_rating || 'pg',
+            translations: data.translations || undefined,
           },
         });
 
@@ -3177,6 +3319,18 @@ export function setupSocketHandlers(
           return;
         }
 
+        // Build translations object
+        const translations: any = {
+          en: {
+            prompt: prompt.prompt.trim(),
+          },
+        };
+
+        // Add French translation if provided
+        if (prompt.translations?.fr) {
+          translations.fr = prompt.translations.fr;
+        }
+
         // Update prompt
         const { data, error } = await supabase
           .from('naughty_prompts')
@@ -3184,6 +3338,7 @@ export function setupSocketHandlers(
             prompt: prompt.prompt.trim(),
             category: prompt.category?.trim() || null,
             content_rating: prompt.contentRating || 'pg',
+            translations: Object.keys(translations).length > 1 ? translations : null,
           })
           .eq('id', promptId)
           .select()
@@ -3201,6 +3356,7 @@ export function setupSocketHandlers(
             prompt: data.prompt,
             category: data.category || '',
             contentRating: data.content_rating || 'pg',
+            translations: data.translations || undefined,
           },
         });
 

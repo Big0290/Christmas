@@ -11,6 +11,7 @@
   export let addingPrompt: boolean;
   export let newPrompt: {
     prompt: string;
+    promptFr: string;
     category: string;
     contentRating: 'pg' | 'pg13';
   };
@@ -113,11 +114,20 @@
         <h4 class="font-bold mb-3">{t('naughtyTab.addNewPrompt')}</h4>
         <div class="space-y-3">
           <div>
-            <label class="block text-sm font-medium mb-1">{t('naughtyTab.prompt')}</label>
+            <label class="block text-sm font-medium mb-1">🇬🇧 {t('naughtyTab.prompt')} (English) *</label>
             <input
               type="text"
               bind:value={newPrompt.prompt}
               placeholder={t('naughtyTab.promptPlaceholder')}
+              class="input w-full"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">🇫🇷 {t('naughtyTab.prompt')} (Français)</label>
+            <input
+              type="text"
+              bind:value={newPrompt.promptFr}
+              placeholder="Entrez l'invite en français (optionnel)"
               class="input w-full"
             />
           </div>

@@ -13,16 +13,27 @@
   export let isHost: boolean = false;
 
   let show = false;
+  let winnerElement: HTMLElement | null = null;
 
   onMount(() => {
     // Play end sound and trigger confetti/reveal
     playSound('gameEnd');
     // Stagger reveal
     setTimeout(() => (show = true), 150);
-    // Fire simple confetti bursts
+    // Fire simple confetti bursts with Christmas colors
     burstConfetti();
     setTimeout(burstConfetti, 800);
     setTimeout(burstConfetti, 1500);
+    
+    // Create Christmas snowflakes
+    createSnowflakes();
+    
+    // Create Christmas sparkles around winner
+    setTimeout(() => {
+      if (winnerElement) {
+        createWinnerSparkles(winnerElement);
+      }
+    }, 600);
   });
 
   function burstConfetti() {
@@ -42,8 +53,56 @@
   }
 
   function randomConfettiColor() {
-    const colors = ['#FFD700', '#FF3D3D', '#2ECC71', '#4DA3FF', '#FF8C00', '#E91E63'];
+    // Christmas-themed colors
+    const colors = ['#FFD700', '#C41E3A', '#0F8644', '#FF3D3D', '#FF8C00', '#E91E63'];
     return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  function createSnowflakes() {
+    const container = document.querySelector('.snowflakes-layer');
+    if (!container) return;
+    
+    // Create 50 snowflakes
+    for (let i = 0; i < 50; i++) {
+      const snowflake = document.createElement('div');
+      snowflake.className = 'snowflake';
+      snowflake.textContent = '❄';
+      snowflake.style.left = `${Math.random() * 100}%`;
+      snowflake.style.animationDelay = `${Math.random() * 5}s`;
+      snowflake.style.animationDuration = `${8 + Math.random() * 4}s`;
+      snowflake.style.opacity = `${0.4 + Math.random() * 0.4}`;
+      snowflake.style.fontSize = `${12 + Math.random() * 8}px`;
+      container.appendChild(snowflake);
+    }
+  }
+
+  function createWinnerSparkles(winnerContainer: HTMLElement) {
+    const container = document.querySelector('.winner-sparkles');
+    if (!container) return;
+    
+    // Create 30 sparkles around winner
+    for (let i = 0; i < 30; i++) {
+      const sparkle = document.createElement('div');
+      sparkle.className = 'christmas-sparkle';
+      
+      // Random Christmas emojis
+      const emojis = ['⭐', '✨', '🎄', '🌟', '💫', '🎅', '❄'];
+      sparkle.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      
+      // Position around winner (circular pattern centered at 50%, 50% of container)
+      const angle = (Math.PI * 2 * i) / 30;
+      const radius = 120 + Math.random() * 60;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      
+      sparkle.style.left = `calc(50% + ${x}px)`;
+      sparkle.style.top = `calc(50% + ${y}px)`;
+      sparkle.style.animationDelay = `${Math.random() * 2}s`;
+      sparkle.style.animationDuration = `${2 + Math.random() * 1.5}s`;
+      sparkle.style.fontSize = `${14 + Math.random() * 8}px`;
+      
+      container.appendChild(sparkle);
+    }
   }
 
   function startNewGame() {
@@ -57,28 +116,47 @@
 
 <div class="final-overlay">
   <div class="confetti-layer" aria-hidden="true"></div>
+  <div class="snowflakes-layer" aria-hidden="true"></div>
   <div class="final-card" class:show={show}>
-    <h1 class="title">🏆 {t('finalResults.title')} 🏆</h1>
+    <h1 class="title">🎄 {t('finalResults.title')} 🎄</h1>
     <p class="subtitle">{gameType ? t('finalResults.game', { gameType: String(gameType) }) : ''}</p>
 
     <!-- Podium -->
     {#if scoreboard && scoreboard.length > 0}
-      <div class="podium">
-        <div class="podium-col second" class:visible={show && scoreboard[1]}>
-          <div class="place">🥈</div>
-          <div class="name">{scoreboard[1]?.name}</div>
-          <div class="score">{scoreboard[1]?.score}</div>
+      <div class="podium-container">
+        <!-- Winner announcement with Christmas emojis -->
+        <div class="winner-announcement" class:visible={show}>
+          <span class="winner-icon">🎉</span>
+          <span class="winner-text">🎄 Winner! 🎄</span>
+          <span class="winner-icon">🎉</span>
         </div>
-        <div class="podium-col first" class:visible={show}>
-          <div class="crown">👑</div>
-          <div class="place">🥇</div>
-          <div class="name winner">{scoreboard[0].name}</div>
-          <div class="score">{scoreboard[0].score}</div>
-        </div>
-        <div class="podium-col third" class:visible={show && scoreboard[2]}>
-          <div class="place">🥉</div>
-          <div class="name">{scoreboard[2]?.name}</div>
-          <div class="score">{scoreboard[2]?.score}</div>
+        
+        <div class="podium">
+          <div class="podium-col second" class:visible={show && scoreboard[1]}>
+            <div class="place">🥈</div>
+            <div class="name">{scoreboard[1]?.name}</div>
+            <div class="score">{scoreboard[1]?.score}</div>
+          </div>
+          <div class="podium-col first" class:visible={show} bind:this={winnerElement}>
+            <div class="christmas-lights">
+              <span class="light">💡</span>
+              <span class="light">💡</span>
+              <span class="light">💡</span>
+              <span class="light">💡</span>
+              <span class="light">💡</span>
+            </div>
+            <div class="crown">👑</div>
+            <div class="place">🥇</div>
+            <div class="name winner">{scoreboard[0].name}</div>
+            <div class="score">{scoreboard[0].score}</div>
+            <div class="winner-glow"></div>
+          </div>
+          <div class="winner-sparkles" aria-hidden="true"></div>
+          <div class="podium-col third" class:visible={show && scoreboard[2]}>
+            <div class="place">🥉</div>
+            <div class="name">{scoreboard[2]?.name}</div>
+            <div class="score">{scoreboard[2]?.score}</div>
+          </div>
         </div>
       </div>
     {/if}
@@ -155,6 +233,79 @@
     100% { transform: translateY(110vh) rotate(720deg); }
   }
 
+  .snowflakes-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .snowflake {
+    position: absolute;
+    top: -20px;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+    animation: snowflake-fall linear infinite;
+    pointer-events: none;
+  }
+  @keyframes snowflake-fall {
+    0% {
+      transform: translateY(-20px) translateX(0) rotate(0deg);
+      opacity: 0.8;
+    }
+    50% {
+      transform: translateY(50vh) translateX(20px) rotate(180deg);
+      opacity: 0.6;
+    }
+    100% {
+      transform: translateY(110vh) translateX(-20px) rotate(360deg);
+      opacity: 0;
+    }
+  }
+
+  .podium-container {
+    position: relative;
+    margin: 0 auto 1rem auto;
+    overflow: visible;
+  }
+
+  .winner-announcement {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    opacity: 0;
+    transform: scale(0.8) translateY(-10px);
+    transition: opacity 500ms ease, transform 500ms ease;
+  }
+  .winner-announcement.visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    animation: winner-bounce 1s ease-in-out infinite;
+  }
+  @keyframes winner-bounce {
+    0%, 100% { transform: scale(1) translateY(0); }
+    50% { transform: scale(1.05) translateY(-5px); }
+  }
+  .winner-icon {
+    font-size: 1.5rem;
+    animation: spin-slow 3s linear infinite;
+  }
+  .winner-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #FFD700;
+    text-shadow: 
+      0 0 10px rgba(255, 215, 0, 0.8),
+      0 0 20px rgba(255, 215, 0, 0.6),
+      0 0 30px rgba(255, 215, 0, 0.4);
+  }
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
   .final-card {
     position: relative;
     width: min(1100px, 100%);
@@ -211,15 +362,146 @@
     transform: translateY(0) scale(1);
     box-shadow: 0 8px 24px rgba(255, 215, 0, 0.15);
   }
-  .podium-col.first { border-color: rgba(255, 215, 0, 0.4); }
+  .podium-col.first {
+    border-color: rgba(255, 215, 0, 0.6);
+    position: relative;
+    overflow: visible;
+  }
+  .podium-col.first.visible {
+    animation: winner-pulse 2s ease-in-out infinite;
+  }
+  @keyframes winner-pulse {
+    0%, 100% {
+      box-shadow: 0 8px 24px rgba(255, 215, 0, 0.3), 0 0 20px rgba(255, 215, 0, 0.2);
+      border-color: rgba(255, 215, 0, 0.6);
+    }
+    50% {
+      box-shadow: 0 12px 32px rgba(255, 215, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.4);
+      border-color: rgba(255, 215, 0, 0.9);
+    }
+  }
   .podium-col .place { font-size: 1.5rem; margin-bottom: 0.25rem; }
   .podium-col .name { font-weight: 700; }
   .podium-col .name.winner {
     color: #FFD700;
-    text-shadow: 0 0 8px rgba(255,215,0,0.5);
+    text-shadow: 
+      0 0 10px rgba(255, 215, 0, 0.8),
+      0 0 20px rgba(255, 215, 0, 0.6),
+      0 0 30px rgba(255, 215, 0, 0.4);
+    animation: winner-glow 2s ease-in-out infinite;
+  }
+  @keyframes winner-glow {
+    0%, 100% {
+      text-shadow: 
+        0 0 10px rgba(255, 215, 0, 0.8),
+        0 0 20px rgba(255, 215, 0, 0.6),
+        0 0 30px rgba(255, 215, 0, 0.4);
+    }
+    50% {
+      text-shadow: 
+        0 0 15px rgba(255, 215, 0, 1),
+        0 0 30px rgba(255, 215, 0, 0.8),
+        0 0 45px rgba(255, 215, 0, 0.6);
+    }
   }
   .podium-col .score { opacity: 0.9; }
-  .podium-col .crown { font-size: 1.3rem; margin-bottom: 0.25rem; }
+  .podium-col .crown {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+    animation: crown-bounce 1.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  }
+  @keyframes crown-bounce {
+    0%, 100% { transform: translateY(0) rotate(-5deg); }
+    25% { transform: translateY(-5px) rotate(5deg); }
+    50% { transform: translateY(-8px) rotate(-5deg); }
+    75% { transform: translateY(-5px) rotate(5deg); }
+  }
+
+  .christmas-lights {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .christmas-lights .light {
+    font-size: 0.9rem;
+    animation: light-twinkle 1.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.8));
+  }
+  .christmas-lights .light:nth-child(1) { animation-delay: 0s; }
+  .christmas-lights .light:nth-child(2) { animation-delay: 0.3s; }
+  .christmas-lights .light:nth-child(3) { animation-delay: 0.6s; }
+  .christmas-lights .light:nth-child(4) { animation-delay: 0.9s; }
+  .christmas-lights .light:nth-child(5) { animation-delay: 1.2s; }
+  @keyframes light-twinkle {
+    0%, 100% {
+      opacity: 0.6;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  }
+
+  .winner-sparkles {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    pointer-events: none;
+    z-index: 10;
+    overflow: visible;
+  }
+  .christmas-sparkle {
+    position: absolute;
+    animation: sparkle-float linear infinite;
+    filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.8));
+  }
+  @keyframes sparkle-float {
+    0% {
+      opacity: 0;
+      transform: translateY(0) scale(0) rotate(0deg);
+    }
+    20% {
+      opacity: 1;
+      transform: translateY(-20px) scale(1) rotate(180deg);
+    }
+    80% {
+      opacity: 1;
+      transform: translateY(-40px) scale(1) rotate(360deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-60px) scale(0) rotate(540deg);
+    }
+  }
+
+  .winner-glow {
+    position: absolute;
+    inset: -10px;
+    border-radius: 12px;
+    background: radial-gradient(circle at center, rgba(255, 215, 0, 0.3), transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+  @keyframes glow-pulse {
+    0%, 100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.1);
+    }
+  }
 
   .ranking {
     margin-top: 1rem;

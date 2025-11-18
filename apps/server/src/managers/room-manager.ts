@@ -896,28 +896,31 @@ export class RoomManager {
   }
   
   // Restore player score in active game
+  // This ensures the game engine's score matches the player's cumulative session score
   restorePlayerScoreInGame(roomCode: string, playerId: string, playerName: string): void {
     const game = this.getGame(roomCode);
     if (!game) return;
     
-    // Get session score
+    // Get session score (cumulative score across all games in this room)
     const sessionScores = this.sessionLeaderboards.get(roomCode);
     if (sessionScores) {
       const sessionScore = sessionScores.get(playerName);
-      if (sessionScore && sessionScore > 0) {
-        // Try to update player's score in the game
+      if (sessionScore !== undefined && sessionScore >= 0) {
+        // Get current game state
         const gameState = game.getState();
         if (gameState.scores) {
-          // Calculate the difference and add to current score
-          const currentScore = gameState.scores[playerId] || 0;
-          const scoreDiff = sessionScore - currentScore;
-          if (scoreDiff > 0) {
-            // Update score in game
+          // The game engine's score should reflect the cumulative session score
+          // This way, the player's displayed score matches their total session progress
+          const currentGameScore = gameState.scores[playerId] || 0;
+          
+          // If session score is different from current game score, update it
+          // This handles reconnection where the player's session score is higher
+          // than what the game engine currently has (which might be from before this game started)
+          if (sessionScore !== currentGameScore) {
+            // Set the game score to match session score
+            // This ensures continuity - the game score should represent cumulative progress
             gameState.scores[playerId] = sessionScore;
-            // Also update via game's updateScore method if available
-            if (typeof (game as any).updateScore === 'function') {
-              (game as any).updateScore(playerId, scoreDiff);
-            }
+            console.log(`[Room] Restored game score for ${playerName} (${playerId.substring(0, 8)}): ${currentGameScore} -> ${sessionScore}`);
           }
         }
       }
@@ -1047,6 +1050,13 @@ export class RoomManager {
     if (oldId && oldId !== newSocketId) {
       room.players.delete(oldId);
       this.playerToRoom.delete(oldId);
+      
+      // Migrate player data in active game engine if game is in progress
+      const game = this.games.get(roomCode);
+      if (game && oldId) {
+        game.migratePlayer(oldId, newSocketId);
+        console.log(`[Room] Migrated player data in game engine from ${oldId.substring(0, 8)} to ${newSocketId.substring(0, 8)}`);
+      }
     }
     
     // Update player with new socket ID

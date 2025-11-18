@@ -49,12 +49,14 @@
   let creatingSet = false;
   let addingQuestion = false;
   let updatingQuestion = false;
-  let editingQuestion: { id: string; question: string; answers: string[]; correctIndex: number; difficulty: string; category?: string } | null = null;
+  let editingQuestion: { id: string; question: string; questionFr: string; answers: string[]; answersFr: string[]; correctIndex: number; difficulty: string; category?: string } | null = null;
   let newSetName = '';
   let newSetDescription = '';
   let newQuestion = {
     question: '',
+    questionFr: '',
     answers: ['', '', '', ''],
+    answersFr: ['', '', '', ''],
     correctIndex: 0,
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
     category: '',
@@ -111,7 +113,9 @@
   let newItemSetDescription = '';
   let newItem = {
     name: '',
+    nameFr: '',
     description: '',
+    descriptionFr: '',
     price: 0,
     imageUrl: '',
     category: '',
@@ -135,6 +139,7 @@
   let newPromptSetDescription = '';
   let newPrompt = {
     prompt: '',
+    promptFr: '',
     category: '',
     contentRating: 'pg' as 'pg' | 'pg13',
   };
@@ -391,6 +396,18 @@
       correctIndex: newQuestion.correctIndex,
       difficulty: newQuestion.difficulty,
       category: newQuestion.category.trim() || undefined,
+      translations: {
+        en: {
+          question: newQuestion.question.trim(),
+          answers: newQuestion.answers.filter((a) => a.trim()),
+        },
+        ...(newQuestion.questionFr.trim() || newQuestion.answersFr.some(a => a.trim()) ? {
+          fr: {
+            question: newQuestion.questionFr.trim() || newQuestion.question.trim(),
+            answers: newQuestion.answersFr.map((a, i) => a.trim() || newQuestion.answers[i].trim()),
+          }
+        } : {}),
+      },
     };
     addingQuestion = true;
     $socket.emit('add_question_to_set', selectedQuestionSet, question, (response: any) => {
@@ -399,7 +416,9 @@
         currentQuestions.push(response.question);
         newQuestion = {
           question: '',
+          questionFr: '',
           answers: ['', '', '', ''],
+          answersFr: ['', '', '', ''],
           correctIndex: 0,
           difficulty: 'medium',
           category: '',
@@ -411,11 +430,14 @@
     });
   }
 
-  function startEditingQuestion(question: { id: string; question: string; answers: string[]; correctIndex: number; difficulty: string; category?: string }) {
+  function startEditingQuestion(question: any) {
+    const translations = question.translations || {};
     editingQuestion = {
       id: question.id,
       question: question.question,
+      questionFr: translations?.fr?.question || '',
       answers: [...question.answers],
+      answersFr: translations?.fr?.answers || ['', '', '', ''],
       correctIndex: question.correctIndex,
       difficulty: question.difficulty,
       category: question.category || '',
@@ -438,6 +460,18 @@
       correctIndex: editingQuestion.correctIndex,
       difficulty: editingQuestion.difficulty,
       category: editingQuestion.category?.trim() || undefined,
+      translations: {
+        en: {
+          question: editingQuestion.question.trim(),
+          answers: editingQuestion.answers.filter((a) => a.trim()),
+        },
+        ...(editingQuestion.questionFr.trim() || editingQuestion.answersFr.some(a => a.trim()) ? {
+          fr: {
+            question: editingQuestion.questionFr.trim() || editingQuestion.question.trim(),
+            answers: editingQuestion.answersFr.map((a, i) => a.trim() || editingQuestion.answers[i].trim()),
+          }
+        } : {}),
+      },
     };
     updatingQuestion = true;
     $socket.emit('update_question', editingQuestion.id, question, (response: any) => {
@@ -617,12 +651,27 @@
       alert(t('priceTab.errors.fillRequiredFields'));
       return;
     }
+    const item = {
+      ...newItem,
+      translations: {
+        en: {
+          name: newItem.name.trim(),
+          description: newItem.description.trim() || '',
+        },
+        ...(newItem.nameFr.trim() || newItem.descriptionFr.trim() ? {
+          fr: {
+            name: newItem.nameFr.trim() || newItem.name.trim(),
+            description: newItem.descriptionFr.trim() || newItem.description.trim() || '',
+          }
+        } : {}),
+      },
+    };
     addingItem = true;
-    $socket.emit('add_item_to_set', selectedItemSet, newItem, (response: any) => {
+    $socket.emit('add_item_to_set', selectedItemSet, item, (response: any) => {
       addingItem = false;
       if (response.success) {
         currentItems.push(response.item);
-        newItem = { name: '', description: '', price: 0, imageUrl: '', category: '' };
+        newItem = { name: '', nameFr: '', description: '', descriptionFr: '', price: 0, imageUrl: '', category: '' };
         showMessage(t('priceTab.success.itemAdded'));
       } else {
         alert(response.error || t('priceTab.errors.failedAddItem'));
@@ -754,12 +803,25 @@
       alert(t('naughtyTab.errors.enterPrompt'));
       return;
     }
+    const prompt = {
+      ...newPrompt,
+      translations: {
+        en: {
+          prompt: newPrompt.prompt.trim(),
+        },
+        ...(newPrompt.promptFr.trim() ? {
+          fr: {
+            prompt: newPrompt.promptFr.trim(),
+          }
+        } : {}),
+      },
+    };
     addingPrompt = true;
-    $socket.emit('add_prompt_to_set', selectedPromptSet, newPrompt, (response: any) => {
+    $socket.emit('add_prompt_to_set', selectedPromptSet, prompt, (response: any) => {
       addingPrompt = false;
       if (response.success) {
         currentPrompts.push(response.prompt);
-        newPrompt = { prompt: '', category: '', contentRating: 'pg' };
+        newPrompt = { prompt: '', promptFr: '', category: '', contentRating: 'pg' };
         showMessage(t('naughtyTab.success.promptAdded'));
       } else {
         alert(response.error || t('naughtyTab.errors.failedAddPrompt'));

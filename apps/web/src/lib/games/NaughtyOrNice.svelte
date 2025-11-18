@@ -3,6 +3,7 @@
   import { GameState } from '@christmas/core';
   import { onDestroy } from 'svelte';
   import { playSound } from '$lib/audio';
+  import { t } from '$lib/i18n';
 
   $: prompt = $gameState?.currentPrompt;
   $: hasVoted = $gameState?.hasVoted;
@@ -71,48 +72,56 @@
       <h1 class="text-4xl font-bold">{t('games.naughtyOrNice.getReady')}</h1>
       <p class="text-xl text-white/70 mt-2">{t('games.naughtyOrNice.startingSoon')}</p>
     </div>
-  {:else if state === GameState.PLAYING && prompt}
-    <div class="voting-card">
-      <div class="round-badge">{t('games.naughtyOrNice.round', { round, maxRounds })}</div>
-      <div class="timer-display">
-        <span class="timer-label">⏱️</span>
-        <span class="timer-value" class:warning={timeRemaining <= 5}>{t('games.naughtyOrNice.timeRemaining', { seconds: timeRemaining })}</span>
-      </div>
-
-      <div class="prompt-card">
-        <h2 class="prompt-text">{prompt.prompt}</h2>
-      </div>
-
-      <div class="vote-question">
-        <p class="text-xl font-bold">{t('games.naughtyOrNice.question')}</p>
-      </div>
-
-      <div class="vote-buttons">
-        <button
-          on:click={() => vote('naughty')}
-          disabled={hasVoted}
-          class="vote-btn naughty-btn"
-        >
-          <div class="vote-icon">😈</div>
-          <div class="vote-label">{t('games.naughtyOrNice.naughty')}</div>
-        </button>
-
-        <button
-          on:click={() => vote('nice')}
-          disabled={hasVoted}
-          class="vote-btn nice-btn"
-        >
-          <div class="vote-icon">👼</div>
-          <div class="vote-label">{t('games.naughtyOrNice.nice')}</div>
-        </button>
-      </div>
-
-      {#if hasVoted}
-        <div class="waiting-message">
-          ✅ {t('games.naughtyOrNice.voteSubmitted')}
+  {:else if state === GameState.PLAYING}
+    {#if prompt}
+      <div class="voting-card">
+        <div class="round-badge">{t('games.naughtyOrNice.round', { round, maxRounds })}</div>
+        <div class="timer-display">
+          <span class="timer-label">⏱️</span>
+          <span class="timer-value" class:warning={timeRemaining <= 5}>{t('games.naughtyOrNice.timeRemaining', { seconds: timeRemaining })}</span>
         </div>
-      {/if}
-    </div>
+
+        <div class="prompt-card">
+          <h2 class="prompt-text">{prompt.prompt}</h2>
+        </div>
+
+        <div class="vote-question">
+          <p class="text-xl font-bold">{t('games.naughtyOrNice.question')}</p>
+        </div>
+
+        <div class="vote-buttons">
+          <button
+            on:click={() => vote('naughty')}
+            disabled={hasVoted}
+            class="vote-btn naughty-btn"
+          >
+            <div class="vote-icon">😈</div>
+            <div class="vote-label">{t('games.naughtyOrNice.naughty')}</div>
+          </button>
+
+          <button
+            on:click={() => vote('nice')}
+            disabled={hasVoted}
+            class="vote-btn nice-btn"
+          >
+            <div class="vote-icon">👼</div>
+            <div class="vote-label">{t('games.naughtyOrNice.nice')}</div>
+          </button>
+        </div>
+
+        {#if hasVoted}
+          <div class="waiting-message">
+            ✅ {t('games.naughtyOrNice.voteSubmitted')}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <!-- Waiting for prompt to load -->
+      <div class="loading-overlay">
+        <div class="text-6xl mb-4 animate-spin">⏳</div>
+        <p class="text-xl text-white/70">{t('games.naughtyOrNice.loading')}</p>
+      </div>
+    {/if}
   {:else if state === GameState.ROUND_END}
     <div class="result-card">
       <div class="text-6xl mb-4">📊</div>

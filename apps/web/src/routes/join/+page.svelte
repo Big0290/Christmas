@@ -4,8 +4,9 @@
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { socket, connectSocket, connected } from '$lib/socket';
-  import { t } from '$lib/i18n';
+  import { t, language } from '$lib/i18n';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
+  import LanguageSelectionModal from '$lib/components/LanguageSelectionModal.svelte';
 
   let roomCode = '';
   let playerName = '';
@@ -15,6 +16,8 @@
   let selectedAvatar = '';
   let avatarStyle: 'festive' | 'emoji' = 'festive';
   let socketReady = false;
+  let showLanguageModal = false;
+  let pendingJoinResponse: any = null;
 
   const festiveAvatars = [
     '🎅', '🤶', '🎄', '⛄', '🦌', '🎁', '🔔', '⭐', '🕯️', '🎿',
@@ -35,8 +38,15 @@
       roomCode = urlCode.toUpperCase().trim();
     }
 
-    // Load saved avatar preference
+    // Load saved preferences
     if (browser) {
+      // Load saved player name if available
+      const savedName = localStorage.getItem('christmas_playerName');
+      if (savedName) {
+        playerName = savedName;
+      }
+      
+      // Load saved avatar preference
       const savedAvatar = localStorage.getItem('christmas_preferredAvatar');
       const savedStyle = localStorage.getItem('christmas_avatarStyle');
       if (savedAvatar) {
@@ -68,6 +78,37 @@
   $: if ($connected && $socket && !socketReady) {
     socketReady = true;
     console.log('[Join] Socket connected (reactive)');
+  }
+
+  function handleLanguageSelected(lang: 'en' | 'fr') {
+    if (!pendingJoinResponse) return;
+    
+    // Update language if it changed
+    if ($language !== lang) {
+      language.set(lang);
+    }
+    
+    if (browser) {
+      // Store player info with normalized room code
+      localStorage.setItem('christmas_playerName', playerName);
+      localStorage.setItem('christmas_role', 'player');
+      localStorage.setItem('christmas_roomCode', pendingJoinResponse.roomCode || roomCode.trim().toUpperCase());
+      if (selectedAvatar) {
+        localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
+        localStorage.setItem('christmas_avatarStyle', avatarStyle);
+      }
+      if (pendingJoinResponse.playerToken) {
+        localStorage.setItem('christmas_playerToken', pendingJoinResponse.playerToken);
+      }
+    }
+    
+    // Close modal and navigate to play page
+    showLanguageModal = false;
+    const normalizedCode = pendingJoinResponse.roomCode || roomCode.trim().toUpperCase();
+    goto(`/play/${normalizedCode}`);
+    
+    // Clear pending response
+    pendingJoinResponse = null;
   }
 
   async function joinRoom() {
@@ -105,7 +146,7 @@
     console.log(`[Join] Socket ID: ${$socket?.id}`);
     console.log(`[Join] Socket connected: ${$connected}`);
 
-    $socket.emit('join_room', normalizedCode, playerName, selectedAvatar || undefined, (response: any) => {
+    $socket.emit('join_room', normalizedCode, playerName, selectedAvatar || undefined, $language, (response: any) => {
       loading = false;
       
       console.log(`[Join] join_room response:`, response);
@@ -115,22 +156,11 @@
         console.log(`[Join] Response players:`, response.players || []);
         console.log(`[Join] Player count:`, response.players?.length || 0);
         
-        if (browser) {
-          // Store player info with normalized room code
-          localStorage.setItem('christmas_playerName', playerName);
-          localStorage.setItem('christmas_role', 'player');
-          localStorage.setItem('christmas_roomCode', normalizedCode);
-          if (selectedAvatar) {
-            localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
-            localStorage.setItem('christmas_avatarStyle', avatarStyle);
-          }
-          if (response.playerToken) {
-            localStorage.setItem('christmas_playerToken', response.playerToken);
-          }
-        }
+        // Store the response temporarily
+        pendingJoinResponse = response;
         
-        // Navigate to play page with normalized code
-        goto(`/play/${normalizedCode}`);
+        // Show language selection modal
+        showLanguageModal = true;
       } else {
         console.error(`[Join] Failed to join room ${normalizedCode}:`, response.error);
         error = response.error || t('home.errors.failedJoin');
@@ -246,6 +276,12 @@
       <p>{t('join.footer')}</p>
     </div>
   </div>
+
+  <!-- Language Selection Modal -->
+  <LanguageSelectionModal 
+    show={showLanguageModal} 
+    onLanguageSelected={handleLanguageSelected}
+  />
 </div>
 
 <style>

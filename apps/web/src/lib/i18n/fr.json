@@ -144,6 +144,13 @@
       "connectionFailed": "Échec de la connexion au serveur. Veuillez actualiser la page."
     }
   },
+  "languageModal": {
+    "title": "Sélectionnez votre langue",
+    "subtitle": "Choisissez votre langue préférée pour le jeu",
+    "english": "Anglais",
+    "french": "Français",
+    "continue": "Continuer"
+  },
   "room": {
     "title": "Salle {code}",
     "gameSettings": "Paramètres du jeu",
@@ -191,7 +198,10 @@
       "connecting": "Connexion...",
       "pleaseWait": "Veuillez patienter",
       "waitingStart": "En attente du début",
-      "hostWillStart": "L'hôte va démarrer le jeu bientôt !"
+      "hostWillStart": "L'hôte va démarrer le jeu bientôt !",
+      "waitingNextRound": "En attente de la prochaine manche",
+      "alreadyAnswered": "Vous avez déjà répondu à cette question",
+      "roundContinues": "La manche continue avec les autres joueurs..."
     },
     "sessionRank": "Session : #{rank}",
     "globalRank": "Global : #{rank}",

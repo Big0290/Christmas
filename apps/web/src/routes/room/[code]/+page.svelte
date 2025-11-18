@@ -173,9 +173,37 @@
         return;
       }
 
-      // NOTE: room_update events are handled by socket.ts (line 273-282)
-      // which updates the players store. We don't need a duplicate listener here.
-      // The $players store will automatically update when socket.ts receives room_update.
+      // Listen for room_update as a backup to ensure players store updates
+      // Even though socket.ts handles this, having a backup listener ensures
+      // the UI always updates when players join/leave
+      $socket.on('room_update', (data: any) => {
+        console.log('[Room] 🔵 Backup room_update listener received:', data);
+        if (data && Array.isArray(data.players)) {
+          console.log(`[Room] 🔵 Backup: Setting players list with ${data.players.length} player(s)`);
+          // Update players store directly as backup
+          players.set(data.players);
+          console.log('[Room] 🔵 Backup: Players store updated via backup listener');
+        }
+      });
+
+      // Also listen for player_joined/player_left as immediate feedback
+      $socket.on('player_joined', (player: any) => {
+        console.log('[Room] 🔵 Player joined event (backup listener):', player);
+        // This provides immediate feedback, but room_update is authoritative
+        players.update((p) => {
+          const exists = p.some((existing) => existing.id === player.id);
+          if (!exists) {
+            return [...p, player];
+          }
+          return p;
+        });
+      });
+
+      $socket.on('player_left', (data: any) => {
+        console.log('[Room] 🔵 Player left event (backup listener):', data);
+        const playerId = typeof data === 'string' ? data : data?.playerId || data;
+        players.update((p) => p.filter((player) => player.id !== playerId));
+      });
 
       // Listen for game start
       $socket.on('game_started', (gameType: GameType) => {
@@ -230,7 +258,11 @@
       clearTimeout(connectionTimeout);
     }
     if ($socket) {
-      // NOTE: Don't remove room_update listener - it's managed by socket.ts
+      // Remove backup listeners we added
+      $socket.off('room_update');
+      $socket.off('player_joined');
+      $socket.off('player_left');
+      // Remove other listeners
       $socket.off('game_started');
       $socket.off('room_settings_updated');
     }

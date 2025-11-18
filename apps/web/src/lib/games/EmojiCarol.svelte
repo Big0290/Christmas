@@ -3,6 +3,7 @@
   import { GameState } from '@christmas/core';
   import { onMount, onDestroy } from 'svelte';
   import { playSound } from '$lib/audio';
+  import { t } from '$lib/i18n';
 
   $: emojis = $gameState?.availableEmojis || [];
   $: hasPicked = $gameState?.hasPicked;
@@ -72,36 +73,44 @@
       <p class="text-xl text-white/70 mt-2">{t('games.naughtyOrNice.startingSoon')}</p>
     </div>
   {:else if state === GameState.PLAYING}
-    <div class="emoji-card">
-      <div class="round-badge">{t('games.emojiCarol.round', { round, maxRounds })}</div>
-      <div class="timer-display">
-        <span class="timer-label">⏱️</span>
-        <span class="timer-value" class:warning={timeRemaining <= 5}>{t('games.emojiCarol.timeRemaining', { seconds: timeRemaining })}</span>
-      </div>
-
-      <h2 class="instruction">
-        {t('games.emojiCarol.pickEmoji')}
-      </h2>
-
-      <div class="emoji-grid">
-        {#each emojis as emoji}
-          <button
-            on:click={() => pickEmoji(emoji)}
-            disabled={hasPicked}
-            class="emoji-button"
-            class:picked={hasPicked}
-          >
-            {emoji}
-          </button>
-        {/each}
-      </div>
-
-      {#if hasPicked}
-        <div class="waiting-message">
-          ✅ {t('games.emojiCarol.voteSubmitted')}
+    {#if emojis.length > 0}
+      <div class="emoji-card">
+        <div class="round-badge">{t('games.emojiCarol.round', { round, maxRounds })}</div>
+        <div class="timer-display">
+          <span class="timer-label">⏱️</span>
+          <span class="timer-value" class:warning={timeRemaining <= 5}>{t('games.emojiCarol.timeRemaining', { seconds: timeRemaining })}</span>
         </div>
-      {/if}
-    </div>
+
+        <h2 class="instruction">
+          {t('games.emojiCarol.pickEmoji')}
+        </h2>
+
+        <div class="emoji-grid">
+          {#each emojis as emoji}
+            <button
+              on:click={() => pickEmoji(emoji)}
+              disabled={hasPicked}
+              class="emoji-button"
+              class:picked={hasPicked}
+            >
+              {emoji}
+            </button>
+          {/each}
+        </div>
+
+        {#if hasPicked}
+          <div class="waiting-message">
+            ✅ {t('games.emojiCarol.voteSubmitted')}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <!-- Waiting for emojis to load -->
+      <div class="loading-overlay">
+        <div class="text-6xl mb-4 animate-spin">⏳</div>
+        <p class="text-xl text-white/70">{t('games.emojiCarol.loading')}</p>
+      </div>
+    {/if}
   {:else if state === GameState.ROUND_END}
     <div class="result-card">
       <div class="text-6xl mb-4">🎶</div>

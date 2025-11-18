@@ -10,10 +10,12 @@
   export let loadingQuestions: boolean;
   export let addingQuestion: boolean;
   export let updatingQuestion: boolean;
-  export let editingQuestion: { id: string; question: string; answers: string[]; correctIndex: number; difficulty: string; category?: string } | null;
+  export let editingQuestion: { id: string; question: string; questionFr: string; answers: string[]; answersFr: string[]; correctIndex: number; difficulty: string; category?: string } | null;
   export let newQuestion: {
     question: string;
+    questionFr: string;
     answers: string[];
+    answersFr: string[];
     correctIndex: number;
     difficulty: 'easy' | 'medium' | 'hard';
     category: string;
@@ -22,7 +24,7 @@
   export let onQuestionSetChange: (setId: string | null) => void;
   export let openCreateSetDialog: () => void;
   export let addQuestion: () => void;
-  export let startEditingQuestion: (question: { id: string; question: string; answers: string[]; correctIndex: number; difficulty: string; category?: string }) => void;
+  export let startEditingQuestion: (question: any) => void;
   export let updateQuestion: () => void;
   export let cancelEditing: () => void;
   export let deleteQuestion: (questionId: string) => void;
@@ -91,7 +93,7 @@
                 <div class="p-4 bg-white/10 rounded-lg border-2 border-christmas-gold/50 frosted-glass">
                   <div class="space-y-3">
                     <div>
-                      <label class="block text-sm font-medium mb-1">{t('triviaTab.question')}</label>
+                      <label class="block text-sm font-medium mb-1">🇬🇧 {t('triviaTab.question')} (English)</label>
                       <input
                         type="text"
                         bind:value={editingQuestion.question}
@@ -99,29 +101,51 @@
                         class="input w-full"
                       />
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="block text-sm font-medium mb-1">🇫🇷 {t('triviaTab.question')} (Français)</label>
+                      <input
+                        type="text"
+                        bind:value={editingQuestion.questionFr}
+                        placeholder="Entrez la question en français (optionnel)"
+                        class="input w-full"
+                      />
+                    </div>
+                    <div class="space-y-2">
                       {#each editingQuestion.answers as answer, i}
-                        <div>
-                          <label class="block text-sm font-medium mb-1">
-                            {t('triviaTab.answer', { letter: String.fromCharCode(65 + i) })}
-                            {#if i === editingQuestion.correctIndex}
-                              <span class="text-green-400">✓ {t('triviaTab.correct')}</span>
-                            {/if}
-                          </label>
-                          <div class="flex gap-1">
+                        <div class="grid grid-cols-2 gap-2">
+                          <div>
+                            <label class="block text-sm font-medium mb-1">
+                              🇬🇧 {t('triviaTab.answer', { letter: String.fromCharCode(65 + i) })} (English)
+                              {#if i === editingQuestion.correctIndex}
+                                <span class="text-green-400">✓ {t('triviaTab.correct')}</span>
+                              {/if}
+                            </label>
+                            <div class="flex gap-1">
+                              <input
+                                type="text"
+                                bind:value={editingQuestion.answers[i]}
+                                placeholder={t('triviaTab.answerPlaceholder')}
+                                class="input flex-1"
+                              />
+                              <button
+                                on:click={() => editingQuestion.correctIndex = i}
+                                class="btn-secondary text-xs px-2 {editingQuestion.correctIndex === i ? 'bg-green-500' : ''}"
+                                title={t('triviaTab.markCorrect')}
+                              >
+                                ✓
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label class="block text-sm font-medium mb-1">
+                              🇫🇷 {t('triviaTab.answer', { letter: String.fromCharCode(65 + i) })} (Français)
+                            </label>
                             <input
                               type="text"
-                              bind:value={editingQuestion.answers[i]}
-                              placeholder={t('triviaTab.answerPlaceholder')}
-                              class="input flex-1"
+                              bind:value={editingQuestion.answersFr[i]}
+                              placeholder="Réponse en français (optionnel)"
+                              class="input w-full"
                             />
-                            <button
-                              on:click={() => editingQuestion.correctIndex = i}
-                              class="btn-secondary text-xs px-2 {editingQuestion.correctIndex === i ? 'bg-green-500' : ''}"
-                              title={t('triviaTab.markCorrect')}
-                            >
-                              ✓
-                            </button>
                           </div>
                         </div>
                       {/each}
@@ -235,7 +259,7 @@
           </h4>
         <div class="space-y-3">
           <div>
-            <label class="block text-sm font-medium mb-1">{t('triviaTab.question')}</label>
+            <label class="block text-sm font-medium mb-1">🇬🇧 {t('triviaTab.question')} (English) *</label>
             <input
               type="text"
               bind:value={newQuestion.question}
@@ -243,29 +267,51 @@
               class="input w-full"
             />
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-sm font-medium mb-1">🇫🇷 {t('triviaTab.question')} (Français)</label>
+            <input
+              type="text"
+              bind:value={newQuestion.questionFr}
+              placeholder="Entrez la question en français (optionnel)"
+              class="input w-full"
+            />
+          </div>
+          <div class="space-y-2">
             {#each newQuestion.answers as answer, index}
-              <div>
-                <label class="block text-sm font-medium mb-1">
-                  {t('triviaTab.answer', { letter: String.fromCharCode(65 + index) })}
-                  {#if index === newQuestion.correctIndex}
-                    <span class="text-green-400">✓ {t('triviaTab.correct')}</span>
-                  {/if}
-                </label>
-                <div class="flex gap-1">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-sm font-medium mb-1">
+                    🇬🇧 {t('triviaTab.answer', { letter: String.fromCharCode(65 + index) })} (English) *
+                    {#if index === newQuestion.correctIndex}
+                      <span class="text-green-400">✓ {t('triviaTab.correct')}</span>
+                    {/if}
+                  </label>
+                  <div class="flex gap-1">
+                    <input
+                      type="text"
+                      bind:value={newQuestion.answers[index]}
+                      placeholder={t('triviaTab.answerPlaceholder')}
+                      class="input flex-1"
+                    />
+                    <button
+                      on:click={() => newQuestion.correctIndex = index}
+                      class="btn-secondary text-xs px-2 {newQuestion.correctIndex === index ? 'bg-green-500' : ''}"
+                      title={t('triviaTab.markCorrect')}
+                    >
+                      ✓
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">
+                    🇫🇷 {t('triviaTab.answer', { letter: String.fromCharCode(65 + index) })} (Français)
+                  </label>
                   <input
                     type="text"
-                    bind:value={newQuestion.answers[index]}
-                    placeholder={t('triviaTab.answerPlaceholder')}
-                    class="input flex-1"
+                    bind:value={newQuestion.answersFr[index]}
+                    placeholder="Réponse en français (optionnel)"
+                    class="input w-full"
                   />
-                  <button
-                    on:click={() => newQuestion.correctIndex = index}
-                    class="btn-secondary text-xs px-2 {newQuestion.correctIndex === index ? 'bg-green-500' : ''}"
-                    title={t('triviaTab.markCorrect')}
-                  >
-                    ✓
-                  </button>
                 </div>
               </div>
             {/each}

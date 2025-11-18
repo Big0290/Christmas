@@ -168,6 +168,20 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
     }
   }
 
+  protected onMigratePlayer(oldPlayerId: string, newPlayerId: string): void {
+    // Migrate guess if it exists
+    if (this.state.guesses && this.state.guesses[oldPlayerId] !== undefined) {
+      this.state.guesses[newPlayerId] = this.state.guesses[oldPlayerId];
+      delete this.state.guesses[oldPlayerId];
+    }
+    // Migrate guess time if it exists
+    if (this.state.guessTimes && this.state.guessTimes[oldPlayerId] !== undefined) {
+      this.state.guessTimes[newPlayerId] = this.state.guessTimes[oldPlayerId];
+      delete this.state.guessTimes[oldPlayerId];
+    }
+    console.log(`[PriceIsRight] Migrated guess from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`);
+  }
+
   getClientState(playerId: string): any {
     // Get player's language preference, default to English
     const player = this.players.get(playerId);
