@@ -9,16 +9,30 @@
 </script>
 
 {#if $gameState?.currentPrompt}
+  {@const promptTranslations = $gameState.currentPrompt.translations}
+  {@const frenchPrompt =
+    typeof promptTranslations?.fr?.prompt === 'string'
+      ? promptTranslations.fr.prompt
+      : ''}
+  {@const englishPrompt =
+    typeof promptTranslations?.en?.prompt === 'string'
+      ? promptTranslations.en.prompt
+      : $gameState.currentPrompt.prompt || ''}
   <div class="naughty-host-projection">
     <div class="naughty-question-section">
       <h2 class="game-title">😇 Naughty or Nice</h2>
       <div class="prompt-display-large">
         <div class="round-number">
-          Round {round}{#if maxRounds > 0}
-            / {maxRounds}{/if}
-          {#if currentState === GameState.ROUND_END} - Results{/if}
+          <div class="round-label-bilingual">
+            <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+          </div>
         </div>
-        <h3 class="prompt-text-large">{$gameState.currentPrompt.prompt}</h3>
+        <!-- Bilingual Prompt Display -->
+        {#if frenchPrompt}
+          <h3 class="prompt-text-large prompt-text-french">{frenchPrompt}</h3>
+        {/if}
+        <h3 class="prompt-text-large prompt-text-english">{englishPrompt}</h3>
 
         <div class="vote-options-large">
           {#if $gameState?.votes}
@@ -37,9 +51,19 @@
             >
               <div class="vote-header-large">
                 <span class="vote-emoji-large">😈</span>
-                <span class="vote-label-large">Naughty</span>
+                <span class="vote-label-large">
+                  <span class="vote-label-bilingual">
+                    <span class="vote-label-french">Méchant</span>
+                    <span class="vote-label-english">Naughty</span>
+                  </span>
+                </span>
                 {#if currentState === GameState.ROUND_END && naughtyCount > niceCount}
-                  <span class="winner-badge-large">Winner</span>
+                  <span class="winner-badge-large">
+                    <span class="winner-bilingual">
+                      <span class="winner-french">Gagnant</span>
+                      <span class="winner-english">Winner</span>
+                    </span>
+                  </span>
                 {/if}
               </div>
               {#if currentState === GameState.PLAYING || currentState === GameState.ROUND_END}
@@ -53,7 +77,10 @@
                   </div>
                   <div class="stats-text-large">
                     <span>{naughtyPercentage}%</span>
-                    <span>({naughtyCount} {naughtyCount === 1 ? 'vote' : 'votes'})</span>
+                    <span class="votes-bilingual">
+                      <span class="votes-french">({naughtyCount} {naughtyCount === 1 ? 'vote' : 'votes'})</span>
+                      <span class="votes-english">({naughtyCount} {naughtyCount === 1 ? 'vote' : 'votes'})</span>
+                    </span>
                   </div>
                 </div>
               {/if}
@@ -65,9 +92,19 @@
             >
               <div class="vote-header-large">
                 <span class="vote-emoji-large">👼</span>
-                <span class="vote-label-large">Nice</span>
+                <span class="vote-label-large">
+                  <span class="vote-label-bilingual">
+                    <span class="vote-label-french">Gentil</span>
+                    <span class="vote-label-english">Nice</span>
+                  </span>
+                </span>
                 {#if currentState === GameState.ROUND_END && niceCount > naughtyCount}
-                  <span class="winner-badge-large">Winner</span>
+                  <span class="winner-badge-large">
+                    <span class="winner-bilingual">
+                      <span class="winner-french">Gagnant</span>
+                      <span class="winner-english">Winner</span>
+                    </span>
+                  </span>
                 {/if}
               </div>
               {#if currentState === GameState.PLAYING || currentState === GameState.ROUND_END}
@@ -81,7 +118,10 @@
                   </div>
                   <div class="stats-text-large">
                     <span>{nicePercentage}%</span>
-                    <span>({niceCount} {niceCount === 1 ? 'vote' : 'votes'})</span>
+                    <span class="votes-bilingual">
+                      <span class="votes-french">({niceCount} {niceCount === 1 ? 'vote' : 'votes'})</span>
+                      <span class="votes-english">({niceCount} {niceCount === 1 ? 'vote' : 'votes'})</span>
+                    </span>
                   </div>
                 </div>
               {/if}
@@ -89,11 +129,21 @@
           {:else}
             <div class="vote-option-card-large">
               <span class="vote-emoji-large">😈</span>
-              <span class="vote-label-large">Naughty</span>
+              <span class="vote-label-large">
+                <span class="vote-label-bilingual">
+                  <span class="vote-label-french">Méchant</span>
+                  <span class="vote-label-english">Naughty</span>
+                </span>
+              </span>
             </div>
             <div class="vote-option-card-large">
               <span class="vote-emoji-large">😇</span>
-              <span class="vote-label-large">Nice</span>
+              <span class="vote-label-large">
+                <span class="vote-label-bilingual">
+                  <span class="vote-label-french">Gentil</span>
+                  <span class="vote-label-english">Nice</span>
+                </span>
+              </span>
             </div>
           {/if}
         </div>
@@ -101,7 +151,10 @@
         {#if currentState === GameState.PLAYING}
           <div class="waiting-status-large">
             <p class="status-text-large">
-              {Object.keys($gameState?.votes || {}).length} / {$players.length} players voted
+              <span class="status-bilingual">
+                <span class="status-french">{Object.keys($gameState?.votes || {}).length} / {$players.length} joueurs ont voté</span>
+                <span class="status-english">{Object.keys($gameState?.votes || {}).length} / {$players.length} players voted</span>
+              </span>
             </p>
           </div>
         {/if}
@@ -109,7 +162,12 @@
     </div>
 
     <div class="naughty-leaderboard-section">
-      <h3 class="leaderboard-title-large">🏆 Leaderboard</h3>
+      <h3 class="leaderboard-title-large">
+        <span class="title-bilingual">
+          <span class="title-french">🏆 Classement</span>
+          <span class="title-english">🏆 Leaderboard</span>
+        </span>
+      </h3>
       <div class="leaderboard-list-large">
         {#each scoreboard as player, i}
           <div class="leaderboard-entry-large" class:top-three={i < 3}>
@@ -128,7 +186,12 @@
             <span class="leaderboard-score-large">{player.score}</span>
           </div>
         {:else}
-          <p class="no-scores-large">No scores yet</p>
+          <p class="no-scores-large">
+            <span class="no-scores-bilingual">
+              <span class="no-scores-french">Aucun score pour le moment</span>
+              <span class="no-scores-english">No scores yet</span>
+            </span>
+          </p>
         {/each}
       </div>
     </div>
@@ -182,6 +245,54 @@
     border-radius: 1rem;
   }
 
+  .round-label-bilingual,
+  .vote-label-bilingual,
+  .winner-bilingual,
+  .votes-bilingual,
+  .status-bilingual,
+  .title-bilingual,
+  .no-scores-bilingual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .round-label-french,
+  .vote-label-french,
+  .winner-french,
+  .votes-french,
+  .status-french,
+  .title-french,
+  .no-scores-french {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .round-label-english,
+  .vote-label-english,
+  .winner-english,
+  .votes-english,
+  .status-english,
+  .title-english,
+  .no-scores-english {
+    font-size: 2rem;
+    font-weight: bold;
+    color: white;
+  }
+
+  .vote-label-french,
+  .vote-label-english {
+    font-size: 2.5rem;
+    color: white;
+  }
+
+  .winner-french,
+  .winner-english {
+    font-size: 1.5rem;
+    color: white;
+  }
+
   .prompt-text-large {
     font-size: 2.5rem;
     font-weight: bold;
@@ -193,6 +304,22 @@
     line-height: 1.4;
     word-wrap: break-word;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .prompt-text-french {
+    font-size: 2rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    padding: 1.5rem 2rem;
+    background: rgba(255, 255, 255, 0.05);
+    margin-bottom: 1rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .prompt-text-english {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: white;
   }
 
   .vote-options-large {

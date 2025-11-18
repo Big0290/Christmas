@@ -391,7 +391,9 @@
 
       <!-- Visualizer -->
       <div class="visualizer-container">
-        <AudioVisualizer key={visualizerKey} mode="bars" width={300} height={35} barCount={20} color="#c41e3a" />
+        {#key visualizerKey}
+          <AudioVisualizer mode="bars" width={300} height={35} barCount={20} color="#c41e3a" />
+        {/key}
       </div>
 
       <!-- Progress Bar -->

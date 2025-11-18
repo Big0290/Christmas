@@ -113,6 +113,7 @@ export const NaughtyOrNiceSettingsSchema = z.object({
   contentFilter: z.enum(['pg', 'pg13', 'none']).default('pg'),
   voteMode: z.enum(['majority', 'weighted']).default('majority'),
   revealSpeed: z.enum(['slow', 'medium', 'fast']).default('medium'),
+  timePerRound: z.number().min(5).max(60).default(15),
   customPromptSetId: z.string().nullable().default(null),
   anonymousVoting: z.boolean().default(true),
 });

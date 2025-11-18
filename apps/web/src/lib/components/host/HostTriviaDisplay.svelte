@@ -35,9 +35,10 @@
       <h2 class="game-title">🎄 Christmas Trivia Royale</h2>
       <div class="question-display-large">
         <div class="question-number">
-          Question {round}{#if maxRounds > 0}
-            / {maxRounds}{/if}
-          {#if currentState === GameState.ROUND_END} - Results{/if}
+          <div class="question-label-bilingual">
+            <span class="question-label-french">Question {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="question-label-english">Question {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+          </div>
         </div>
 
         <!-- Bilingual Question Display -->
@@ -71,7 +72,12 @@
                   </div>
                 </div>
                 {#if isCorrect && currentState === GameState.ROUND_END}
-                  <span class="correct-badge-large">✓ Correct</span>
+                  <span class="correct-badge-large">
+                    <span class="correct-bilingual">
+                      <span class="correct-french">✓ Correct</span>
+                      <span class="correct-english">✓ Correct</span>
+                    </span>
+                  </span>
                 {/if}
               </div>
               {#if currentState === GameState.ROUND_END && $gameState?.showReveal}
@@ -85,19 +91,29 @@
                   </div>
                   <div class="stats-text-large">
                     <span>{percentage}%</span>
-                    <span>({count} {count === 1 ? 'vote' : 'votes'})</span>
+                    <span class="votes-bilingual">
+                      <span class="votes-french">({count} {count === 1 ? 'vote' : 'votes'})</span>
+                      <span class="votes-english">({count} {count === 1 ? 'vote' : 'votes'})</span>
+                    </span>
                   </div>
                 </div>
               {:else if currentState === GameState.PLAYING}
                 <div class="answer-progress-large">
                   <div class="progress-text-large">
-                    {count}
-                    {count === 1 ? 'player' : 'players'} answered
+                    <span class="progress-bilingual">
+                      <span class="progress-french">{count} {count === 1 ? 'joueur a' : 'joueurs ont'} répondu</span>
+                      <span class="progress-english">{count} {count === 1 ? 'player' : 'players'} answered</span>
+                    </span>
                   </div>
                 </div>
               {:else}
                 <div class="answer-progress-large">
-                  <div class="progress-text-large">Waiting for players...</div>
+                  <div class="progress-text-large">
+                    <span class="waiting-bilingual">
+                      <span class="waiting-french">En attente des joueurs...</span>
+                      <span class="waiting-english">Waiting for players...</span>
+                    </span>
+                  </div>
                 </div>
               {/if}
             </div>
@@ -107,7 +123,10 @@
         {#if currentState === GameState.PLAYING}
           <div class="waiting-status-large">
             <p class="status-text-large">
-              {Object.keys($gameState?.answers || {}).length} / {$players.length} players answered
+              <span class="status-bilingual">
+                <span class="status-french">{Object.keys($gameState?.answers || {}).length} / {$players.length} joueurs ont répondu</span>
+                <span class="status-english">{Object.keys($gameState?.answers || {}).length} / {$players.length} players answered</span>
+              </span>
             </p>
           </div>
         {/if}
@@ -117,7 +136,12 @@
     <!-- Right side: Full Leaderboard (hidden during PLAYING) -->
     {#if currentState !== GameState.PLAYING}
       <div class="trivia-leaderboard-section">
-        <h3 class="leaderboard-title-large">🏆 Leaderboard</h3>
+        <h3 class="leaderboard-title-large">
+          <span class="title-bilingual">
+            <span class="title-french">🏆 Classement</span>
+            <span class="title-english">🏆 Leaderboard</span>
+          </span>
+        </h3>
         <div class="leaderboard-list-large">
           {#each scoreboard as player, i}
             <div class="leaderboard-entry-large" class:top-three={i < 3}>
@@ -136,7 +160,12 @@
               <span class="leaderboard-score-large">{player.score}</span>
             </div>
           {:else}
-            <p class="no-scores-large">No scores yet</p>
+            <p class="no-scores-large">
+              <span class="no-scores-bilingual">
+                <span class="no-scores-french">Aucun score pour le moment</span>
+                <span class="no-scores-english">No scores yet</span>
+              </span>
+            </p>
           {/each}
         </div>
       </div>
@@ -193,6 +222,51 @@
     background: rgba(255, 215, 0, 0.1);
     border: 3px solid #ffd700;
     border-radius: 1rem;
+  }
+
+  .question-label-bilingual,
+  .correct-bilingual,
+  .votes-bilingual,
+  .progress-bilingual,
+  .waiting-bilingual,
+  .status-bilingual,
+  .title-bilingual,
+  .no-scores-bilingual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .question-label-french,
+  .correct-french,
+  .votes-french,
+  .progress-french,
+  .waiting-french,
+  .status-french,
+  .title-french,
+  .no-scores-french {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 215, 0, 0.9);
+  }
+
+  .question-label-english,
+  .correct-english,
+  .votes-english,
+  .progress-english,
+  .waiting-english,
+  .status-english,
+  .title-english,
+  .no-scores-english {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #ffd700;
+  }
+
+  .correct-french,
+  .correct-english {
+    font-size: 1.25rem;
+    color: white;
   }
 
   .question-text-english {

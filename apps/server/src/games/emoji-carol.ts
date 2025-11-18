@@ -5,19 +5,36 @@ import {
   EmojiCarolGameState,
   Player,
   calculateSpeedBonus,
+  EmojiCarolSettings,
 } from '@christmas/core';
 
 const DEFAULT_EMOJIS = ['🎅', '🎄', '⛄', '🎁', '🔔', '⭐', '🕯️', '🦌', '🤶', '🧝', '🎿', '⛷️'];
 
 export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
   private timePerRound: number = 15000; // 15 seconds
+  private settings: EmojiCarolSettings;
+  private uniquePickBonus: number = 5;
 
-  constructor(players: Map<string, Player>, timePerRoundSeconds?: number) {
+  constructor(players: Map<string, Player>, settings?: EmojiCarolSettings) {
     super(GameType.EMOJI_CAROL, players);
-    // Set time per round if provided (convert seconds to milliseconds)
-    if (timePerRoundSeconds !== undefined) {
-      this.timePerRound = timePerRoundSeconds * 1000;
-    }
+
+    // Use provided settings or defaults
+    this.settings = settings || {
+      roundCount: 8,
+      allowDuplicates: false,
+      uniquePickBonus: 5,
+      customEmojiSetId: null,
+      timePerRound: 15,
+    };
+
+    // Set time per round (convert seconds to milliseconds)
+    this.timePerRound = this.settings.timePerRound * 1000;
+
+    // Set unique pick bonus
+    this.uniquePickBonus = this.settings.uniquePickBonus;
+
+    // Update maxRounds based on settings (createInitialState is called before settings are set)
+    this.state.maxRounds = this.settings.roundCount;
   }
 
   protected createInitialState(): EmojiCarolGameState {
@@ -30,7 +47,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       gameType: GameType.EMOJI_CAROL,
       state: GameState.LOBBY,
       round: 0,
-      maxRounds: 8,
+      maxRounds: 8, // Default value, will be updated in constructor
       startedAt: 0,
       scores,
       availableEmojis: [...DEFAULT_EMOJIS],
@@ -57,7 +74,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
     this.state.playerPicks = {};
     this.state.pickTimes = {};
     this.state.roundStartTime = Date.now();
-    
+
     // Timer to end round
     this.setTimer(() => {
       this.endRound();
@@ -85,7 +102,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
 
     // Award points with speed bonus
     const speedBonusMultiplier = 0.5; // Lower multiplier for emoji game
-    
+
     Object.entries(picks).forEach(([playerId, emoji]) => {
       let points = 0;
 
@@ -97,7 +114,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       // Uniqueness bonus
       const pickCount = emojiCounts.get(emoji) || 0;
       if (pickCount === 1) {
-        points += 5;
+        points += this.uniquePickBonus;
       }
 
       // Speed bonus (only if they got majority or uniqueness bonus)
@@ -151,7 +168,9 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       this.state.pickTimes[newPlayerId] = this.state.pickTimes[oldPlayerId];
       delete this.state.pickTimes[oldPlayerId];
     }
-    console.log(`[EmojiCarol] Migrated pick from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`);
+    console.log(
+      `[EmojiCarol] Migrated pick from ${oldPlayerId.substring(0, 8)} to ${newPlayerId.substring(0, 8)}`
+    );
   }
 
   getClientState(playerId: string): any {

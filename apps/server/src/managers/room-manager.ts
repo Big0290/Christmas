@@ -11,6 +11,10 @@ import {
   TriviaQuestion,
   PriceItem,
   NaughtyPrompt,
+  TriviaRoyaleSettings,
+  PriceIsRightSettings,
+  NaughtyOrNiceSettings,
+  EmojiCarolSettings,
 } from '@christmas/core';
 import { BaseGameEngine } from '@christmas/core';
 import { GameFactory } from '../games/factory.js';
@@ -588,14 +592,15 @@ export class RoomManager {
     let customQuestions: TriviaQuestion[] | undefined;
     let customItems: PriceItem[] | undefined;
     let customPrompts: NaughtyPrompt[] | undefined;
-    let timeSettings: {
-      timePerQuestion?: number;
-      timeLimit?: number;
-      timePerRound?: number;
-    } | undefined;
+    let gameSettings:
+      | TriviaRoyaleSettings
+      | PriceIsRightSettings
+      | NaughtyOrNiceSettings
+      | EmojiCarolSettings
+      | undefined;
 
     if (this.supabase) {
-      // Try to get game settings to find customSetId and time settings
+      // Try to get game settings to find customSetId and all settings
       const { data: settingsData } = await this.supabase
         .from('game_settings')
         .select('settings')
@@ -607,15 +612,15 @@ export class RoomManager {
         const settings = settingsData.settings;
         const customSetId = settings.customQuestionSetId || settings.customItemSetId || settings.customPromptSetId;
         
-        // Extract time settings
-        if (settings.timePerQuestion !== undefined) {
-          timeSettings = { ...timeSettings, timePerQuestion: settings.timePerQuestion };
-        }
-        if (settings.timeLimit !== undefined) {
-          timeSettings = { ...timeSettings, timeLimit: settings.timeLimit };
-        }
-        if (settings.timePerRound !== undefined) {
-          timeSettings = { ...timeSettings, timePerRound: settings.timePerRound };
+        // Store full settings object based on game type
+        if (gameType === GameType.TRIVIA_ROYALE) {
+          gameSettings = settings as TriviaRoyaleSettings;
+        } else if (gameType === GameType.PRICE_IS_RIGHT) {
+          gameSettings = settings as PriceIsRightSettings;
+        } else if (gameType === GameType.NAUGHTY_OR_NICE) {
+          gameSettings = settings as NaughtyOrNiceSettings;
+        } else if (gameType === GameType.EMOJI_CAROL) {
+          gameSettings = settings as EmojiCarolSettings;
         }
         
         if (gameType === GameType.TRIVIA_ROYALE) {
@@ -752,7 +757,14 @@ export class RoomManager {
       }
     }
 
-    const game = GameFactory.createGame(gameType, room.players, customQuestions, customItems, customPrompts, timeSettings);
+    const game = GameFactory.createGame(
+      gameType,
+      room.players,
+      customQuestions,
+      customItems,
+      customPrompts,
+      gameSettings
+    );
     if (!game) return null;
 
     this.games.set(roomCode, game);

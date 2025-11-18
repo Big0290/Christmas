@@ -16,10 +16,17 @@
         <!-- Round End: Show results -->
         <div class="emoji-display-large">
           <div class="round-number">
-            Round {round}{#if maxRounds > 0}
-              / {maxRounds}{/if} - Results
+            <div class="round-label-bilingual">
+              <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if} - Résultats</span>
+              <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if} - Results</span>
+            </div>
           </div>
-          <h3 class="emoji-instruction-large">Most Popular Emojis:</h3>
+          <h3 class="emoji-instruction-large">
+            <div class="instruction-bilingual">
+              <span class="instruction-french">Emojis les plus populaires :</span>
+              <span class="instruction-english">Most Popular Emojis:</span>
+            </div>
+          </h3>
 
           <div class="emoji-results-grid-large">
             {#each (() => {
@@ -36,7 +43,12 @@
             })() as [emoji, count]}
               <div class="emoji-result-card-large">
                 <span class="emoji-display-large-host">{emoji}</span>
-                <span class="emoji-count-large">{count} {count === 1 ? 'vote' : 'votes'}</span>
+                <span class="emoji-count-large">
+                  <span class="count-bilingual">
+                    <span class="count-french">{count} {count === 1 ? 'vote' : 'votes'}</span>
+                    <span class="count-english">{count} {count === 1 ? 'vote' : 'votes'}</span>
+                  </span>
+                </span>
               </div>
             {/each}
           </div>
@@ -45,11 +57,16 @@
         <!-- STARTING/PLAYING: Show emoji selection -->
         <div class="emoji-display-large">
           <div class="round-number">
-            Round {round}{#if maxRounds > 0}
-              / {maxRounds}{/if}
+            <div class="round-label-bilingual">
+              <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if}</span>
+              <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if}</span>
+            </div>
           </div>
           <h3 class="emoji-instruction-large">
-            Pick an emoji that you think most people will choose!
+            <div class="instruction-bilingual">
+              <span class="instruction-french">Choisissez un emoji que vous pensez que la plupart des gens choisiront !</span>
+              <span class="instruction-english">Pick an emoji that you think most people will choose!</span>
+            </div>
           </h3>
 
           <div class="emoji-grid-large-host">
@@ -63,7 +80,10 @@
           {#if currentState === GameState.PLAYING}
             <div class="waiting-status-large">
               <p class="status-text-large">
-                {Object.keys($gameState?.playerPicks || {}).length} / {$players.length} players picked
+                <span class="status-bilingual">
+                  <span class="status-french">{Object.keys($gameState?.playerPicks || {}).length} / {$players.length} joueurs ont choisi</span>
+                  <span class="status-english">{Object.keys($gameState?.playerPicks || {}).length} / {$players.length} players picked</span>
+                </span>
               </p>
             </div>
           {/if}
@@ -72,7 +92,12 @@
     </div>
 
     <div class="emoji-leaderboard-section">
-      <h3 class="leaderboard-title-large">🏆 Leaderboard</h3>
+      <h3 class="leaderboard-title-large">
+        <span class="title-bilingual">
+          <span class="title-french">🏆 Classement</span>
+          <span class="title-english">🏆 Leaderboard</span>
+        </span>
+      </h3>
       <div class="leaderboard-list-large">
         {#each scoreboard as player, i}
           <div class="leaderboard-entry-large" class:top-three={i < 3}>
@@ -91,7 +116,12 @@
             <span class="leaderboard-score-large">{player.score}</span>
           </div>
         {:else}
-          <p class="no-scores-large">No scores yet</p>
+          <p class="no-scores-large">
+            <span class="no-scores-bilingual">
+              <span class="no-scores-french">Aucun score pour le moment</span>
+              <span class="no-scores-english">No scores yet</span>
+            </span>
+          </p>
         {/each}
       </div>
     </div>
@@ -145,6 +175,39 @@
     border-radius: 1rem;
   }
 
+  .round-label-bilingual,
+  .instruction-bilingual,
+  .status-bilingual,
+  .title-bilingual,
+  .no-scores-bilingual,
+  .count-bilingual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .round-label-french,
+  .instruction-french,
+  .status-french,
+  .title-french,
+  .no-scores-french,
+  .count-french {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .round-label-english,
+  .instruction-english,
+  .status-english,
+  .title-english,
+  .no-scores-english,
+  .count-english {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #ffd700;
+  }
+
   .emoji-instruction-large {
     font-size: 2rem;
     font-weight: bold;
@@ -154,6 +217,54 @@
     background: rgba(255, 255, 255, 0.1);
     border-radius: 1rem;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .instruction-french {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.25rem;
+  }
+
+  .instruction-english {
+    font-size: 2rem;
+    color: white;
+  }
+
+  .status-french {
+    font-size: 1.5rem;
+    color: rgba(255, 215, 0, 0.9);
+  }
+
+  .status-english {
+    font-size: 2rem;
+    color: #ffd700;
+  }
+
+  .title-french {
+    font-size: 2rem;
+    color: rgba(255, 215, 0, 0.9);
+  }
+
+  .title-english {
+    font-size: 2.5rem;
+    color: #ffd700;
+  }
+
+  .no-scores-french {
+    font-size: 1.25rem;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .no-scores-english {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .count-french,
+  .count-english {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #ffd700;
   }
 
   .emoji-grid-large-host {

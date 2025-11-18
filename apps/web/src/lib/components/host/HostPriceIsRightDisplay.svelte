@@ -13,13 +13,29 @@
   <div class="price-question-section">
     <h2 class="game-title">💰 Price Is Right</h2>
     {#if $gameState?.currentItem}
+      {@const itemTranslations = $gameState.currentItem.translations}
+      {@const frenchName =
+        typeof itemTranslations?.fr?.name === 'string'
+          ? itemTranslations.fr.name
+          : ''}
+      {@const englishName =
+        typeof itemTranslations?.en?.name === 'string'
+          ? itemTranslations.en.name
+          : $gameState.currentItem.name || ''}
+      {@const frenchDescription =
+        typeof itemTranslations?.fr?.description === 'string'
+          ? itemTranslations.fr.description
+          : ''}
+      {@const englishDescription =
+        typeof itemTranslations?.en?.description === 'string'
+          ? itemTranslations.en.description
+          : $gameState.currentItem.description || ''}
       <div class="item-display-large">
         <div class="round-number">
-          Round {round}{#if maxRounds > 0}
-            / {maxRounds}{/if}
-          {#if currentState === GameState.ROUND_END}
-            - Results
-          {/if}
+          <div class="round-label-bilingual">
+            <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+          </div>
         </div>
 
         {#if currentState === GameState.STARTING}
@@ -28,13 +44,25 @@
             {#if $gameState.currentItem.imageUrl}
               <img
                 src={$gameState.currentItem.imageUrl}
-                alt={$gameState.currentItem.name}
+                alt={englishName}
                 class="item-image-large"
               />
             {/if}
-            <h3 class="item-name-large">{$gameState.currentItem.name}</h3>
-            {#if $gameState.currentItem.description}
-              <p class="item-description-large">{$gameState.currentItem.description}</p>
+            <!-- Bilingual Item Name -->
+            {#if frenchName}
+              <h3 class="item-name-large item-name-french">{frenchName}</h3>
+            {/if}
+            <h3 class="item-name-large item-name-english">{englishName}</h3>
+            <!-- Bilingual Item Description -->
+            {#if frenchDescription || englishDescription}
+              <div class="item-description-bilingual">
+                {#if frenchDescription}
+                  <p class="item-description-large item-description-french">{frenchDescription}</p>
+                {/if}
+                {#if englishDescription}
+                  <p class="item-description-large item-description-english">{englishDescription}</p>
+                {/if}
+              </div>
             {/if}
           </div>
         {:else if currentState === GameState.PLAYING}
@@ -43,19 +71,36 @@
             {#if $gameState.currentItem.imageUrl}
               <img
                 src={$gameState.currentItem.imageUrl}
-                alt={$gameState.currentItem.name}
+                alt={englishName}
                 class="item-image-large"
               />
             {/if}
-            <h3 class="item-name-large">{$gameState.currentItem.name}</h3>
-            {#if $gameState.currentItem.description}
-              <p class="item-description-large">{$gameState.currentItem.description}</p>
+            <!-- Bilingual Item Name -->
+            {#if frenchName}
+              <h3 class="item-name-large item-name-french">{frenchName}</h3>
+            {/if}
+            <h3 class="item-name-large item-name-english">{englishName}</h3>
+            <!-- Bilingual Item Description -->
+            {#if frenchDescription || englishDescription}
+              <div class="item-description-bilingual">
+                {#if frenchDescription}
+                  <p class="item-description-large item-description-french">{frenchDescription}</p>
+                {/if}
+                {#if englishDescription}
+                  <p class="item-description-large item-description-english">{englishDescription}</p>
+                {/if}
+              </div>
             {/if}
           </div>
 
           {#if $gameState?.guesses && Object.keys($gameState.guesses).length > 0}
             <div class="guesses-section-large">
-              <h4 class="guesses-title-large">All Guesses:</h4>
+              <h4 class="guesses-title-large">
+                <span class="guesses-title-bilingual">
+                  <span class="guesses-title-french">Tous les suppositions :</span>
+                  <span class="guesses-title-english">All Guesses:</span>
+                </span>
+              </h4>
               <div class="guesses-list-large">
                 {#each (() => {
                   const guessesArray = Object.entries($gameState.guesses).map(([playerId, guess]) => {
@@ -78,7 +123,10 @@
 
           <div class="waiting-status-large">
             <p class="status-text-large">
-              {Object.keys($gameState?.guesses || {}).length} / {$players.length} players guessed
+              <span class="status-bilingual">
+                <span class="status-french">{Object.keys($gameState?.guesses || {}).length} / {$players.length} joueurs ont deviné</span>
+                <span class="status-english">{Object.keys($gameState?.guesses || {}).length} / {$players.length} players guessed</span>
+              </span>
             </p>
           </div>
         {:else if currentState === GameState.ROUND_END}
@@ -87,26 +135,48 @@
             {#if $gameState.currentItem.imageUrl}
               <img
                 src={$gameState.currentItem.imageUrl}
-                alt={$gameState.currentItem.name}
+                alt={englishName}
                 class="item-image-large"
               />
             {/if}
-            <h3 class="item-name-large">{$gameState.currentItem.name}</h3>
-            {#if $gameState.currentItem.description}
-              <p class="item-description-large">{$gameState.currentItem.description}</p>
+            <!-- Bilingual Item Name -->
+            {#if frenchName}
+              <h3 class="item-name-large item-name-french">{frenchName}</h3>
+            {/if}
+            <h3 class="item-name-large item-name-english">{englishName}</h3>
+            <!-- Bilingual Item Description -->
+            {#if frenchDescription || englishDescription}
+              <div class="item-description-bilingual">
+                {#if frenchDescription}
+                  <p class="item-description-large item-description-french">{frenchDescription}</p>
+                {/if}
+                {#if englishDescription}
+                  <p class="item-description-large item-description-english">{englishDescription}</p>
+                {/if}
+              </div>
             {/if}
           </div>
 
           {#if $gameState.currentItem.price}
             <div class="actual-price-display-large">
-              <h4 class="actual-price-label">Actual Price:</h4>
+              <h4 class="actual-price-label">
+                <span class="price-label-bilingual">
+                  <span class="price-label-french">Prix réel :</span>
+                  <span class="price-label-english">Actual Price:</span>
+                </span>
+              </h4>
               <div class="actual-price-value">${$gameState.currentItem.price.toFixed(2)}</div>
             </div>
           {/if}
 
           {#if $gameState?.guesses && Object.keys($gameState.guesses).length > 0}
             <div class="guesses-section-large">
-              <h4 class="guesses-title-large">All Guesses:</h4>
+              <h4 class="guesses-title-large">
+                <span class="guesses-title-bilingual">
+                  <span class="guesses-title-french">Tous les suppositions :</span>
+                  <span class="guesses-title-english">All Guesses:</span>
+                </span>
+              </h4>
               <div class="guesses-list-large">
                 {#each (() => {
                   const guessesArray = Object.entries($gameState.guesses).map(([playerId, guess]) => {
@@ -153,13 +223,19 @@
                         </div>
                         <div class="guess-difference-large">
                           {#if guessEntry.guess <= actualPrice}
-                            <span class="difference-text"
-                              >${(actualPrice - guessEntry.guess).toFixed(2)} under</span
-                            >
+                            <span class="difference-text">
+                              <span class="difference-bilingual">
+                                <span class="difference-french">${(actualPrice - guessEntry.guess).toFixed(2)} sous</span>
+                                <span class="difference-english">${(actualPrice - guessEntry.guess).toFixed(2)} under</span>
+                              </span>
+                            </span>
                           {:else}
-                            <span class="difference-text"
-                              >${(guessEntry.guess - actualPrice).toFixed(2)} over</span
-                            >
+                            <span class="difference-text">
+                              <span class="difference-bilingual">
+                                <span class="difference-french">${(guessEntry.guess - actualPrice).toFixed(2)} sur</span>
+                                <span class="difference-english">${(guessEntry.guess - actualPrice).toFixed(2)} over</span>
+                              </span>
+                            </span>
                           {/if}
                         </div>
                       </div>
@@ -169,7 +245,12 @@
               </div>
             </div>
           {:else}
-            <p class="no-guesses-large">No guesses yet</p>
+            <p class="no-guesses-large">
+              <span class="no-guesses-bilingual">
+                <span class="no-guesses-french">Aucune supposition pour le moment</span>
+                <span class="no-guesses-english">No guesses yet</span>
+              </span>
+            </p>
           {/if}
         {/if}
       </div>
@@ -178,7 +259,12 @@
 
   <!-- Right side: Full Leaderboard -->
   <div class="price-leaderboard-section">
-    <h3 class="leaderboard-title-large">🏆 Leaderboard</h3>
+    <h3 class="leaderboard-title-large">
+      <span class="title-bilingual">
+        <span class="title-french">🏆 Classement</span>
+        <span class="title-english">🏆 Leaderboard</span>
+      </span>
+    </h3>
     <div class="leaderboard-list-large">
       {#each scoreboard as player, i}
         <div class="leaderboard-entry-large" class:top-three={i < 3}>
@@ -197,7 +283,12 @@
           <span class="leaderboard-score-large">{player.score}</span>
         </div>
       {:else}
-        <p class="no-scores-large">No scores yet</p>
+        <p class="no-scores-large">
+          <span class="no-scores-bilingual">
+            <span class="no-scores-french">Aucun score pour le moment</span>
+            <span class="no-scores-english">No scores yet</span>
+          </span>
+        </p>
       {/each}
     </div>
   </div>
@@ -250,6 +341,63 @@
     border-radius: 1rem;
   }
 
+  .round-label-bilingual,
+  .price-label-bilingual,
+  .guesses-title-bilingual,
+  .status-bilingual,
+  .no-guesses-bilingual,
+  .title-bilingual,
+  .no-scores-bilingual,
+  .difference-bilingual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .round-label-french,
+  .price-label-french,
+  .guesses-title-french,
+  .status-french,
+  .no-guesses-french,
+  .title-french,
+  .no-scores-french,
+  .difference-french {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .round-label-english,
+  .price-label-english,
+  .guesses-title-english,
+  .status-english,
+  .no-guesses-english,
+  .title-english,
+  .no-scores-english,
+  .difference-english {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #ffd700;
+  }
+
+  .difference-french,
+  .difference-english {
+    font-size: 1.25rem;
+    color: #ffd700;
+  }
+
+  .price-label-french,
+  .price-label-english {
+    font-size: 1.75rem;
+    color: white;
+  }
+
+  .guesses-title-french,
+  .guesses-title-english {
+    font-size: 2rem;
+    color: #ffd700;
+  }
+
   .item-content-large {
     display: flex;
     flex-direction: column;
@@ -276,11 +424,40 @@
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
   }
 
+  .item-name-french {
+    font-size: 2rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.5rem;
+  }
+
+  .item-name-english {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: white;
+  }
+
+  .item-description-bilingual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
   .item-description-large {
     font-size: 1.5rem;
     text-align: center;
-    color: rgba(255, 255, 255, 0.9);
     line-height: 1.5;
+  }
+
+  .item-description-french {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.25rem;
+  }
+
+  .item-description-english {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.5rem;
   }
 
   .actual-price-display-large {
