@@ -4,26 +4,86 @@ import { createSupabaseAnonClient } from '$lib/supabase';
 import { getClientFingerprint } from '$lib/utils/fingerprint';
 import type { GuessingChallengePublic } from '@christmas/core';
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const load: PageServerLoad = async ({ params, fetch, url }) => {
   const roomCode = params.room?.toUpperCase();
   const challengeId = params.challengeId;
 
-  if (!roomCode || !challengeId) {
+  // Validate room code (should be 4 uppercase letters)
+  if (!roomCode || !/^[A-Z]{4}$/.test(roomCode)) {
+    throw redirect(302, '/');
+  }
+
+  // Validate challenge ID (should be a UUID)
+  if (!challengeId || !UUID_REGEX.test(challengeId)) {
     throw redirect(302, '/');
   }
 
   try {
     // Fetch challenge data from public API
-    const response = await fetch(`/api/guessing/${roomCode}/challenges/${challengeId}`);
+    const apiUrl = `/api/guessing/${roomCode}/challenges/${challengeId}`;
+    let response: Response;
     
-    if (!response.ok) {
-      console.error('[Guess Page] API error:', response.status, response.statusText);
+    try {
+      response = await fetch(apiUrl);
+    } catch (fetchError: any) {
+      console.error('[Guess Page] Fetch error:', fetchError);
+      console.error('[Guess Page] Fetch error details:', {
+        message: fetchError?.message,
+        stack: fetchError?.stack,
+        url: apiUrl,
+      });
       throw redirect(302, '/');
     }
     
-    const result = await response.json();
+    if (!response.ok) {
+      // If 404, challenge doesn't exist - redirect to home
+      if (response.status === 404) {
+        console.log('[Guess Page] Challenge not found (404)');
+        throw redirect(302, '/');
+      }
+      
+      // For 500 errors, try to get error details from response
+      let errorDetails: any = null;
+      try {
+        errorDetails = await response.json();
+      } catch (e) {
+        // Ignore JSON parse errors
+      }
+      
+      console.error('[Guess Page] API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorDetails,
+        url: apiUrl,
+      });
+      throw redirect(302, '/');
+    }
+    
+    let result: any;
+    try {
+      const responseText = await response.text();
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError: any) {
+        console.error('[Guess Page] JSON parse error:', parseError);
+        console.error('[Guess Page] Response text:', responseText);
+        throw redirect(302, '/');
+      }
+    } catch (readError: any) {
+      console.error('[Guess Page] Error reading response:', readError);
+      throw redirect(302, '/');
+    }
 
-    if (!result.success || !result.challenge) {
+    if (!result || !result.success || !result.challenge) {
+      console.error('[Guess Page] Invalid API response:', {
+        result,
+        hasResult: !!result,
+        hasSuccess: !!result?.success,
+        hasChallenge: !!result?.challenge,
+      });
       throw redirect(302, '/');
     }
 
@@ -37,12 +97,13 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
       throw error;
     }
     console.error('[Guess Page] Error loading challenge:', error);
+    console.error('[Guess Page] Error stack:', error?.stack);
     throw redirect(302, '/');
   }
 };
 
 export const actions: Actions = {
-  submitGuess: async ({ request, params, fetch }) => {
+  submitGuess: async ({ request, params, fetch, platform }) => {
     const roomCode = params.room?.toUpperCase();
     const challengeId = params.challengeId;
 
@@ -50,7 +111,9 @@ export const actions: Actions = {
       return fail(400, { error: 'Room code and challenge ID required' });
     }
 
-    const supabase = createSupabaseAnonClient();
+    // Get env vars from platform (Fly.io) or process.env
+    const env = (platform as any)?.env || process.env;
+    const supabase = createSupabaseAnonClient(env);
     if (!supabase) {
       return fail(500, { error: 'Database not available' });
     }
@@ -98,12 +161,17 @@ export const actions: Actions = {
 
       // Check for duplicate submission (unless multiple guesses allowed)
       if (!challenge.allow_multiple_guesses) {
-        const { data: existingSubmission } = await supabase
+        const { data: existingSubmission, error: checkError } = await supabase
           .from('guessing_submissions')
           .select('id')
           .eq('challenge_id', challengeId)
           .eq('client_fingerprint_hash', fingerprintHash)
-          .single();
+          .maybeSingle();
+
+        // If there's an error that's not "no rows found", log it
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('[Guess Submission] Error checking for duplicates:', checkError);
+        }
 
         if (existingSubmission) {
           return fail(400, { error: 'You have already submitted a guess for this challenge' });

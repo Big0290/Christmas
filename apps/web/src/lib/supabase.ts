@@ -279,18 +279,21 @@ export async function getAccessToken(): Promise<string | null> {
 /**
  * Create an anonymous Supabase client for server-side API routes
  * This is used for public endpoints that don't require authentication
+ * @param platformEnv Optional environment variables from SvelteKit platform (for Fly.io)
  */
-export function createSupabaseAnonClient(): SupabaseClient | null {
-  // Get URL and key - try both browser (import.meta.env) and server (process.env) environments
-  // In SvelteKit, PUBLIC_ prefixed vars are available via import.meta.env in both client and server
-  // But we can also fall back to process.env for server-side access
+export function createSupabaseAnonClient(platformEnv?: Record<string, string | undefined>): SupabaseClient | null {
+  // Get URL and key - try platform.env (Fly.io), then import.meta.env, then process.env
+  const env = platformEnv || (typeof process !== 'undefined' ? process.env : {});
+  
   const url = 
+    (platformEnv?.PUBLIC_SUPABASE_URL) ||
     (typeof import.meta !== 'undefined' && (import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_PUBLIC_SUPABASE_URL)) ||
-    (typeof process !== 'undefined' && process.env.PUBLIC_SUPABASE_URL) ||
+    (env.PUBLIC_SUPABASE_URL) ||
     '';
   const key = 
+    (platformEnv?.PUBLIC_SUPABASE_ANON_KEY) ||
     (typeof import.meta !== 'undefined' && (import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY)) ||
-    (typeof process !== 'undefined' && process.env.PUBLIC_SUPABASE_ANON_KEY) ||
+    (env.PUBLIC_SUPABASE_ANON_KEY) ||
     '';
   
   const finalUrl = url.trim() || undefined;
@@ -298,10 +301,12 @@ export function createSupabaseAnonClient(): SupabaseClient | null {
   
   if (!finalUrl || !finalKey) {
     console.error('[Supabase] Missing PUBLIC_SUPABASE_URL or PUBLIC_SUPABASE_ANON_KEY', {
+      hasPlatformEnv: !!platformEnv,
       hasImportMeta: typeof import.meta !== 'undefined',
       hasProcess: typeof process !== 'undefined',
+      urlFromPlatform: platformEnv?.PUBLIC_SUPABASE_URL,
       urlFromImportMeta: typeof import.meta !== 'undefined' ? import.meta.env.PUBLIC_SUPABASE_URL : undefined,
-      urlFromProcess: typeof process !== 'undefined' ? process.env.PUBLIC_SUPABASE_URL : undefined,
+      urlFromProcess: env.PUBLIC_SUPABASE_URL,
     });
     return null;
   }

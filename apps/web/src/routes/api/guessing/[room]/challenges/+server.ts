@@ -6,14 +6,16 @@ import type { GuessingChallengePublic } from '@christmas/core';
 /**
  * Public API endpoint to get all challenges for a room (without correct_answer)
  */
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, platform }) => {
   const roomCode = params.room?.toUpperCase();
   
   if (!roomCode) {
     return json({ success: false, error: 'Room code required' }, { status: 400 });
   }
 
-  const supabase = createSupabaseAnonClient();
+  // Get env vars from platform (Fly.io) or process.env
+  const env = (platform as any)?.env || process.env;
+  const supabase = createSupabaseAnonClient(env);
   if (!supabase) {
     return json({ success: false, error: 'Database not available' }, { status: 500 });
   }

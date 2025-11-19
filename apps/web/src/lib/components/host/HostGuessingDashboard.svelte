@@ -260,7 +260,7 @@
             <div class="detail-row">
               <span class="detail-label">{t('guessing.dashboard.multipleGuesses')}:</span>
               <span class="detail-value">
-                {challenge.allow_multiple_guesses ? t('common.yes') : t('common.no')}
+                {challenge.allow_multiple_guesses ? t('common.button.yes') : t('common.button.no')}
               </span>
             </div>
           </div>

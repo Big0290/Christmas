@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { RoomManager } from './managers/room-manager.js';
 import { AchievementManager } from './managers/achievement-manager.js';
 import { setupSocketHandlers } from './socket/handlers.js';
@@ -130,39 +130,95 @@ app.get('/api/background-music', async (req, res) => {
   }
 });
 
-// Serve SvelteKit static files in production
+// Serve SvelteKit app with SSR support in production
 if (process.env.NODE_ENV === 'production') {
-  const webBuildPath = path.join(__dirname, '../../web/build');
-  
-  // Serve static files
-  app.use(express.static(webBuildPath));
-  
-  // Handle SvelteKit routes - serve index.html for all non-API routes
-  // This allows client-side routing to work
-  app.get('*', (req, res, next) => {
-    // Don't serve index.html for API routes, socket.io, or health check
-    if (
-      req.path.startsWith('/socket.io') || 
-      req.path.startsWith('/health') ||
-      req.path.startsWith('/api') ||
-      req.path.startsWith('/config') ||
-      req.path.startsWith('/_app') // SvelteKit assets
-    ) {
-      return next();
-    }
-    
-    // Check if it's a file request (has extension)
-    if (req.path.includes('.')) {
-      return next();
-    }
-    
-    // Serve index.html for all routes (client-side routing)
-    res.sendFile(path.join(webBuildPath, 'index.html'), (err) => {
-      if (err) {
-        next(err);
+  // Use IIFE to handle async import
+  (async () => {
+    try {
+      // Import the SvelteKit handler (built by adapter-node)
+      // Convert to file:// URL for ES module import
+      const handlerPath = path.join(__dirname, '../../web/build/handler.js');
+      const handlerUrl = pathToFileURL(handlerPath).href;
+      console.log('[Server] Attempting to load handler from:', handlerUrl);
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore - Module path is dynamic and file doesn't exist at compile time
+      const handlerModule = await import(handlerUrl);
+      const handler = handlerModule.handler;
+      
+      console.log('[Server] ✅ Loaded SvelteKit SSR handler');
+      
+      // Serve SvelteKit app - it will handle all routes except those we've defined above
+      app.use((req, res, next) => {
+        // Don't pass to SvelteKit if it's a server route we handle
+        if (
+          req.path.startsWith('/socket.io') || 
+          req.path.startsWith('/health') ||
+          req.path.startsWith('/config')
+        ) {
+          return next();
+        }
+        
+        // Let SvelteKit handle everything else (including API routes)
+        handler(req, res, next);
+      });
+    } catch (error) {
+      console.error('[Server] Failed to load SvelteKit handler:', error);
+      console.error('[Server] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      console.error('[Server] Falling back to static file serving');
+      
+      // Fallback to static file serving if handler not available
+      // With adapter-node, static files are in build/client
+      const webBuildPath = path.join(__dirname, '../../web/build');
+      const staticPath = path.join(webBuildPath, 'client');
+      
+      // Check if client directory exists (adapter-node structure)
+      const fs = await import('fs/promises');
+      try {
+        await fs.access(staticPath);
+        console.log('[Server] Serving static files from:', staticPath);
+        app.use(express.static(staticPath));
+      } catch {
+        // Fallback to build root if client doesn't exist
+        console.log('[Server] Serving static files from:', webBuildPath);
+        app.use(express.static(webBuildPath));
       }
-    });
-  });
+      
+      app.get('*', (req, res, next) => {
+        if (
+          req.path.startsWith('/socket.io') || 
+          req.path.startsWith('/health') ||
+          req.path.startsWith('/api') ||
+          req.path.startsWith('/config') ||
+          req.path.startsWith('/_app')
+        ) {
+          return next();
+        }
+        
+        if (req.path.includes('.')) {
+          return next();
+        }
+        
+        // Try to serve index.html from client directory first
+        const indexPath = path.join(staticPath, 'index.html');
+        res.sendFile(indexPath, (err) => {
+          if (err) {
+            // If client/index.html doesn't exist, try build root
+            const rootIndexPath = path.join(webBuildPath, 'index.html');
+            res.sendFile(rootIndexPath, (err2) => {
+              if (err2) {
+                // Last resort: try to find any index.html
+                console.error('[Server] Could not find index.html in:', staticPath, 'or', webBuildPath);
+                res.status(404).send('Page not found');
+              }
+            });
+          }
+        });
+      });
+    }
+  })();
 }
 
 // HTTP server

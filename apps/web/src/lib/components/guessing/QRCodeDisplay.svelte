@@ -67,7 +67,7 @@
   {/if}
 
   <div class="qrcode-url">
-    <input type="text" value={url} readonly class="url-input" />
+    <input type="text" value={url} readonly class="url-input" data-sveltekit-preload-data="off" />
     <button type="button" on:click={copyLink} class="copy-btn" class:copied={copied}>
       {#if copied}
         ✓ {t('common.button.copied')}

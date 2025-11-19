@@ -5,13 +5,19 @@
   import { onMount } from 'svelte';
   import { getClientFingerprint } from '$lib/utils/fingerprint';
   import { t } from '$lib/i18n';
+  import { goto } from '$app/navigation';
   import type { GuessingChallengePublic } from '@christmas/core';
   import type { PageData } from './$types';
 
   export let data: PageData;
 
-  let challenge: GuessingChallengePublic = data.challenge;
-  let roomCode: string = data.roomCode;
+  // Check if data is valid - redirect if missing
+  $: if (data && (!data.challenge || !data.roomCode)) {
+    goto('/');
+  }
+
+  $: challenge = data?.challenge;
+  $: roomCode = data?.roomCode;
   let playerName: string = '';
   let guess: string | number = '';
   let fingerprint: string = '';
@@ -32,12 +38,18 @@
 </script>
 
 <svelte:head>
-  <title>{challenge.title} - Guessing Game</title>
+  <title>{challenge?.title || 'Guessing Game'} - Guessing Game</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="sveltekit:preload-data" content="off" />
 </svelte:head>
 
 <div class="guess-container">
-  {#if submitted}
+  {#if !challenge || !roomCode}
+    <div class="loading-screen">
+      <div class="spinner"></div>
+      <p>{t('guessing.loading') || 'Loading challenge...'}</p>
+    </div>
+  {:else if submitted}
     <div class="success-screen">
       <div class="success-icon">✓</div>
       <h1 class="success-title">{t('guessing.submit.success')}</h1>
@@ -99,7 +111,7 @@
             return;
           }
 
-          if (guessValue < challenge.min_guess || guessValue > challenge.max_guess) {
+          if (challenge && (guessValue < challenge.min_guess || guessValue > challenge.max_guess)) {
             error = `Guess must be between ${challenge.min_guess} and ${challenge.max_guess}`;
             cancel();
             return;
@@ -153,13 +165,13 @@
             name="guess"
             type="number"
             bind:value={guess}
-            min={challenge.min_guess}
-            max={challenge.max_guess}
+            min={challenge?.min_guess || 0}
+            max={challenge?.max_guess || 100}
             step="0.01"
             class="guess-input"
-            placeholder={`${challenge.min_guess} - ${challenge.max_guess}`}
+            placeholder={challenge ? `${challenge.min_guess} - ${challenge.max_guess}` : 'Enter your guess'}
             required
-            disabled={submitting || !fingerprint}
+            disabled={submitting || !fingerprint || !challenge}
             inputmode="decimal"
           />
         </div>
@@ -482,6 +494,31 @@
     color: rgba(255, 255, 255, 0.7);
     margin-top: 1rem;
     font-style: italic;
+  }
+
+  .loading-screen {
+    max-width: 500px;
+    width: 100%;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 3px solid var(--christmas-gold);
+    border-radius: 1rem;
+    padding: 3rem 2rem;
+    box-shadow: 
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 0 40px rgba(255, 215, 0, 0.3);
+  }
+
+  .loading-screen .spinner {
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 1.5rem;
+  }
+
+  .loading-screen p {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   /* Mobile optimizations */
