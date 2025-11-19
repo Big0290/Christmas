@@ -132,7 +132,7 @@ export function setupGuessingHandlers(
               }, {
                 onConflict: 'code'
               })
-              .select('code')
+              .select('code, is_active')
               .single();
 
             if (insertError) {

@@ -1020,20 +1020,22 @@ export class RoomManager {
 
     // Mark room as inactive in database (so host can create a new room)
     if (this.supabase) {
-      this.supabase
-        .from('rooms')
-        .update({ is_active: false })
-        .eq('code', code)
-        .then(({ error }) => {
+      (async () => {
+        try {
+          const { error } = await this.supabase!
+            .from('rooms')
+            .update({ is_active: false })
+            .eq('code', code);
+          
           if (error) {
             console.error('[Room] Failed to mark room as inactive in database:', error);
           } else {
             console.log(`[Room] Marked room ${code} as inactive in database`);
           }
-        })
-        .catch((err: any) => {
+        } catch (err: any) {
           console.error('[Room] Error marking room as inactive:', err);
-        });
+        }
+      })();
     }
 
     // Remove all player mappings
