@@ -12,6 +12,7 @@
   import ShareRoom from '$lib/components/room/ShareRoom.svelte';
   import Jukebox from '$lib/components/room/Jukebox.svelte';
   import GameSettingsModal from '$lib/components/room/GameSettingsModal.svelte';
+  import HostGuessingDashboard from '$lib/components/host/HostGuessingDashboard.svelte';
   import { t, language } from '$lib/i18n';
   import { get } from 'svelte/store';
 
@@ -29,6 +30,7 @@
   let showSettingsModal = false;
   let selectedGameForSettings: GameType | null = null;
   let games: Array<{ type: GameType; name: string; desc: string }> = [];
+  let activeRoomTab: 'games' | 'guessing' = 'games';
   
   // Debug logging (dev mode only)
   $: if (import.meta.env.DEV) {
@@ -136,6 +138,20 @@
       if (browser) {
         const hostToken = localStorage.getItem('christmas_hostToken');
         const savedRoomCode = localStorage.getItem('christmas_roomCode');
+        const justCreatedRoom = sessionStorage.getItem('just_created_room');
+
+        // If we just created this room, we're already connected - just verify and skip reconnect
+        if (justCreatedRoom === roomCode) {
+          console.log('[Room] Just created this room - already connected via create_room, skipping reconnect');
+          sessionStorage.removeItem('just_created_room'); // Clear flag
+          verifyingConnection = false;
+          
+          // Room was just created, so we're already in the room
+          // The create_room handler already joined the socket to the room
+          // Just load settings and we're done
+          loadRoomSettings();
+          return;
+        }
 
         if (hostToken && savedRoomCode === roomCode) {
           console.log(`[Room] Verifying host connection (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`);
@@ -328,7 +344,7 @@
 </svelte:head>
 
 <div class="room-page min-h-screen p-4 md:p-6 lg:p-8">
-  <div class="max-w-7xl mx-auto">
+  <div>
     <!-- Header -->
     <div class="text-center mb-8 md:mb-12">
       <h1 class="text-5xl md:text-7xl lg:text-8xl font-bold text-christmas-gold mb-4 drop-shadow-2xl">
@@ -457,43 +473,73 @@
         </div>
       </div>
 
-      <!-- Right Column: Game Selection -->
+      <!-- Right Column: Games or Guessing Dashboard -->
       <div class="lg:col-span-1">
-        <div class="card frosted-glass">
-          <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5 text-center">🎮 {t('room.selectGame')}</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3 md:gap-4">
-            {#each games as game}
-              {#if game.type}
-                <GameTile
-                  gameType={game.type}
-                  name={game.name}
-                  description={game.desc}
-                  playerCount={$players.length}
-                  isHost={isHost}
-                  selected={selectedGame === game.type}
-                  onSelect={() => selectGame(game.type)}
-                  onStart={startGame}
-                />
-              {/if}
-            {/each}
+        {#if isHost}
+          <!-- Tab Navigation for Host -->
+          <div class="mb-4 md:mb-6">
+            <div class="flex gap-2 md:gap-3 rounded-lg bg-white/10 p-1 backdrop-blur-sm">
+              <button
+                type="button"
+                class="flex-1 px-3 md:px-4 py-2 md:py-3 rounded-md font-bold text-base md:text-lg transition-all {activeRoomTab === 'games' ? 'bg-christmas-red text-white' : 'text-white/70 hover:bg-white/10'}"
+                on:click={() => (activeRoomTab = 'games')}
+              >
+                🎮 {t('room.tabs.games')}
+              </button>
+              <button
+                type="button"
+                class="flex-1 px-3 md:px-4 py-2 md:py-3 rounded-md font-bold text-base md:text-lg transition-all {activeRoomTab === 'guessing' ? 'bg-christmas-red text-white' : 'text-white/70 hover:bg-white/10'}"
+                on:click={() => (activeRoomTab = 'guessing')}
+              >
+                🎯 {t('room.tabs.guessing')}
+              </button>
+            </div>
           </div>
+        {/if}
 
-          {#if isHost && selectedGame}
-            <div class="mt-6 text-center">
-              {#if $players.length < 2}
-                <p class="text-xl md:text-2xl text-yellow-300 mb-4">
-                  ⚠️ {t('room.needPlayers')}
+        {#if activeRoomTab === 'guessing' && isHost}
+          <!-- Guessing Dashboard -->
+          <div class="card frosted-glass min-h-[600px]">
+            <HostGuessingDashboard {roomCode} {origin} />
+          </div>
+        {:else}
+          <!-- Game Selection -->
+          <div class="card frosted-glass">
+            <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5 text-center">🎮 {t('room.selectGame')}</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3 md:gap-4">
+              {#each games as game}
+                {#if game.type}
+                  <GameTile
+                    gameType={game.type}
+                    name={game.name}
+                    description={game.desc}
+                    playerCount={$players.length}
+                    isHost={isHost}
+                    selected={selectedGame === game.type}
+                    onSelect={() => selectGame(game.type)}
+                    onStart={startGame}
+                  />
+                {/if}
+              {/each}
+            </div>
+
+            {#if isHost && selectedGame}
+              <div class="mt-6 text-center">
+                {#if $players.length < 2}
+                  <p class="text-xl md:text-2xl text-yellow-300 mb-4">
+                    ⚠️ {t('room.needPlayers')}
+                  </p>
+                {/if}
+              </div>
+            {:else if !isHost}
+              <div class="mt-6 p-6 bg-white/10 rounded-xl text-center">
+                <p class="text-xl md:text-2xl text-white/80">
+                  {t('room.waitingHost')}
                 </p>
-              {/if}
-            </div>
-          {:else if !isHost}
-            <div class="mt-6 p-6 bg-white/10 rounded-xl text-center">
-              <p class="text-xl md:text-2xl text-white/80">
-                {t('room.waitingHost')}
-              </p>
-            </div>
-          {/if}
-        </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
     </div>
   </div>

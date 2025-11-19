@@ -13,30 +13,27 @@
   <div class="price-question-section">
     <h2 class="game-title">💰 Price Is Right</h2>
     {#if $gameState?.currentItem || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
-      {#if $gameState?.currentItem}
-        {@const itemTranslations = $gameState.currentItem.translations}
-        {@const frenchName =
-          typeof itemTranslations?.fr?.name === 'string'
-            ? itemTranslations.fr.name
-            : ''}
-        {@const englishName =
-          typeof itemTranslations?.en?.name === 'string'
-            ? itemTranslations.en.name
-            : $gameState.currentItem.name || ''}
-        {@const frenchDescription =
-          typeof itemTranslations?.fr?.description === 'string'
-            ? itemTranslations.fr.description
-            : ''}
-        {@const englishDescription =
-          typeof itemTranslations?.en?.description === 'string'
-            ? itemTranslations.en.description
-            : $gameState.currentItem.description || ''}
-      {:else}
-        {@const frenchName = ''}
-        {@const englishName = ''}
-        {@const frenchDescription = ''}
-        {@const englishDescription = ''}
-      {/if}
+      {@const itemTranslations = $gameState?.currentItem?.translations}
+      {@const frenchName =
+        $gameState?.currentItem && typeof itemTranslations?.fr?.name === 'string'
+          ? itemTranslations.fr.name
+          : ''}
+      {@const englishName =
+        $gameState?.currentItem
+          ? (typeof itemTranslations?.en?.name === 'string'
+              ? itemTranslations.en.name
+              : $gameState.currentItem.name || '')
+          : ''}
+      {@const frenchDescription =
+        $gameState?.currentItem && typeof itemTranslations?.fr?.description === 'string'
+          ? itemTranslations.fr.description
+          : ''}
+      {@const englishDescription =
+        $gameState?.currentItem
+          ? (typeof itemTranslations?.en?.description === 'string'
+              ? itemTranslations.en.description
+              : $gameState.currentItem.description || '')
+          : ''}
       <div class="item-display-large">
         <div class="round-number">
           <div class="round-label-bilingual">
@@ -45,10 +42,17 @@
           </div>
         </div>
 
-        {#if currentState === GameState.STARTING}
+        {#if currentState === GameState.STARTING && !$gameState?.currentItem}
+          <!-- STARTING: Show loading/placeholder -->
+          <div class="item-content-large">
+            <div class="loading-placeholder">
+              <p class="loading-text">Loading item...</p>
+            </div>
+          </div>
+        {:else if currentState === GameState.STARTING}
           <!-- STARTING: Show item without price -->
           <div class="item-content-large">
-            {#if $gameState.currentItem.imageUrl}
+            {#if $gameState?.currentItem?.imageUrl}
               <img
                 src={$gameState.currentItem.imageUrl}
                 alt={englishName}
@@ -937,6 +941,20 @@
     padding: 2rem;
     font-size: 1.5rem;
     font-style: italic;
+  }
+
+  .loading-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    padding: 2rem;
+  }
+
+  .loading-text {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
   }
 
   /* Responsive Design */

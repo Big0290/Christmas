@@ -230,8 +230,23 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
       );
     }
 
+    // Validate that we have items
+    if (this.items.length === 0) {
+      console.error('[PriceIsRightGame] No items available after filtering!');
+      // Fallback to all items if filtering resulted in empty array
+      this.items = shuffleArray(DEFAULT_ITEMS);
+    }
+
     // Update maxRounds based on roundCount setting
     this.state.maxRounds = Math.min(this.items.length, this.settings.roundCount);
+    
+    if (this.state.maxRounds === 0) {
+      console.error('[PriceIsRightGame] maxRounds is 0! Items:', this.items.length, 'roundCount:', this.settings.roundCount);
+      // Ensure at least 1 round
+      this.state.maxRounds = Math.min(this.items.length, 1);
+    }
+    
+    console.log(`[PriceIsRightGame] Initialized with ${this.items.length} items, ${this.state.maxRounds} rounds`);
 
     // Set scoring mode
     this.scoringMode = this.settings.scoringMode;

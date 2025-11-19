@@ -22,50 +22,182 @@
   let avatarStyle: 'festive' | 'emoji' = 'festive';
   let showLanguageModal = false;
   let pendingJoinResponse: any = null;
+  let isRedirecting = false; // Prevent multiple redirect attempts
 
   const festiveAvatars = [
-    '🎅', '🤶', '🎄', '⛄', '🦌', '🎁', '🔔', '⭐', '🕯️', '🎿',
-    '🧝', '🧙', '👼', '🎺', '🎻', '🎸', '🥁', '🎷', '🎉', '🎊'
+    '🎅',
+    '🤶',
+    '🎄',
+    '⛄',
+    '🦌',
+    '🎁',
+    '🔔',
+    '⭐',
+    '🕯️',
+    '🎿',
+    '🧝',
+    '🧙',
+    '👼',
+    '🎺',
+    '🎻',
+    '🎸',
+    '🥁',
+    '🎷',
+    '🎉',
+    '🎊',
   ];
 
   const emojiAvatars = [
-    '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊',
-    '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '😚', '🙂', '🤗'
+    '😀',
+    '😁',
+    '😂',
+    '🤣',
+    '😃',
+    '😄',
+    '😅',
+    '😆',
+    '😉',
+    '😊',
+    '😋',
+    '😎',
+    '😍',
+    '😘',
+    '🥰',
+    '😗',
+    '😙',
+    '😚',
+    '🙂',
+    '🤗',
   ];
 
-  async function checkMyRoom() {
+  // Helper functions to safely check if values are valid non-empty strings
+  function isValidPlayerName(name: any): boolean {
+    try {
+      if (name == null) return false; // null or undefined
+      if (typeof name !== 'string') return false;
+      const trimmed = name.trim();
+      return trimmed.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  function isValidRoomCode(code: any): boolean {
+    try {
+      if (code == null) return false; // null or undefined
+      if (typeof code !== 'string') return false;
+      const trimmed = code.trim();
+      return trimmed.length === 4;
+    } catch {
+      return false;
+    }
+  }
+
+  async function checkMyRoom(autoRedirect: boolean = true): Promise<void> {
     if (!$authUser || !$socket || !$connected) {
       myRoom = null;
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      loadingMyRoom = true;
+      $socket.emit('get_my_room', async (response: any) => {
+        loadingMyRoom = false;
+        if (response && response.success && response.room) {
+          myRoom = {
+            code: response.room.code,
+            hostToken: response.room.hostToken,
+          };
+
+          // Auto-redirect to existing room to prevent multiple room creation
+          if (autoRedirect && response.room.isActive && !isRedirecting) {
+            isRedirecting = true; // Prevent multiple redirect attempts
+            console.log('[Landing] Found existing active room, redirecting:', response.room.code);
+            await reconnectAndRedirect(response.room.code, response.room.hostToken);
+          }
+        } else {
+          myRoom = null;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async function reconnectAndRedirect(roomCode: string, hostToken: string) {
+    if (!isValidPlayerName(playerName) && browser) {
+      // Try to load saved name
+      const savedName = localStorage.getItem('christmas_playerName');
+      if (savedName) {
+        playerName = String(savedName);
+      }
+    }
+
+    // Ensure we have a player name
+    if (!isValidPlayerName(playerName)) {
+      console.warn('[Landing] No player name set, cannot auto-redirect');
       return;
     }
 
-    loadingMyRoom = true;
-    $socket.emit('get_my_room', (response: any) => {
-      loadingMyRoom = false;
-      if (response && response.success && response.room) {
-        myRoom = {
-          code: response.room.code,
-          hostToken: response.room.hostToken
-        };
+    if (!$socket || !$connected) {
+      console.warn('[Landing] Socket not connected, waiting...');
+      // Wait a bit for connection
+      setTimeout(() => {
+        if ($socket && $connected) {
+          reconnectAndRedirect(roomCode, hostToken);
+        }
+      }, 1000);
+      return;
+    }
+
+    loading = true;
+    error = '';
+
+    // Get auth token
+    const authToken = await getAccessToken();
+    if (!authToken) {
+      loading = false;
+      error = t('home.errors.mustSignIn');
+      return;
+    }
+
+    // Reconnect host to room
+    $socket.emit('reconnect_host', roomCode, hostToken, $language, (response: any) => {
+      loading = false;
+      if (response && response.success) {
+        if (browser) {
+          localStorage.setItem('christmas_playerName', playerName);
+          localStorage.setItem('christmas_role', 'host');
+          localStorage.setItem('christmas_roomCode', roomCode);
+          localStorage.setItem('christmas_hostToken', hostToken);
+          if (selectedAvatar) {
+            localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
+            localStorage.setItem('christmas_avatarStyle', avatarStyle);
+          }
+          sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+          sessionStorage.setItem(`host_${roomCode}`, 'true');
+        }
+        console.log('[Landing] ✅ Successfully reconnected to room, redirecting:', roomCode);
+        goto(`/room/${roomCode}`);
       } else {
-        myRoom = null;
+        error = response?.error || t('home.errors.failedReconnect');
+        console.error('[Landing] ⚠️ Failed to reconnect:', response?.error);
       }
     });
   }
 
   onMount(() => {
     connectSocket();
-    
+
     // Load saved player name and avatar from localStorage
     if (browser) {
       const savedName = localStorage.getItem('christmas_playerName');
       if (savedName) {
-        playerName = savedName;
+        playerName = String(savedName);
       }
       const savedAvatar = localStorage.getItem('christmas_preferredAvatar');
       const savedStyle = localStorage.getItem('christmas_avatarStyle');
       if (savedAvatar) {
-        selectedAvatar = savedAvatar;
+        selectedAvatar = String(savedAvatar);
         avatarStyle = (savedStyle as 'festive' | 'emoji') || 'festive';
       }
     }
@@ -81,69 +213,61 @@
         }, 3000);
       } else if (isConnected) {
         error = ''; // Clear error when connected
-        // Check for user's room when connected
-        if ($authUser) {
-          checkMyRoom();
-        }
+        // Note: Room check will be handled by the reactive statement to avoid duplicate checks
       }
     });
 
     return () => unsubscribe();
   });
 
-  // Check for room when auth state changes
+  // Check for room when auth state changes (with auto-redirect)
+  // Only check once to avoid multiple redirect attempts
+  let lastCheckedUserId: string | null = null;
+  let isCheckingRoom = false;
   $: {
-    if ($authUser && $connected && $socket) {
-      checkMyRoom();
-    } else {
+    if (
+      $authUser &&
+      $connected &&
+      $socket &&
+      $authUser.id !== lastCheckedUserId &&
+      !isCheckingRoom
+    ) {
+      lastCheckedUserId = $authUser.id;
+      isCheckingRoom = true;
+      checkMyRoom(true)
+        .then(() => {
+          // Reset flag after a delay to allow for potential redirects
+          setTimeout(() => {
+            isCheckingRoom = false;
+          }, 1000);
+        })
+        .catch(() => {
+          isCheckingRoom = false;
+        }); // Auto-redirect to existing room
+    } else if (!$authUser || !$connected) {
       myRoom = null;
+      lastCheckedUserId = null;
+      isRedirecting = false;
+      isCheckingRoom = false;
     }
   }
 
   async function goToMyRoom() {
     if (!myRoom) return;
-    
-    loading = true;
-    error = '';
 
-    if (!$socket || !$connected) {
-      error = t('home.errors.notConnected');
-      connectSocket();
-      loading = false;
-      return;
-    }
-
-    // Get auth token
-    const authToken = await getAccessToken();
-    if (!authToken) {
-      loading = false;
-      error = t('home.errors.mustSignIn');
-      return;
-    }
-
-    // Reconnect host to room
-    $socket.emit('reconnect_host', myRoom.code, myRoom.hostToken, $language, (response: any) => {
-      loading = false;
-      if (response && response.success) {
-        if (browser) {
-          localStorage.setItem('christmas_playerName', playerName);
-          localStorage.setItem('christmas_role', 'host');
-          localStorage.setItem('christmas_roomCode', myRoom!.code);
-          localStorage.setItem('christmas_hostToken', myRoom!.hostToken);
-          if (selectedAvatar) {
-            localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
-            localStorage.setItem('christmas_avatarStyle', avatarStyle);
-          }
-        }
-        goto(`/room/${myRoom!.code}`);
-      } else {
-        error = response?.error || t('home.errors.failedReconnect');
-      }
-    });
+    // Use the reconnectAndRedirect function to avoid duplication
+    await reconnectAndRedirect(myRoom.code, myRoom.hostToken);
   }
 
   async function createRoom() {
-    if (!playerName.trim()) {
+    // Prevent creating a new room if user already has an active room
+    if (myRoom) {
+      console.warn('[Landing] User already has a room, redirecting instead of creating new one');
+      await reconnectAndRedirect(myRoom.code, myRoom.hostToken);
+      return;
+    }
+
+    if (!isValidPlayerName(playerName)) {
       error = t('home.errors.enterName');
       return;
     }
@@ -171,7 +295,10 @@
       const client = supabase.getSupabaseClient();
       if (client) {
         // Refresh session to get latest token
-        const { data: { session }, error } = await client.auth.getSession();
+        const {
+          data: { session },
+          error,
+        } = await client.auth.getSession();
         if (error) {
           console.error('[CreateRoom] Error refreshing session:', error);
         }
@@ -184,7 +311,7 @@
         }
       }
     }
-    
+
     const authToken = await getAccessToken();
     if (!authToken) {
       clearTimeout(timeout);
@@ -195,71 +322,77 @@
       }, 2000);
       return;
     }
-    
-    console.log('[CreateRoom] Sending create_room request with token:', authToken.substring(0, 20) + '...');
 
-    $socket.emit('create_room', playerName, authToken, $language, async (response: any) => {
-      clearTimeout(timeout);
-      
-      if (response && response.success) {
-        // Store player name and room code for persistence
-        if (browser) {
-          localStorage.setItem('christmas_playerName', playerName);
-          localStorage.setItem('christmas_role', 'host');
-          localStorage.setItem('christmas_roomCode', response.roomCode);
-          if (selectedAvatar) {
-            localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
-            localStorage.setItem('christmas_avatarStyle', avatarStyle);
-          }
-          if (response.hostToken) {
-            localStorage.setItem('christmas_hostToken', response.hostToken);
-          }
-          sessionStorage.setItem('christmas_playerId', $socket?.id || '');
-        }
-        
-        // Store host status - host is not in players list
-        if (response.isHost) {
-          sessionStorage.setItem(`host_${response.roomCode}`, 'true');
-        }
-        
-        // Immediately reconnect host to ensure room connection is established
-        if ($socket && response.hostToken && response.roomCode) {
-          console.log('[CreateRoom] Immediately reconnecting host to room:', response.roomCode);
-          $socket.emit('reconnect_host', response.roomCode, response.hostToken, $language, (reconnectResponse: any) => {
-            loading = false;
-            if (reconnectResponse && reconnectResponse.success) {
-              console.log('[CreateRoom] ✅ Host successfully connected to room before navigation');
-              goto(`/room/${response.roomCode}`);
-            } else {
-              console.error('[CreateRoom] ⚠️ Failed to reconnect host, but proceeding anyway:', reconnectResponse?.error);
-              goto(`/room/${response.roomCode}`);
+    console.log(
+      '[CreateRoom] Sending create_room request with token:',
+      authToken.substring(0, 20) + '...'
+    );
+
+    $socket.emit(
+      'create_room',
+      typeof playerName === 'string' ? playerName : String(playerName || ''),
+      authToken,
+      $language,
+      async (response: any) => {
+        clearTimeout(timeout);
+
+        if (response && response.success) {
+          // Store player name and room code for persistence
+          if (browser) {
+            localStorage.setItem('christmas_playerName', playerName);
+            localStorage.setItem('christmas_role', 'host');
+            localStorage.setItem('christmas_roomCode', response.roomCode);
+            if (selectedAvatar) {
+              localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
+              localStorage.setItem('christmas_avatarStyle', avatarStyle);
             }
-          });
+            if (response.hostToken) {
+              localStorage.setItem('christmas_hostToken', response.hostToken);
+            }
+            sessionStorage.setItem('christmas_playerId', $socket?.id || '');
+          }
+
+          // Store host status - host is not in players list
+          if (response.isHost) {
+            sessionStorage.setItem(`host_${response.roomCode}`, 'true');
+          }
+
+          // Mark that we just created this room so the room page knows we're already connected
+          if (browser) {
+            sessionStorage.setItem('just_created_room', response.roomCode);
+          }
+
+          // Navigate directly - the room was just created so we're already connected
+          loading = false;
+          console.log('[CreateRoom] ✅ Room created, navigating to room page:', response.roomCode);
+          goto(`/room/${response.roomCode}`);
         } else {
           loading = false;
-          console.warn('[CreateRoom] ⚠️ Missing socket or token, navigating anyway');
-          goto(`/room/${response.roomCode}`);
+          error = response?.error || t('home.errors.failedCreate');
         }
-      } else {
-        loading = false;
-        error = response?.error || t('home.errors.failedCreate');
       }
-    });
+    );
   }
 
   function handleLanguageSelected(lang: 'en' | 'fr') {
     if (!pendingJoinResponse) return;
-    
+
     // Update language if it changed
     if ($language !== lang) {
       language.set(lang);
     }
-    
+
     if (browser) {
       // Store player name and room code for persistence
       localStorage.setItem('christmas_playerName', playerName);
       localStorage.setItem('christmas_role', 'player');
-      localStorage.setItem('christmas_roomCode', pendingJoinResponse.roomCode || roomCode.toUpperCase());
+      localStorage.setItem(
+        'christmas_roomCode',
+        pendingJoinResponse.roomCode ||
+          (typeof roomCode === 'string'
+            ? roomCode.toUpperCase()
+            : String(roomCode || '').toUpperCase())
+      );
       if (selectedAvatar) {
         localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
         localStorage.setItem('christmas_avatarStyle', avatarStyle);
@@ -269,23 +402,27 @@
       }
       sessionStorage.setItem('christmas_playerId', $socket?.id || '');
     }
-    
+
     // Close modal and navigate to play page
     showLanguageModal = false;
-    const normalizedCode = pendingJoinResponse.roomCode || roomCode.toUpperCase();
+    const normalizedCode =
+      pendingJoinResponse.roomCode ||
+      (typeof roomCode === 'string'
+        ? roomCode.toUpperCase()
+        : String(roomCode || '').toUpperCase());
     goto(`/play/${normalizedCode}`);
-    
+
     // Clear pending response
     pendingJoinResponse = null;
   }
 
   async function joinRoom() {
-    if (!playerName.trim()) {
+    if (!isValidPlayerName(playerName)) {
       error = t('home.errors.enterName');
       return;
     }
 
-    if (!roomCode.trim() || roomCode.length !== 4) {
+    if (!isValidRoomCode(roomCode)) {
       error = t('home.errors.validCode');
       return;
     }
@@ -307,20 +444,27 @@
       error = t('home.errors.timeout');
     }, 10000); // 10 second timeout
 
-    $socket.emit('join_room', roomCode.toUpperCase(), playerName, selectedAvatar || undefined, $language, (response: any) => {
-      clearTimeout(timeout);
-      loading = false;
-      
-      if (response && response.success) {
-        // Store the response temporarily
-        pendingJoinResponse = response;
-        
-        // Show language selection modal
-        showLanguageModal = true;
-      } else {
-        error = response?.error || t('home.errors.failedJoin');
+    $socket.emit(
+      'join_room',
+      typeof roomCode === 'string' ? roomCode.toUpperCase() : String(roomCode || '').toUpperCase(),
+      typeof playerName === 'string' ? playerName : String(playerName || ''),
+      selectedAvatar || undefined,
+      $language,
+      (response: any) => {
+        clearTimeout(timeout);
+        loading = false;
+
+        if (response && response.success) {
+          // Store the response temporarily
+          pendingJoinResponse = response;
+
+          // Show language selection modal
+          showLanguageModal = true;
+        } else {
+          error = response?.error || t('home.errors.failedJoin');
+        }
       }
-    });
+    );
   }
 </script>
 
@@ -345,12 +489,16 @@
 
     <div class="space-y-4">
       {#if !$connected && $socket}
-        <div class="bg-yellow-500/20 border border-yellow-500 rounded-lg p-3 text-sm flex items-center gap-2">
+        <div
+          class="bg-yellow-500/20 border border-yellow-500 rounded-lg p-3 text-sm flex items-center gap-2"
+        >
           <span>🟡</span>
           <span>{t('home.connection.connecting')}</span>
         </div>
       {:else if $connected}
-        <div class="bg-green-500/20 border border-green-500 rounded-lg p-2 text-xs flex items-center justify-center gap-2">
+        <div
+          class="bg-green-500/20 border border-green-500 rounded-lg p-2 text-xs flex items-center justify-center gap-2"
+        >
           <span>🟢</span>
           <span>{t('home.connection.connected')}</span>
         </div>
@@ -359,7 +507,14 @@
       <input
         type="text"
         placeholder={t('home.namePlaceholder')}
-        bind:value={playerName}
+        value={playerName || ''}
+        on:input={(e) => {
+          const target = e.currentTarget;
+          if (!target) return;
+          const value = target.value;
+          // Always ensure playerName is a string, never null/undefined
+          playerName = value != null && typeof value === 'string' ? value : '';
+        }}
         class="input"
         maxlength="20"
         disabled={loading || !$connected}
@@ -369,7 +524,7 @@
         <div class="block text-sm font-medium mb-2">{t('home.avatarLabel')}</div>
         <div class="flex items-center gap-3">
           <button
-            on:click={() => showAvatarPicker = !showAvatarPicker}
+            on:click={() => (showAvatarPicker = !showAvatarPicker)}
             class="text-4xl p-3 bg-white/10 hover:bg-white/20 rounded-lg border-2 border-white/20"
             type="button"
             disabled={loading}
@@ -384,14 +539,18 @@
           </div>
         </div>
         {#if showAvatarPicker}
-          <div class="mt-2 grid grid-cols-10 gap-2 max-h-48 overflow-y-auto p-2 bg-white/5 rounded-lg">
-            {#each (avatarStyle === 'festive' ? festiveAvatars : emojiAvatars) as avatar}
+          <div
+            class="mt-2 grid grid-cols-10 gap-2 max-h-48 overflow-y-auto p-2 bg-white/5 rounded-lg"
+          >
+            {#each avatarStyle === 'festive' ? festiveAvatars : emojiAvatars as avatar}
               <button
                 on:click={() => {
                   selectedAvatar = avatar;
                   showAvatarPicker = false;
                 }}
-                class="text-2xl p-2 rounded {selectedAvatar === avatar ? 'bg-christmas-gold ring-2 ring-christmas-red' : 'bg-white/5 hover:bg-white/10'}"
+                class="text-2xl p-2 rounded {selectedAvatar === avatar
+                  ? 'bg-christmas-gold ring-2 ring-christmas-red'
+                  : 'bg-white/5 hover:bg-white/10'}"
                 type="button"
               >
                 {avatar}
@@ -415,8 +574,12 @@
         <div class="bg-blue-500/20 border border-blue-500 rounded-lg p-4 text-center space-y-3">
           <p class="text-sm">🔐 {t('home.auth.signInRequired')}</p>
           <div class="flex gap-2 justify-center">
-            <a href="/auth/login" class="btn-primary text-sm px-4 py-2">{t('common.button.signIn')}</a>
-            <a href="/auth/signup" class="btn-secondary text-sm px-4 py-2">{t('common.button.signUp')}</a>
+            <a href="/auth/login" class="btn-primary text-sm px-4 py-2"
+              >{t('common.button.signIn')}</a
+            >
+            <a href="/auth/signup" class="btn-secondary text-sm px-4 py-2"
+              >{t('common.button.signUp')}</a
+            >
           </div>
           <p class="text-xs text-white/60">{t('home.auth.playersCanJoin')}</p>
         </div>
@@ -424,13 +587,15 @@
         <!-- Host Section -->
         <div class="space-y-3">
           {#if loadingMyRoom}
-            <div class="bg-yellow-500/20 border border-yellow-500 rounded-lg p-3 text-sm text-center">
+            <div
+              class="bg-yellow-500/20 border border-yellow-500 rounded-lg p-3 text-sm text-center"
+            >
               {t('home.loadingRoom')}
             </div>
           {:else if myRoom}
             <button
               on:click={goToMyRoom}
-              disabled={loading || !playerName.trim() || !$connected}
+              disabled={loading || !isValidPlayerName(playerName) || !$connected}
               class="btn-primary w-full text-lg"
             >
               {loading ? t('home.loading') : `🏠 ${t('home.goToRoom')} (${myRoom.code})`}
@@ -438,14 +603,19 @@
           {:else}
             <button
               on:click={createRoom}
-              disabled={loading || !playerName.trim() || !$connected}
+              disabled={loading || !isValidPlayerName(playerName) || !$connected}
               class="btn-primary w-full text-lg"
             >
-              {loading ? t('home.createRoom.creating') : !$connected ? t('home.createRoom.connecting') : `🎮 ${t('home.createRoom.button')}`}
+              {loading
+                ? t('home.createRoom.creating')
+                : !$connected
+                  ? t('home.createRoom.connecting')
+                  : `🎮 ${t('home.createRoom.button')}`}
             </button>
           {/if}
           <div class="text-center text-xs text-white/50">
-            {t('home.auth.signedInAs')} {$authUser.email}
+            {t('home.auth.signedInAs')}
+            {$authUser.email}
             <button
               on:click={async () => {
                 const { signOut } = await import('$lib/supabase');
@@ -473,21 +643,32 @@
         <input
           type="text"
           placeholder={t('home.joinRoom.codePlaceholder')}
-          bind:value={roomCode}
+          value={roomCode || ''}
           class="input text-center text-2xl tracking-widest"
           maxlength="4"
           disabled={loading}
           on:input={(e) => {
-            roomCode = e.currentTarget.value.toUpperCase();
+            const value = e.currentTarget?.value;
+            roomCode =
+              value != null && typeof value === 'string'
+                ? value.toUpperCase()
+                : String(value || '').toUpperCase();
           }}
         />
 
         <button
           on:click={joinRoom}
-          disabled={loading || !playerName.trim() || roomCode.length !== 4 || !$connected}
+          disabled={loading ||
+            !isValidPlayerName(playerName) ||
+            !isValidRoomCode(roomCode) ||
+            !$connected}
           class="btn-secondary w-full text-lg"
         >
-          {loading ? t('home.joinRoom.joining') : !$connected ? t('home.createRoom.connecting') : `🚪 ${t('home.joinRoom.button')}`}
+          {loading
+            ? t('home.joinRoom.joining')
+            : !$connected
+              ? t('home.createRoom.connecting')
+              : `🚪 ${t('home.joinRoom.button')}`}
         </button>
       </div>
     </div>
@@ -498,8 +679,5 @@
   </div>
 
   <!-- Language Selection Modal -->
-  <LanguageSelectionModal 
-    show={showLanguageModal} 
-    onLanguageSelected={handleLanguageSelected}
-  />
+  <LanguageSelectionModal show={showLanguageModal} onLanguageSelected={handleLanguageSelected} />
 </div>

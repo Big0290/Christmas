@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@christmas/core": "workspace:*",
+    "@fingerprintjs/fingerprintjs": "^5.0.1",
     "@supabase/supabase-js": "^2.39.3",
     "phaser": "^3.70.0",
     "qrcode": "^1.5.3",

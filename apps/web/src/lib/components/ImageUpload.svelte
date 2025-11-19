@@ -6,6 +6,7 @@
 
   export let currentImageUrl: string | undefined = undefined;
   export let disabled: boolean = false;
+  export let bucket: 'price-item-images' | 'guessing-challenge-images' = 'price-item-images';
 
   const dispatch = createEventDispatcher<{
     upload: { imageUrl: string };
@@ -75,50 +76,143 @@
     isUploading = true;
     errorMessage = '';
 
+    console.log('[ImageUpload] Starting file read:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      sizeKB: (file.size / 1024).toFixed(2)
+    });
+
+    // Set up timeout at the start to prevent infinite waiting
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
     try {
       // Convert file to base64
       const reader = new FileReader();
+      
+      reader.onloadstart = () => {
+        console.log('[ImageUpload] FileReader: Reading file started');
+      };
+
+      reader.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = (e.loaded / e.total) * 100;
+          console.log(`[ImageUpload] FileReader: Progress ${percent.toFixed(1)}%`);
+        }
+      };
+
       reader.onload = async (e) => {
+        console.log('[ImageUpload] FileReader: File read complete');
         try {
           const base64Data = e.target?.result as string;
+          if (!base64Data) {
+            throw new Error('FileReader returned no data');
+          }
+          console.log('[ImageUpload] Base64 data length:', base64Data.length);
+          
           // Remove data URL prefix if present
           const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+          console.log('[ImageUpload] Base64 (without prefix) length:', base64.length);
 
           // Upload via socket
-          if (!$socket) {
+          console.log('[ImageUpload] Checking socket connection...', {
+            hasSocket: !!$socket,
+            isConnected: $socket?.connected,
+            socketId: $socket?.id
+          });
+
+          if (!$socket || !$socket.connected) {
+            console.error('[ImageUpload] Socket not connected!', {
+              hasSocket: !!$socket,
+              isConnected: $socket?.connected
+            });
             throw new Error(t('imageUpload.errors.socketNotConnected'));
           }
 
-          $socket.emit('upload_item_image', {
+          // Determine which upload endpoint to use based on bucket prop
+          const eventName = bucket === 'guessing-challenge-images' ? 'upload_guessing_image' : 'upload_item_image';
+          console.log('[ImageUpload] Using upload event:', eventName, 'for bucket:', bucket);
+
+          // Set up timeout to prevent infinite waiting
+          timeout = setTimeout(() => {
+            console.error('[ImageUpload] Upload timeout after 30 seconds!');
+            timeout = null;
+            isUploading = false;
+            errorMessage = t('imageUpload.errors.failedUpload') + ' (Timeout)';
+            dispatch('error', { message: errorMessage });
+          }, 30000); // 30 second timeout
+
+          console.log('[ImageUpload] Emitting socket event:', eventName, {
+            fileName: file.name,
+            fileType: file.type,
+            dataLength: base64.length
+          });
+
+          $socket.emit(eventName, {
             name: file.name,
             type: file.type,
             data: base64,
           }, (response: any) => {
+            console.log('[ImageUpload] Socket response received:', {
+              success: response?.success,
+              hasError: !!response?.error,
+              hasImageUrl: !!response?.imageUrl
+            });
+            if (timeout) {
+              clearTimeout(timeout);
+              timeout = null;
+            }
             isUploading = false;
-            if (response.success) {
+            if (response && response.success) {
               previewUrl = response.imageUrl;
               dispatch('upload', { imageUrl: response.imageUrl });
               errorMessage = '';
             } else {
-              errorMessage = response.error || t('imageUpload.errors.failedUpload');
+              errorMessage = response?.error || t('imageUpload.errors.failedUpload');
               dispatch('error', { message: errorMessage });
             }
           });
         } catch (err: any) {
+          if (timeout) {
+            clearTimeout(timeout);
+            timeout = null;
+          }
           isUploading = false;
           errorMessage = err.message || t('imageUpload.errors.failedProcess');
           dispatch('error', { message: errorMessage });
         }
       };
 
-      reader.onerror = () => {
+      reader.onerror = (e) => {
+        console.error('[ImageUpload] FileReader error:', e);
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
         isUploading = false;
         errorMessage = t('imageUpload.errors.failedRead');
         dispatch('error', { message: errorMessage });
       };
 
+      reader.onabort = () => {
+        console.warn('[ImageUpload] FileReader: Read aborted');
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
+        isUploading = false;
+        errorMessage = t('imageUpload.errors.failedRead') + ' (Aborted)';
+        dispatch('error', { message: errorMessage });
+      };
+
+      console.log('[ImageUpload] Calling reader.readAsDataURL()...');
       reader.readAsDataURL(file);
+      console.log('[ImageUpload] reader.readAsDataURL() called, waiting for onload...');
     } catch (err: any) {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
       isUploading = false;
       errorMessage = err.message || t('imageUpload.errors.failedUpload');
       dispatch('error', { message: errorMessage });

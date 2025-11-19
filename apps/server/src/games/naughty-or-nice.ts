@@ -191,8 +191,23 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
       return p.contentRating === 'pg';
     });
 
+    // Validate that we have prompts
+    if (this.prompts.length === 0) {
+      console.error('[NaughtyOrNiceGame] No prompts available after filtering!');
+      // Fallback to all prompts if filtering resulted in empty array
+      this.prompts = shuffleArray(DEFAULT_PROMPTS);
+    }
+
     // Update maxRounds based on promptCount setting
     this.state.maxRounds = Math.min(this.prompts.length, this.settings.promptCount);
+    
+    if (this.state.maxRounds === 0) {
+      console.error('[NaughtyOrNiceGame] maxRounds is 0! Prompts:', this.prompts.length, 'promptCount:', this.settings.promptCount);
+      // Ensure at least 1 round
+      this.state.maxRounds = Math.min(this.prompts.length, 1);
+    }
+    
+    console.log(`[NaughtyOrNiceGame] Initialized with ${this.prompts.length} prompts, ${this.state.maxRounds} rounds`);
 
     // Set time per round from settings (convert seconds to milliseconds)
     // Optionally adjust based on revealSpeed if needed

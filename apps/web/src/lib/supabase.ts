@@ -276,3 +276,41 @@ export async function getAccessToken(): Promise<string | null> {
   return token;
 }
 
+/**
+ * Create an anonymous Supabase client for server-side API routes
+ * This is used for public endpoints that don't require authentication
+ */
+export function createSupabaseAnonClient(): SupabaseClient | null {
+  // Get URL and key - try both browser (import.meta.env) and server (process.env) environments
+  // In SvelteKit, PUBLIC_ prefixed vars are available via import.meta.env in both client and server
+  // But we can also fall back to process.env for server-side access
+  const url = 
+    (typeof import.meta !== 'undefined' && (import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_PUBLIC_SUPABASE_URL)) ||
+    (typeof process !== 'undefined' && process.env.PUBLIC_SUPABASE_URL) ||
+    '';
+  const key = 
+    (typeof import.meta !== 'undefined' && (import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY)) ||
+    (typeof process !== 'undefined' && process.env.PUBLIC_SUPABASE_ANON_KEY) ||
+    '';
+  
+  const finalUrl = url.trim() || undefined;
+  const finalKey = key.trim() || undefined;
+  
+  if (!finalUrl || !finalKey) {
+    console.error('[Supabase] Missing PUBLIC_SUPABASE_URL or PUBLIC_SUPABASE_ANON_KEY', {
+      hasImportMeta: typeof import.meta !== 'undefined',
+      hasProcess: typeof process !== 'undefined',
+      urlFromImportMeta: typeof import.meta !== 'undefined' ? import.meta.env.PUBLIC_SUPABASE_URL : undefined,
+      urlFromProcess: typeof process !== 'undefined' ? process.env.PUBLIC_SUPABASE_URL : undefined,
+    });
+    return null;
+  }
+  
+  return createClient(finalUrl, finalKey, {
+    auth: {
+      persistSession: false, // Server-side doesn't need session persistence
+      autoRefreshToken: false,
+    },
+  });
+}
+

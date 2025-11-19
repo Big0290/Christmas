@@ -1057,6 +1057,7 @@
     transition: margin-right 0.3s ease-in-out;
     position: relative;
     z-index: 1;
+    overflow-y: auto;
   }
 
   .host-screen.panel-open .host-content {

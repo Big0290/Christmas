@@ -86,32 +86,63 @@ export class RoomManager {
   /**
    * Create or get existing room for host
    * If host already has an active room, return it (reactivate if needed)
-   * Otherwise create a new room
+   * Only creates a new room if the host's current room is closed/deleted
    */
   async createOrGetRoom(hostId: string, hostName: string, hostUserId?: string): Promise<Room> {
-    // If host_user_id provided, check for existing room first
+    // First, check for in-memory room by socket ID (hostId)
+    const inMemoryRoom = this.getRoomByHost(hostId);
+    if (inMemoryRoom) {
+      // Reactivate if expired
+      if (isExpired(inMemoryRoom.expiresAt)) {
+        const newExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
+        inMemoryRoom.expiresAt = newExpiresAt;
+        await this.updateLastAccessed(inMemoryRoom.code);
+        console.log(`[Room] Reactivated expired room ${inMemoryRoom.code} for host ${hostId}`);
+      }
+      
+      // Ensure room is marked as active in database
+      if (this.supabase) {
+        this.supabase
+          .from('rooms')
+          .update({ is_active: true, last_accessed_at: new Date().toISOString() })
+          .eq('code', inMemoryRoom.code)
+          .then(({ error }) => {
+            if (error) {
+              console.error('[Room] Failed to reactivate room in database:', error);
+            }
+          });
+      }
+      
+      console.log(`[Room] Restored existing in-memory room ${inMemoryRoom.code} for host ${hostId}`);
+      return inMemoryRoom;
+    }
+
+    // Second, check database for active room by user_id (if provided)
     if (hostUserId && this.supabase) {
-      const existingRoom = await this.getRoomByHostUserId(hostUserId);
-      if (existingRoom) {
+      const dbRoom = await this.getRoomByHostUserId(hostUserId);
+      if (dbRoom) {
         // Reactivate if expired
-        if (isExpired(existingRoom.expiresAt)) {
+        if (isExpired(dbRoom.expiresAt)) {
           const newExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
-          existingRoom.expiresAt = newExpiresAt;
-          await this.updateLastAccessed(existingRoom.code);
-          console.log(`[Room] Reactivated expired room ${existingRoom.code} for host ${hostUserId}`);
+          dbRoom.expiresAt = newExpiresAt;
+          await this.updateLastAccessed(dbRoom.code);
+          console.log(`[Room] Reactivated expired room ${dbRoom.code} for host ${hostUserId}`);
         }
         
         // Update host socket ID if changed
-        if (existingRoom.hostId !== hostId) {
-          existingRoom.hostId = hostId;
-          console.log(`[Room] Updated host socket ID for room ${existingRoom.code}`);
+        if (dbRoom.hostId !== hostId) {
+          dbRoom.hostId = hostId;
+          console.log(`[Room] Updated host socket ID for room ${dbRoom.code}`);
         }
         
-        return existingRoom;
+        console.log(`[Room] Restored existing database room ${dbRoom.code} for host ${hostUserId}`);
+        return dbRoom;
       }
     }
 
-    // No existing room found, create new one
+    // No active room found - host can create a new room
+    // (their previous room must be closed/deleted)
+    console.log(`[Room] No active room found for host ${hostId} (user: ${hostUserId || 'none'}), creating new room`);
     return this.createRoom(hostId, hostName, hostUserId);
   }
 
@@ -780,6 +811,12 @@ export class RoomManager {
     }
 
     console.log(`[RoomManager] Creating game ${gameType} with ${room.players.size} players, settings:`, gameSettings);
+    console.log(`[RoomManager] Custom content loaded:`, {
+      questions: customQuestions?.length || 0,
+      items: customItems?.length || 0,
+      prompts: customPrompts?.length || 0,
+    });
+    
     const game = GameFactory.createGame(
       gameType,
       room.players,
@@ -792,6 +829,8 @@ export class RoomManager {
       console.error(`[RoomManager] GameFactory.createGame returned null for gameType: ${gameType}`);
       return null;
     }
+    
+    console.log(`[RoomManager] Game created successfully: ${gameType}, state: ${game.getState().state}`);
 
     this.games.set(roomCode, game);
     room.currentGame = gameType;
@@ -978,6 +1017,24 @@ export class RoomManager {
   private deleteRoom(code: string): void {
     const room = this.rooms.get(code);
     if (!room) return;
+
+    // Mark room as inactive in database (so host can create a new room)
+    if (this.supabase) {
+      this.supabase
+        .from('rooms')
+        .update({ is_active: false })
+        .eq('code', code)
+        .then(({ error }) => {
+          if (error) {
+            console.error('[Room] Failed to mark room as inactive in database:', error);
+          } else {
+            console.log(`[Room] Marked room ${code} as inactive in database`);
+          }
+        })
+        .catch((err: any) => {
+          console.error('[Room] Error marking room as inactive:', err);
+        });
+    }
 
     // Remove all player mappings
     for (const playerId of room.players.keys()) {

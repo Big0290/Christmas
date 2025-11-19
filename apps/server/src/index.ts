@@ -177,6 +177,8 @@ const io = new Server(httpServer, {
   },
   pingTimeout: 60000,
   pingInterval: 25000,
+  // Increase max message size to allow image uploads (5MB base64 = ~6.7MB encoded)
+  maxHttpBufferSize: 10 * 1024 * 1024, // 10MB to handle 5MB files in base64
   // Allow auth token in handshake
   allowRequest: async (req, callback) => {
     // Allow all connections - we'll verify auth per-event

@@ -2,10 +2,12 @@
   import '../app.css';
   import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { snowEffect, initializeSettings } from '$lib/settings';
-  import { connectSocket } from '$lib/socket';
+  import { connectSocket, socket, connected } from '$lib/socket';
   import { getAudioManager, startBackgroundMusic } from '$lib/audio';
-  import { initializeAuth } from '$lib/supabase';
+  import { initializeAuth, authUser, getAccessToken } from '$lib/supabase';
   import { get } from 'svelte/store';
   import { roomTheme, sparklesEnabled, iciclesEnabled, frostPatternEnabled, colorScheme } from '$lib/theme';
   import SparklesEffect from '$lib/components/SparklesEffect.svelte';
@@ -20,6 +22,8 @@
   let showIcicles = false;
   let showFrost = false;
   let currentColorScheme = 'mixed';
+  let checkedForRoom = false;
+  let isRedirecting = false;
 
   onMount(() => {
     if (browser) {
@@ -102,6 +106,112 @@
       };
     }
   });
+
+  // Check for active room and redirect if needed (global check for all authenticated users)
+  async function checkAndRedirectToActiveRoom() {
+    if (!browser || isRedirecting || checkedForRoom) return;
+    
+    // Get current route
+    const currentPath = $page.url.pathname;
+    
+    // Don't redirect if already on room-related pages or auth pages
+    const roomRelatedPaths = ['/room/', '/play/', '/host/', '/guess/'];
+    const authPaths = ['/auth/', '/login', '/signup'];
+    const shouldSkip = 
+      roomRelatedPaths.some(path => currentPath.startsWith(path)) ||
+      authPaths.some(path => currentPath.startsWith(path));
+    
+    if (shouldSkip) {
+      return;
+    }
+
+    // Check if user is authenticated and socket is connected
+    if (!$authUser || !$connected || !$socket) {
+      return;
+    }
+
+    // Mark as checked to prevent multiple simultaneous checks
+    checkedForRoom = true;
+
+    try {
+      // Get auth token
+      const authToken = await getAccessToken();
+      if (!authToken) {
+        checkedForRoom = false; // Reset if no token
+        return;
+      }
+
+      // Check for active room
+      $socket.emit('get_my_room', (response: any) => {
+        if (response && response.success && response.room && response.room.isActive) {
+          const roomCode = response.room.code;
+          const hostToken = response.room.hostToken;
+          
+          // Check again if we should redirect (in case route changed)
+          const currentPath = window.location.pathname;
+          const roomRelatedPaths = ['/room/', '/play/', '/host/', '/guess/'];
+          const authPaths = ['/auth/', '/login', '/signup'];
+          const shouldSkip = 
+            roomRelatedPaths.some(path => currentPath.startsWith(path)) ||
+            authPaths.some(path => currentPath.startsWith(path));
+          
+          if (shouldSkip) {
+            checkedForRoom = false; // Reset for next check
+            return;
+          }
+
+          // Store room info and redirect
+          console.log('[Layout] Found active room, redirecting to:', roomCode);
+          isRedirecting = true;
+          
+          // Store room info
+          const savedName = localStorage.getItem('christmas_playerName') || 'Host';
+          localStorage.setItem('christmas_playerName', savedName);
+          localStorage.setItem('christmas_role', 'host');
+          localStorage.setItem('christmas_roomCode', roomCode);
+          localStorage.setItem('christmas_hostToken', hostToken);
+          sessionStorage.setItem(`host_${roomCode}`, 'true');
+          sessionStorage.setItem('just_created_room', roomCode); // Mark as just connected
+          
+          // Redirect to room
+          goto(`/room/${roomCode}`);
+        } else {
+          checkedForRoom = false; // Reset if no room found
+        }
+      });
+    } catch (error) {
+      console.error('[Layout] Error checking for active room:', error);
+      checkedForRoom = false; // Reset on error
+    }
+  }
+
+  // Check for active room when auth and socket are ready
+  $: {
+    if ($authUser && $connected && $socket && !isRedirecting) {
+      // Small delay to ensure everything is initialized
+      setTimeout(() => {
+        checkAndRedirectToActiveRoom();
+      }, 500);
+    } else if (!$authUser || !$connected) {
+      // Reset check flag when disconnected or logged out
+      checkedForRoom = false;
+      isRedirecting = false;
+    }
+  }
+
+  // Check when route changes (but skip if already checked)
+  $: {
+    const path = $page.url.pathname;
+    // Reset check flag when navigating to non-room pages
+    if (!path.startsWith('/room/') && !path.startsWith('/play/') && !path.startsWith('/host/') && !path.startsWith('/guess/')) {
+      // Small delay before checking again (to avoid race conditions)
+      setTimeout(() => {
+        if (!$page.url.pathname.startsWith('/auth/')) {
+          checkedForRoom = false;
+        }
+      }, 100);
+    }
+  }
   
   function applyColorScheme(scheme: string) {
     if (!browser) return;

@@ -24,6 +24,9 @@
 
   // Debug logging for rendering
   $: if (import.meta.env.DEV) {
+    const shouldShowPrice = (normalizedGameType === GameType.PRICE_IS_RIGHT || currentGameType === GameType.PRICE_IS_RIGHT) && (currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING || $gameState?.currentItem);
+    const shouldShowNaughty = (normalizedGameType === GameType.NAUGHTY_OR_NICE || currentGameType === GameType.NAUGHTY_OR_NICE) && (currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING || $gameState?.currentPrompt);
+    
     console.log('[HostGameDisplay] Render check:', {
       currentGameType,
       normalizedGameType,
@@ -40,8 +43,8 @@
       isBingoGame: isBingo(currentGameType) || isBingo(normalizedGameType) || isBingo($gameState?.gameType),
       shouldShowTrivia: currentGameType === GameType.TRIVIA_ROYALE && ($gameState?.currentQuestion || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
       shouldShowEmoji: currentGameType === GameType.EMOJI_CAROL && ($gameState?.availableEmojis || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
-      shouldShowNaughty: currentGameType === GameType.NAUGHTY_OR_NICE && ($gameState?.currentPrompt || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
-      shouldShowPrice: currentGameType === GameType.PRICE_IS_RIGHT && ($gameState?.currentItem || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
+      shouldShowNaughty,
+      shouldShowPrice,
       questionText: $gameState?.currentQuestion?.question || 'N/A'
     });
   }

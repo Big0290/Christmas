@@ -69,6 +69,9 @@ importers:
       '@christmas/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@fingerprintjs/fingerprintjs':
+        specifier: ^5.0.1
+        version: 5.0.1
       '@supabase/supabase-js':
         specifier: ^2.39.3
         version: 2.81.1
@@ -584,6 +587,10 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
+
+  /@fingerprintjs/fingerprintjs@5.0.1:
+    resolution: {integrity: sha512-KbaeE/rk2WL8MfpRP6jTI4lSr42SJPjvkyrjP3QU6uUDkOMWWYC2Ts1sNSYcegHC8avzOoYTHBj+2fTqvZWQBA==}
+    dev: false
 
   /@isaacs/cliui@8.0.2:
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}

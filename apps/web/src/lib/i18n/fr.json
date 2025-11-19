@@ -20,7 +20,9 @@
       "submit": "Soumettre",
       "confirm": "Confirmer",
       "yes": "Oui",
-      "no": "Non"
+      "no": "Non",
+      "copy": "Copier",
+      "copied": "Copié"
     },
     "status": {
       "connected": "Connecté",
@@ -168,6 +170,10 @@
     "waitingPlayers": "En attente de joueurs...",
     "scanQrCode": "Scannez le code QR pour rejoindre !",
     "waitingHost": "En attente que l'hôte démarre le jeu...",
+    "tabs": {
+      "games": "Jeux",
+      "guessing": "Jeu de Devinette"
+    },
     "games": {
       "triviaRoyale": {
         "name": "Trivia Royale de Noël",
@@ -220,6 +226,10 @@
     "room": "Salle : {code}",
     "players": "Joueurs",
     "controlPanel": "Contrôles de l'hôte",
+    "tabs": {
+      "game": "Jeu",
+      "guessing": "Jeu de Devinette"
+    },
     "gameControls": "Contrôles du jeu",
     "pause": "Pause",
     "resume": "Reprendre",
@@ -895,6 +905,86 @@
       "callIntervalSeconds": "Intervalle d'appel",
       "pointsPerLine": "Points par ligne",
       "speedBonusMultiplier": "Multiplicateur de bonus de vitesse"
+    }
+  },
+  "guessing": {
+    "dashboard": {
+      "title": "Gestionnaire de Défis de Devinette",
+      "createChallenge": "Créer un Défi",
+      "createFirst": "Créez votre premier défi",
+      "loading": "Chargement des défis...",
+      "noChallenges": "Aucun défi créé pour le moment.",
+      "bounds": "Limites de devinette",
+      "revealAt": "Révéler à",
+      "multipleGuesses": "Plusieurs devinettes",
+      "correctAnswer": "Bonne réponse",
+      "revealed": "Révélé",
+      "reveal": "Révéler",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "viewSubmissions": "Voir les soumissions",
+      "hideSubmissions": "Masquer les soumissions",
+      "loadingSubmissions": "Chargement des soumissions...",
+      "shareChallenge": "Partager le défi",
+      "confirmDelete": "Êtes-vous sûr de vouloir supprimer le défi \"{title}\"?",
+      "confirmReveal": "Révéler le Défi",
+      "confirmRevealMessage": "Êtes-vous sûr de vouloir révéler \"{title}\"? Cela affichera la bonne réponse et les résultats aux joueurs.",
+      "errors": {
+        "loadFailed": "Échec du chargement des défis",
+        "deleteFailed": "Échec de la suppression du défi",
+        "revealFailed": "Échec de la révélation du défi",
+        "loadSubmissionsFailed": "Échec du chargement des soumissions"
+      }
+    },
+    "form": {
+      "createTitle": "Créer un Défi de Devinette",
+      "editTitle": "Modifier le Défi de Devinette",
+      "title": "Titre",
+      "titlePlaceholder": "Entrez le titre du défi",
+      "description": "Description",
+      "descriptionPlaceholder": "Décrivez le défi...",
+      "image": "Image",
+      "imageHint": "Téléchargez une image de l'article/jar/bucket à deviner",
+      "minGuess": "Devinette minimum",
+      "maxGuess": "Devinette maximum",
+      "correctAnswer": "Bonne réponse",
+      "correctAnswerHint": "La bonne réponse (cachée des joueurs)",
+      "allowMultipleGuesses": "Autoriser plusieurs devinettes",
+      "allowMultipleGuessesHint": "Permettre aux joueurs de soumettre plusieurs devinettes",
+      "revealAt": "Auto-révéler à",
+      "optional": "(Optionnel)",
+      "revealAtHint": "Révéler automatiquement les résultats à ce moment",
+      "errors": {
+        "titleRequired": "Le titre est requis",
+        "imageRequired": "L'image est requise",
+        "invalidBounds": "La devinette minimum doit être inférieure à la devinette maximum",
+        "answerOutOfBounds": "La bonne réponse doit être dans les limites min et max",
+        "failedCreate": "Échec de la création du défi",
+        "failedUpdate": "Échec de la mise à jour du défi"
+      }
+    },
+    "submissions": {
+      "title": "Soumissions",
+      "rank": "Rang",
+      "guess": "Devinette",
+      "difference": "Différence",
+      "submittedAt": "Soumis à",
+      "noSubmissions": "Aucune soumission pour le moment",
+      "export": "Exporter CSV"
+    },
+    "qrcode": {
+      "generating": "Génération du code QR..."
+    },
+    "bounds": "Limites",
+    "playerName": "Votre nom",
+    "playerNamePlaceholder": "Entrez votre nom",
+    "enterGuess": "Entrez votre devinette",
+    "submit": {
+      "button": "Soumettre la devinette",
+      "submitting": "Soumission...",
+      "success": "Merci!",
+      "thankYou": "Votre devinette a été enregistrée.",
+      "watchHost": "Regardez l'écran de l'hôte pour voir les résultats lorsqu'ils sont révélés!"
     }
   }
 }

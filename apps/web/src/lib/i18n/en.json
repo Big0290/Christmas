@@ -20,7 +20,9 @@
       "submit": "Submit",
       "confirm": "Confirm",
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "status": {
       "connected": "Connected",
@@ -153,6 +155,10 @@
     "waitingPlayers": "Waiting for players...",
     "scanQrCode": "Scan the QR code to join!",
     "waitingHost": "Waiting for host to start the game...",
+    "tabs": {
+      "games": "Games",
+      "guessing": "Guessing Game"
+    },
     "games": {
       "triviaRoyale": {
         "name": "Christmas Trivia Royale",
@@ -205,6 +211,10 @@
     "room": "Room: {code}",
     "players": "Players",
     "controlPanel": "Host Controls",
+    "tabs": {
+      "game": "Game",
+      "guessing": "Guessing Game"
+    },
     "gameControls": "Game Controls",
     "pause": "Pause",
     "resume": "Resume",
@@ -874,6 +884,86 @@
       "callIntervalSeconds": "Call Interval",
       "pointsPerLine": "Points Per Line",
       "speedBonusMultiplier": "Speed Bonus Multiplier"
+    }
+  },
+  "guessing": {
+    "dashboard": {
+      "title": "Guessing Challenge Manager",
+      "createChallenge": "Create Challenge",
+      "createFirst": "Create Your First Challenge",
+      "loading": "Loading challenges...",
+      "noChallenges": "No challenges created yet.",
+      "bounds": "Guess Bounds",
+      "revealAt": "Reveal At",
+      "multipleGuesses": "Multiple Guesses",
+      "correctAnswer": "Correct Answer",
+      "revealed": "Revealed",
+      "reveal": "Reveal",
+      "edit": "Edit",
+      "delete": "Delete",
+      "viewSubmissions": "View Submissions",
+      "hideSubmissions": "Hide Submissions",
+      "loadingSubmissions": "Loading submissions...",
+      "shareChallenge": "Share Challenge",
+      "confirmDelete": "Are you sure you want to delete the challenge \"{title}\"?",
+      "confirmReveal": "Reveal Challenge",
+      "confirmRevealMessage": "Are you sure you want to reveal \"{title}\"? This will show the correct answer and results to players.",
+      "errors": {
+        "loadFailed": "Failed to load challenges",
+        "deleteFailed": "Failed to delete challenge",
+        "revealFailed": "Failed to reveal challenge",
+        "loadSubmissionsFailed": "Failed to load submissions"
+      }
+    },
+    "form": {
+      "createTitle": "Create Guessing Challenge",
+      "editTitle": "Edit Guessing Challenge",
+      "title": "Title",
+      "titlePlaceholder": "Enter challenge title",
+      "description": "Description",
+      "descriptionPlaceholder": "Describe the challenge...",
+      "image": "Image",
+      "imageHint": "Upload an image of the item/jar/bucket to guess",
+      "minGuess": "Minimum Guess",
+      "maxGuess": "Maximum Guess",
+      "correctAnswer": "Correct Answer",
+      "correctAnswerHint": "The correct answer (hidden from players)",
+      "allowMultipleGuesses": "Allow Multiple Guesses",
+      "allowMultipleGuessesHint": "Allow players to submit multiple guesses",
+      "revealAt": "Auto-Reveal At",
+      "optional": "(Optional)",
+      "revealAtHint": "Automatically reveal results at this time",
+      "errors": {
+        "titleRequired": "Title is required",
+        "imageRequired": "Image is required",
+        "invalidBounds": "Minimum guess must be less than maximum guess",
+        "answerOutOfBounds": "Correct answer must be within min and max bounds",
+        "failedCreate": "Failed to create challenge",
+        "failedUpdate": "Failed to update challenge"
+      }
+    },
+    "submissions": {
+      "title": "Submissions",
+      "rank": "Rank",
+      "guess": "Guess",
+      "difference": "Difference",
+      "submittedAt": "Submitted At",
+      "noSubmissions": "No submissions yet",
+      "export": "Export CSV"
+    },
+    "qrcode": {
+      "generating": "Generating QR code..."
+    },
+    "bounds": "Bounds",
+    "playerName": "Your Name",
+    "playerNamePlaceholder": "Enter your name",
+    "enterGuess": "Enter Your Guess",
+    "submit": {
+      "button": "Submit Guess",
+      "submitting": "Submitting...",
+      "success": "Thanks!",
+      "thankYou": "Your guess has been recorded.",
+      "watchHost": "Watch the host screen to see results when revealed!"
     }
   }
 }

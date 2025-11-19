@@ -9,20 +9,17 @@
 </script>
 
 {#if $gameState?.currentPrompt || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
-  {#if $gameState?.currentPrompt}
-    {@const promptTranslations = $gameState.currentPrompt.translations}
-    {@const frenchPrompt =
-      typeof promptTranslations?.fr?.prompt === 'string'
-        ? promptTranslations.fr.prompt
-        : ''}
-    {@const englishPrompt =
-      typeof promptTranslations?.en?.prompt === 'string'
-        ? promptTranslations.en.prompt
-        : $gameState.currentPrompt.prompt || ''}
-  {:else}
-    {@const frenchPrompt = ''}
-    {@const englishPrompt = ''}
-  {/if}
+  {@const promptTranslations = $gameState?.currentPrompt?.translations}
+  {@const frenchPrompt =
+    $gameState?.currentPrompt && typeof promptTranslations?.fr?.prompt === 'string'
+      ? promptTranslations.fr.prompt
+      : ''}
+  {@const englishPrompt =
+    $gameState?.currentPrompt
+      ? (typeof promptTranslations?.en?.prompt === 'string'
+          ? promptTranslations.en.prompt
+          : $gameState.currentPrompt.prompt || '')
+      : ''}
   <div class="naughty-host-projection">
     <div class="naughty-question-section">
       <h2 class="game-title">😇 Naughty or Nice</h2>
@@ -34,10 +31,16 @@
           </div>
         </div>
         <!-- Bilingual Prompt Display -->
-        {#if frenchPrompt}
-          <h3 class="prompt-text-large prompt-text-french">{frenchPrompt}</h3>
+        {#if currentState === GameState.STARTING && !$gameState?.currentPrompt}
+          <div class="loading-placeholder">
+            <p class="loading-text">Loading prompt...</p>
+          </div>
+        {:else}
+          {#if frenchPrompt}
+            <h3 class="prompt-text-large prompt-text-french">{frenchPrompt}</h3>
+          {/if}
+          <h3 class="prompt-text-large prompt-text-english">{englishPrompt}</h3>
         {/if}
-        <h3 class="prompt-text-large prompt-text-english">{englishPrompt}</h3>
 
         <div class="vote-options-large">
           {#if currentState === GameState.ROUND_END || currentState === GameState.PLAYING || $gameState?.votes}
@@ -736,6 +739,20 @@
     padding: 2rem;
     font-size: 1.5rem;
     font-style: italic;
+  }
+
+  .loading-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    padding: 2rem;
+  }
+
+  .loading-text {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
   }
 
   /* Responsive Design */

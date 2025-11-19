@@ -207,6 +207,64 @@ export interface BingoCard {
 }
 
 // ============================================================================
+// GUESSING GAME TYPES
+// ============================================================================
+
+export interface GuessingChallenge {
+  id: string;
+  room_code: string;
+  title: string;
+  description: string | null;
+  image_url: string;
+  correct_answer: number;
+  min_guess: number;
+  max_guess: number;
+  allow_multiple_guesses: boolean;
+  reveal_at: string | null;
+  is_revealed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GuessingChallengePublic {
+  id: string;
+  room_code: string;
+  title: string;
+  description: string | null;
+  image_url: string;
+  min_guess: number;
+  max_guess: number;
+  allow_multiple_guesses: boolean;
+  reveal_at: string | null;
+  is_revealed: boolean;
+  created_at: string;
+  updated_at: string;
+  // correct_answer is excluded for public API
+}
+
+export interface GuessingSubmission {
+  id: string;
+  challenge_id: string;
+  room_code: string;
+  player_name: string | null;
+  guess_value: number;
+  client_fingerprint_hash: string;
+  difference: number;
+  submitted_at: string;
+}
+
+export interface GuessingChallengeForm {
+  title: string;
+  description: string;
+  image_url: string;
+  correct_answer: number;
+  min_guess: number;
+  max_guess: number;
+  allow_multiple_guesses: boolean;
+  reveal_at: string | null;
+}
+
+// ============================================================================
 // SOCKET EVENTS
 // ============================================================================
 

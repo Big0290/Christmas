@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { RoomManager } from '../managers/room-manager.js';
 import { AchievementManager } from '../managers/achievement-manager.js';
 import { verifyAuthToken } from '../lib/supabase.js';
+import { setupGuessingHandlers } from './guessing-handlers.js';
 import {
   GameType,
   GameState,
@@ -23,10 +24,10 @@ export function setupSocketHandlers(
 ) {
   // Guard to ensure finalization happens exactly once per room
   const finalizedRooms = new Set<string>();
-  
+
   // Track last game state per room to detect transitions for sound events
   const lastGameState = new Map<string, GameState>();
-  
+
   // Track last sound event per room to prevent duplicates
   const lastSoundEvent = new Map<string, { sound: string; state: GameState; timestamp: number }>();
   io.on('connection', (socket: Socket) => {
@@ -880,22 +881,23 @@ export function setupSocketHandlers(
       // Save settings to database if provided
       if (settings && supabase) {
         try {
-          const { error } = await supabase
-            .from('game_settings')
-            .upsert(
-              {
-                room_code: room.code,
-                game_type: gameType,
-                settings: settings,
-                updated_at: new Date().toISOString(),
-              },
-              {
-                onConflict: 'room_code,game_type',
-              }
-            );
+          const { error } = await supabase.from('game_settings').upsert(
+            {
+              room_code: room.code,
+              game_type: gameType,
+              settings: settings,
+              updated_at: new Date().toISOString(),
+            },
+            {
+              onConflict: 'room_code,game_type',
+            }
+          );
 
           if (error) {
-            console.error(`[Game] Failed to save settings for ${gameType} in room ${room.code}:`, error);
+            console.error(
+              `[Game] Failed to save settings for ${gameType} in room ${room.code}:`,
+              error
+            );
           } else {
             console.log(`[Game] Saved settings for ${gameType} in room ${room.code}`);
           }
@@ -904,17 +906,28 @@ export function setupSocketHandlers(
         }
       }
 
-      console.log(`[Game] Attempting to start ${gameType} in room ${room.code} with settings:`, settings);
+      console.log(
+        `[Game] Attempting to start ${gameType} in room ${room.code} with settings:`,
+        settings
+      );
       const game = await roomManager.startGame(room.code, gameType, settings);
       if (!game) {
-        console.error(`[Game] Failed to start ${gameType} in room ${room.code} - startGame returned null`);
+        console.error(
+          `[Game] Failed to start ${gameType} in room ${room.code} - startGame returned null`
+        );
         socket.emit('error', 'Failed to start game');
         return;
       }
 
-      console.log(
-        `[Game] Starting ${gameType} in room ${room.code}, host socket: ${room.hostId?.substring(0, 8)}`
-      );
+      const gameState = game.getState();
+      console.log(`[Game] Game created successfully: ${gameType} in room ${room.code}`, {
+        state: gameState.state,
+        round: gameState.round,
+        maxRounds: gameState.maxRounds,
+        hasItem: !!(gameState as any).currentItem,
+        hasPrompt: !!(gameState as any).currentPrompt,
+        hostSocket: room.hostId?.substring(0, 8),
+      });
 
       io.to(room.code).emit('game_started', gameType);
 
@@ -3565,20 +3578,42 @@ export function setupSocketHandlers(
     socket.on(
       'upload_item_image',
       async (fileData: { name: string; type: string; data: string }, callback) => {
-        if (!checkRateLimit()) return;
+        console.log('[Image Upload] Received upload request:', {
+          fileName: fileData.name,
+          fileType: fileData.type,
+          dataLength: fileData.data?.length || 0,
+          socketId: socket.id,
+          hasCallback: typeof callback === 'function',
+        });
+
+        if (!checkRateLimit()) {
+          console.warn('[Image Upload] Rate limit exceeded');
+          callback({ success: false, error: 'Rate limit exceeded. Please try again in a moment.' });
+          return;
+        }
 
         try {
           // Verify host permissions
           const roomInfo = roomManager.getRoomBySocketId(socket.id);
+          console.log('[Image Upload] Room info check:', {
+            hasRoomInfo: !!roomInfo,
+            isHost: roomInfo?.isHost,
+            roomCode: roomInfo?.room?.code,
+          });
+
           if (!roomInfo || !roomInfo.isHost) {
+            console.warn('[Image Upload] Not a host or room not found');
             callback({ success: false, error: 'You must be a host' });
             return;
           }
 
           if (!supabase) {
+            console.error('[Image Upload] Supabase not available');
             callback({ success: false, error: 'Database not available' });
             return;
           }
+
+          console.log('[Image Upload] Starting validation...');
 
           // Validate file type
           const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
@@ -3603,9 +3638,15 @@ export function setupSocketHandlers(
           const fileName = `price-items/${roomInfo.room.hostId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
 
           // Convert base64 to buffer
+          console.log('[Image Upload] Converting base64 to buffer...');
           const fileBuffer = Buffer.from(fileData.data, 'base64');
+          console.log('[Image Upload] Buffer created:', {
+            size: fileBuffer.length,
+            sizeKB: (fileBuffer.length / 1024).toFixed(2),
+          });
 
           // Upload to Supabase storage
+          console.log('[Image Upload] Uploading to Supabase storage:', fileName);
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('price-item-images')
             .upload(fileName, fileBuffer, {
@@ -3619,16 +3660,20 @@ export function setupSocketHandlers(
             return;
           }
 
+          console.log('[Image Upload] Upload successful, getting public URL...');
+
           // Get public URL
           const { data: urlData } = supabase.storage
             .from('price-item-images')
             .getPublicUrl(fileName);
 
           if (!urlData?.publicUrl) {
+            console.error('[Image Upload] Failed to get public URL');
             callback({ success: false, error: 'Failed to get image URL' });
             return;
           }
 
+          console.log('[Image Upload] ✅ Success! URL:', urlData.publicUrl);
           callback({
             success: true,
             imageUrl: urlData.publicUrl,
@@ -3641,6 +3686,11 @@ export function setupSocketHandlers(
         }
       }
     );
+
+    // ========================================================================
+    // GUESSING GAME HANDLERS
+    // ========================================================================
+    setupGuessingHandlers(socket, roomManager, supabase);
 
     // ========================================================================
     // HELPER FUNCTIONS
@@ -3677,12 +3727,12 @@ export function setupSocketHandlers(
       // This ensures reconnections get the correct state
       const gameStateValue = game.getState().state;
       const previousState = lastGameState.get(roomCode);
-      
+
       // Detect state transitions and emit sound events
       if (previousState !== gameStateValue) {
         const timestamp = Date.now();
         let soundToEmit: 'gameStart' | 'roundEnd' | 'gameEnd' | null = null;
-        
+
         // Determine which sound to play based on state transition
         if (gameStateValue === GameState.STARTING) {
           soundToEmit = 'gameStart';
@@ -3691,34 +3741,37 @@ export function setupSocketHandlers(
         } else if (gameStateValue === GameState.GAME_END) {
           soundToEmit = 'gameEnd';
         }
-        
+
         // Emit sound event if state transition warrants it and we haven't already emitted for this state
         if (soundToEmit) {
           const lastSound = lastSoundEvent.get(roomCode);
           // Only emit if we haven't already emitted this sound for this state transition
           // or if enough time has passed (prevent rapid duplicates)
-          const shouldEmit = !lastSound || 
-            lastSound.state !== gameStateValue || 
-            (timestamp - lastSound.timestamp) > 1000; // 1 second debounce
-          
+          const shouldEmit =
+            !lastSound ||
+            lastSound.state !== gameStateValue ||
+            timestamp - lastSound.timestamp > 1000; // 1 second debounce
+
           if (shouldEmit) {
             io.to(roomCode).emit('sound_event', {
               sound: soundToEmit,
-              timestamp: timestamp
+              timestamp: timestamp,
             });
             lastSoundEvent.set(roomCode, {
               sound: soundToEmit,
               state: gameStateValue,
-              timestamp: timestamp
+              timestamp: timestamp,
             });
-            console.log(`[Sound] Emitted ${soundToEmit} event for room ${roomCode} (state: ${gameStateValue})`);
+            console.log(
+              `[Sound] Emitted ${soundToEmit} event for room ${roomCode} (state: ${gameStateValue})`
+            );
           }
         }
-        
+
         // Update last known state
         lastGameState.set(roomCode, gameStateValue);
       }
-      
+
       if (room.gameState !== gameStateValue) {
         room.gameState = gameStateValue;
         console.log(`[Game] Synced room.gameState to ${gameStateValue} for room ${roomCode}`);
@@ -3821,6 +3874,7 @@ export function setupSocketHandlers(
   // Periodic game state broadcast (for real-time games like Gift Grabber)
   // Reduced frequency and only broadcast when state actually changes
   const lastBroadcastState = new Map<string, string>();
+  const lastBroadcastTime = new Map<string, number>();
   setInterval(() => {
     // Reap expired rooms regularly
     roomManager.cleanupExpiredRooms();
@@ -3831,12 +3885,12 @@ export function setupSocketHandlers(
         if (game) {
           const currentGameState = game.getState().state;
           const previousState = lastGameState.get(code);
-          
+
           // Check for state transitions and emit sound events
           if (previousState !== currentGameState) {
             const timestamp = Date.now();
             let soundToEmit: 'gameStart' | 'roundEnd' | 'gameEnd' | null = null;
-            
+
             if (currentGameState === GameState.STARTING) {
               soundToEmit = 'gameStart';
             } else if (currentGameState === GameState.ROUND_END) {
@@ -3844,31 +3898,34 @@ export function setupSocketHandlers(
             } else if (currentGameState === GameState.GAME_END) {
               soundToEmit = 'gameEnd';
             }
-            
+
             if (soundToEmit) {
               const lastSound = lastSoundEvent.get(code);
-              const shouldEmit = !lastSound || 
-                lastSound.state !== currentGameState || 
-                (timestamp - lastSound.timestamp) > 1000;
-              
+              const shouldEmit =
+                !lastSound ||
+                lastSound.state !== currentGameState ||
+                timestamp - lastSound.timestamp > 1000;
+
               if (shouldEmit) {
                 io.to(code).emit('sound_event', {
                   sound: soundToEmit,
-                  timestamp: timestamp
+                  timestamp: timestamp,
                 });
                 lastSoundEvent.set(code, {
                   sound: soundToEmit,
                   state: currentGameState,
-                  timestamp: timestamp
+                  timestamp: timestamp,
                 });
-                console.log(`[Sound] Emitted ${soundToEmit} event for room ${code} (state: ${currentGameState})`);
+                console.log(
+                  `[Sound] Emitted ${soundToEmit} event for room ${code} (state: ${currentGameState})`
+                );
               }
             }
-            
+
             lastGameState.set(code, currentGameState);
           }
         }
-        
+
         if (game && game.getState().state === GameState.PLAYING) {
           // Only broadcast for games in PLAYING state (real-time games)
           // This optimizes bandwidth for turn-based games
@@ -3876,20 +3933,29 @@ export function setupSocketHandlers(
           // Check if state has changed (use JSON string comparison for simplicity)
           const currentState = JSON.stringify(game.getState());
           const lastState = lastBroadcastState.get(code);
-          
+
           // Special handling for bingo: emit item_called event when new item is called
           const gameState = game.getState();
           if (gameState.gameType === GameType.BINGO && 'currentItem' in gameState) {
             const bingoState = gameState as any;
             const lastBingoState = JSON.parse(lastState || '{}');
-            
+
             // Check if currentItem changed
-            if (bingoState.currentItem && 
-                (!lastBingoState.currentItem || lastBingoState.currentItem.id !== bingoState.currentItem.id)) {
+            if (
+              bingoState.currentItem &&
+              (!lastBingoState.currentItem ||
+                lastBingoState.currentItem.id !== bingoState.currentItem.id)
+            ) {
               // New item was called - emit event
-              io.to(code).emit('bingo_item_called', bingoState.currentItem, bingoState.itemsCalled || 0);
-              console.log(`[Bingo] Item called: ${bingoState.currentItem.emoji} ${bingoState.currentItem.name} in room ${code}`);
-              
+              io.to(code).emit(
+                'bingo_item_called',
+                bingoState.currentItem,
+                bingoState.itemsCalled || 0
+              );
+              console.log(
+                `[Bingo] Item called: ${bingoState.currentItem.emoji} ${bingoState.currentItem.name} in room ${code}`
+              );
+
               // Also check for completed lines and emit those events
               if (bingoState.winners && bingoState.winners.length > 0) {
                 bingoState.winners.forEach((winnerId: string) => {
@@ -3901,7 +3967,9 @@ export function setupSocketHandlers(
                       const points = bingoState.scores?.[winnerId] || 0;
                       const lineType = completedLines[completedLines.length - 1]; // Last completed line
                       io.to(code).emit('bingo_line_completed', winnerId, lineType, points);
-                      console.log(`[Bingo] Line completed by ${player.name}: ${lineType} for ${points} points`);
+                      console.log(
+                        `[Bingo] Line completed by ${player.name}: ${lineType} for ${points} points`
+                      );
                     }
                   }
                 });
@@ -3909,22 +3977,28 @@ export function setupSocketHandlers(
             }
           }
 
-          // Only broadcast if state changed or every 200ms (5Hz instead of 10Hz)
-          const shouldBroadcast = currentState !== lastState || Date.now() % 200 < 100; // Throttle to 5Hz
+          // Only broadcast if state changed OR if it's been more than 200ms since last broadcast (throttle to 5Hz max)
+          const now = Date.now();
+          const lastBroadcast = lastBroadcastTime.get(code) || 0;
+          const timeSinceLastBroadcast = now - lastBroadcast;
+          const stateChanged = currentState !== lastState;
+          const shouldBroadcast = stateChanged && (timeSinceLastBroadcast >= 200 || !lastState);
 
           if (shouldBroadcast) {
             lastBroadcastState.set(code, currentState);
+            lastBroadcastTime.set(code, now);
             room.players.forEach((player) => {
               const socket = io.sockets.sockets.get(player.id);
               if (socket) {
                 socket.emit('game_state_update', game.getClientState(player.id));
               }
             });
-            
+
             // Also send to host
             const hostSocket = io.sockets.sockets.get(room.hostId);
             if (hostSocket) {
-              const firstPlayerId = room.players.size > 0 ? room.players.keys().next().value : room.hostId;
+              const firstPlayerId =
+                room.players.size > 0 ? room.players.keys().next().value : room.hostId;
               if (firstPlayerId) {
                 hostSocket.emit('game_state_update', game.getClientState(firstPlayerId));
               }
@@ -3964,11 +4038,13 @@ export function setupSocketHandlers(
           }
           // Clear cache for ended games
           lastBroadcastState.delete(code);
+          lastBroadcastTime.delete(code);
           lastGameState.delete(code);
           lastSoundEvent.delete(code);
         } else {
           // Clear state cache when game ends
           lastBroadcastState.delete(code);
+          lastBroadcastTime.delete(code);
           // Don't clear lastGameState or lastSoundEvent here - they might be needed for cleanup
         }
       }
