@@ -15,6 +15,7 @@
   import EmojiCarol from '$lib/games/EmojiCarol.svelte';
   import NaughtyOrNice from '$lib/games/NaughtyOrNice.svelte';
   import PriceIsRight from '$lib/games/PriceIsRight.svelte';
+  import Bingo from '$lib/games/Bingo.svelte';
   import SessionLeaderboard from '$lib/components/SessionLeaderboard.svelte';
   import FinalResults from '$lib/components/FinalResults.svelte';
 
@@ -396,6 +397,11 @@
     };
   });
 
+  // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
+  function isBingo(gt: GameType | string | null | undefined): boolean {
+    return gt === GameType.BINGO || gt === 'bingo';
+  }
+
   $: currentGame = $gameState?.gameType;
   $: playerScore = $gameState?.scores?.[$socket?.id] || 0;
   $: currentState = $gameState?.state;
@@ -406,9 +412,12 @@
       currentGame,
       currentGameType: typeof currentGame,
       GameType_TRIVIA_ROYALE: GameType.TRIVIA_ROYALE,
+      GameType_BINGO: GameType.BINGO,
+      isBingoGame: isBingo(currentGame),
       matchesTrivia: currentGame === GameType.TRIVIA_ROYALE,
       currentState,
-      hasGameState: !!$gameState
+      hasGameState: !!$gameState,
+      hasPlayerCard: !!$gameState?.playerCard
     });
   }
   
@@ -645,6 +654,9 @@
     {:else if currentGame === GameType.PRICE_IS_RIGHT}
       {@const _ = console.log('[Player Page] Rendering PriceIsRight component')}
       <PriceIsRight />
+    {:else if isBingo(currentGame)}
+      {@const _ = console.log('[Player Page] Rendering Bingo component, currentGame:', currentGame)}
+      <Bingo />
     {/if}
   </div>
 

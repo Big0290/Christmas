@@ -4,6 +4,25 @@
 
   export let gameType: GameType | null;
   export let showInstructions: boolean = false;
+
+  // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
+  function isBingo(gt: GameType | string | null): boolean {
+    return gt === GameType.BINGO || gt === 'bingo';
+  }
+
+  // Debug logging
+  $: {
+    if (import.meta.env.DEV) {
+      console.log('[HostInstructionsOverlay] Props changed:', {
+        show: showInstructions,
+        gameType,
+        isBingoType: isBingo(gameType),
+        GameType_BINGO: GameType.BINGO,
+        shouldRender: showInstructions && gameType,
+        hasBingoRules: !!t('games.bingo.rules.title')
+      });
+    }
+  }
 </script>
 
 {#if showInstructions}
@@ -113,6 +132,38 @@
           </div>
           <p class="scoring-note">{t('games.priceIsRight.rules.scoring.note')}</p>
         </div>
+      {:else if isBingo(gameType)}
+        <h1 class="instructions-title">{t('games.bingo.rules.title')}</h1>
+        <div class="instructions-section">
+          <h2 class="instructions-subtitle">{t('games.bingo.rules.howToPlay.title')}</h2>
+          <p class="instructions-text">{t('games.bingo.rules.howToPlay.description1')}</p>
+          <p class="instructions-text">{t('games.bingo.rules.howToPlay.description2')}</p>
+          <p class="instructions-text">{t('games.bingo.rules.howToPlay.description3')}</p>
+        </div>
+        <div class="scoring-section">
+          <h2 class="instructions-subtitle">{t('games.bingo.rules.scoring.title')}</h2>
+          <div class="scoring-breakdown">
+            <div class="scoring-item">
+              <span class="scoring-label">{t('games.bingo.rules.scoring.item1.label')}</span>
+              <span class="scoring-points">{t('games.bingo.rules.scoring.item1.points')}</span>
+            </div>
+            <div class="scoring-item highlight">
+              <span class="scoring-label">{t('games.bingo.rules.scoring.item2.label')}</span>
+              <span class="scoring-points">{t('games.bingo.rules.scoring.item2.points')}</span>
+            </div>
+          </div>
+          <p class="scoring-note">{t('games.bingo.rules.scoring.note')}</p>
+        </div>
+      {:else}
+        <!-- Fallback for unknown game type (debug) -->
+        {#if import.meta.env.DEV}
+          <div class="instructions-section">
+            <h1 class="instructions-title">⚠️ Unknown Game Type</h1>
+            <p class="instructions-text">gameType: {String(gameType)}</p>
+            <p class="instructions-text">isBingo: {String(isBingo(gameType))}</p>
+            <p class="instructions-text">GameType.BINGO: {String(GameType.BINGO)}</p>
+          </div>
+        {/if}
       {/if}
     </div>
   </div>

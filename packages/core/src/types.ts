@@ -9,6 +9,7 @@ export enum GameType {
   EMOJI_CAROL = 'emoji_carol',
   NAUGHTY_OR_NICE = 'naughty_or_nice',
   PRICE_IS_RIGHT = 'price_is_right',
+  BINGO = 'bingo',
 }
 
 export enum GameState {
@@ -133,12 +134,24 @@ export const PriceIsRightSettingsSchema = z.object({
 
 export type PriceIsRightSettings = z.infer<typeof PriceIsRightSettingsSchema>;
 
+// BINGO
+export const BingoSettingsSchema = z.object({
+  roundCount: z.number().min(3).max(15).default(5),
+  itemsPerCall: z.number().min(1).max(1).default(1),
+  callIntervalSeconds: z.number().min(1).max(10).default(2.5),
+  pointsPerLine: z.number().min(50).max(500).default(100),
+  speedBonusMultiplier: z.number().min(1).max(3).default(1.5),
+});
+
+export type BingoSettings = z.infer<typeof BingoSettingsSchema>;
+
 // Combined settings
 export interface AllGameSettings {
   trivia_royale: TriviaRoyaleSettings;
   emoji_carol: EmojiCarolSettings;
   naughty_or_nice: NaughtyOrNiceSettings;
   price_is_right: PriceIsRightSettings;
+  bingo: BingoSettings;
 }
 
 // ============================================================================
@@ -180,6 +193,19 @@ export interface NaughtyPrompt {
   translations?: Record<string, { prompt: string }>; // Language code -> translated content
 }
 
+export interface BingoItem {
+  id: string;
+  emoji: string;
+  name: string;
+  column: 'B' | 'I' | 'N' | 'G' | 'O'; // B-I-N-G-O column
+  number: number; // 1-5 for each column (except N3 which is FREE)
+  callString: string; // e.g., "B-3" or "I-5"
+}
+
+export interface BingoCard {
+  grid: (BingoItem | null)[][]; // 5x5 grid, center (2,2) is null
+}
+
 // ============================================================================
 // SOCKET EVENTS
 // ============================================================================
@@ -219,6 +245,10 @@ export interface ServerToClientEvents {
   price_round_start: (item: PriceItem, round: number) => void;
   price_round_end: (results: any) => void;
   
+  bingo_card_generated: (card: BingoCard) => void;
+  bingo_item_called: (item: BingoItem, callNumber: number) => void;
+  bingo_line_completed: (playerId: string, lineType: string, points: number) => void;
+  
   // Jukebox
   jukebox_state: (state: { currentTrack: number; isPlaying: boolean; shuffle: boolean; repeat: 'none' | 'one' | 'all'; volume: number; progress?: number }) => void;
 }
@@ -249,6 +279,7 @@ export interface ClientToServerEvents {
   emoji_pick: (emoji: string) => void;
   vote: (choice: 'naughty' | 'nice') => void;
   price_guess: (guess: number) => void;
+  bingo_mark: (row: number, col: number) => void;
   
   // Jukebox control (host only)
   jukebox_control: (roomCode: string, action: 'play' | 'pause' | 'next' | 'previous' | 'select' | 'shuffle' | 'repeat' | 'volume' | 'seek', data?: any) => void;
@@ -307,8 +338,24 @@ export interface PriceIsRightGameState extends BaseGameState {
   guessTimes: Record<string, number>; // Track when each player guessed
 }
 
+export interface BingoGameState extends BaseGameState {
+  gameType: GameType.BINGO;
+  currentCard: BingoCard | null; // Host's reference card
+  playerCards: Record<string, BingoCard>; // Each player's unique card
+  calledItems: BingoItem[]; // Items called so far
+  currentItem: BingoItem | null; // Currently displayed item
+  markedCells: Record<string, boolean[][]>; // Marked positions per player [row][col]
+  completedLines: Record<string, string[]>; // Completed line types per player ['horizontal-0', 'vertical-2', etc.]
+  winners: string[]; // Players who completed lines this round
+  callInterval: number; // Time between calls in ms
+  nextCallTime: number; // When next item will be called
+  roundStartTime: number; // When current round started
+  itemsCalled: number; // Number of items called in current round
+}
+
 export type AnyGameState =
   | TriviaGameState
   | EmojiCarolGameState
   | NaughtyOrNiceGameState
-  | PriceIsRightGameState;
+  | PriceIsRightGameState
+  | BingoGameState;

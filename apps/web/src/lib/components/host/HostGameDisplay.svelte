@@ -6,6 +6,7 @@
   import HostEmojiCarolDisplay from './HostEmojiCarolDisplay.svelte';
   import HostNaughtyOrNiceDisplay from './HostNaughtyOrNiceDisplay.svelte';
   import HostPriceIsRightDisplay from './HostPriceIsRightDisplay.svelte';
+  import HostBingoDisplay from './HostBingoDisplay.svelte';
 
   export let currentGameType: GameType | null;
   export let currentState: GameState | null | undefined;
@@ -16,10 +17,16 @@
   // Normalize gameType to handle both enum and string values
   $: normalizedGameType = normalizeGameType(currentGameType) || normalizeGameType($gameState?.gameType);
 
+  // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
+  function isBingo(gt: GameType | string | null | undefined): boolean {
+    return gt === GameType.BINGO || gt === 'bingo';
+  }
+
   // Debug logging for rendering
   $: if (import.meta.env.DEV) {
     console.log('[HostGameDisplay] Render check:', {
       currentGameType,
+      normalizedGameType,
       currentState,
       hasGameState: !!$gameState,
       gameStateGameType: $gameState?.gameType,
@@ -27,6 +34,10 @@
       hasItem: !!$gameState?.currentItem,
       hasPrompt: !!$gameState?.currentPrompt,
       hasEmojis: !!$gameState?.availableEmojis,
+      hasBingoCard: !!$gameState?.playerCard || !!$gameState?.currentCard,
+      hasBingoCurrentItem: !!$gameState?.currentItem,
+      hasBingoCalledItems: !!$gameState?.calledItems,
+      isBingoGame: isBingo(currentGameType) || isBingo(normalizedGameType) || isBingo($gameState?.gameType),
       shouldShowTrivia: currentGameType === GameType.TRIVIA_ROYALE && ($gameState?.currentQuestion || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
       shouldShowEmoji: currentGameType === GameType.EMOJI_CAROL && ($gameState?.availableEmojis || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
       shouldShowNaughty: currentGameType === GameType.NAUGHTY_OR_NICE && ($gameState?.currentPrompt || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING),
@@ -44,6 +55,8 @@
   <HostNaughtyOrNiceDisplay {currentState} {round} {maxRounds} {scoreboard} />
 {:else if (normalizedGameType === GameType.PRICE_IS_RIGHT || currentGameType === GameType.PRICE_IS_RIGHT) && (currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING || $gameState?.currentItem)}
   <HostPriceIsRightDisplay {currentState} {round} {maxRounds} {scoreboard} />
+{:else if (isBingo(normalizedGameType) || isBingo(currentGameType) || isBingo($gameState?.gameType)) && (currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING || $gameState?.playerCard || $gameState?.currentCard || $gameState?.currentItem || $gameState?.calledItems || $gameState?.playerCards || $gameState?.gameType === 'bingo')}
+  <HostBingoDisplay {currentState} {round} {maxRounds} {scoreboard} />
 {:else if currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END}
   <!-- Show placeholder if we're in an active game state but gameType doesn't match -->
   <div class="game-placeholder">

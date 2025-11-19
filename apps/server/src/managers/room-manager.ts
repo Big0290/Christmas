@@ -15,6 +15,7 @@ import {
   PriceIsRightSettings,
   NaughtyOrNiceSettings,
   EmojiCarolSettings,
+  BingoSettings,
 } from '@christmas/core';
 import { BaseGameEngine } from '@christmas/core';
 import { GameFactory } from '../games/factory.js';
@@ -592,6 +593,7 @@ export class RoomManager {
       | PriceIsRightSettings
       | NaughtyOrNiceSettings
       | EmojiCarolSettings
+      | BingoSettings
   ): Promise<BaseGameEngine | null> {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
@@ -605,6 +607,7 @@ export class RoomManager {
       | PriceIsRightSettings
       | NaughtyOrNiceSettings
       | EmojiCarolSettings
+      | BingoSettings
       | undefined;
 
     // Use provided settings if available, otherwise load from database
@@ -631,6 +634,8 @@ export class RoomManager {
           gameSettings = settings as NaughtyOrNiceSettings;
         } else if (gameType === GameType.EMOJI_CAROL) {
           gameSettings = settings as EmojiCarolSettings;
+        } else if (gameType === GameType.BINGO) {
+          gameSettings = settings as BingoSettings;
         }
       }
     }
@@ -774,6 +779,7 @@ export class RoomManager {
       }
     }
 
+    console.log(`[RoomManager] Creating game ${gameType} with ${room.players.size} players, settings:`, gameSettings);
     const game = GameFactory.createGame(
       gameType,
       room.players,
@@ -782,7 +788,10 @@ export class RoomManager {
       customPrompts,
       gameSettings
     );
-    if (!game) return null;
+    if (!game) {
+      console.error(`[RoomManager] GameFactory.createGame returned null for gameType: ${gameType}`);
+      return null;
+    }
 
     this.games.set(roomCode, game);
     room.currentGame = gameType;

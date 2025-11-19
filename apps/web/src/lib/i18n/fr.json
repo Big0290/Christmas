@@ -184,6 +184,10 @@
       "priceIsRight": {
         "name": "Le Juste Prix",
         "desc": "Jeu de devinette de prix"
+      },
+      "bingo": {
+        "name": "Bingo de Noël Rapide",
+        "desc": "Bingo dynamique avec images"
       }
     }
   },
@@ -407,6 +411,55 @@
             "points": "100 + bonus de vitesse"
           },
           "note": "⚡ La devinette la plus proche la plus rapide obtient le bonus de vitesse !"
+        }
+      }
+    },
+    "bingo": {
+      "loading": "Chargement du jeu...",
+      "getReady": "Préparez-vous !",
+      "round": "Manche {round}/{maxRounds}",
+      "calledItems": "Articles Appelés",
+      "currentlyCalling": "Actuellement Appelé",
+      "free": "GRATUIT",
+      "lineComplete": "LIGNE COMPLÈTE !",
+      "waitingForOthers": "En attente des autres...",
+      "roundResults": "Résultats de la Manche",
+      "youWon": "Vous avez gagné cette manche !",
+      "completedLines": "Lignes Complétées",
+      "leaderboard": "Classement",
+      "lineTypes": {
+        "horizontal-0": "Ligne 1",
+        "horizontal-1": "Ligne 2",
+        "horizontal-2": "Ligne 3",
+        "horizontal-3": "Ligne 4",
+        "horizontal-4": "Ligne 5",
+        "vertical-0": "Colonne 1",
+        "vertical-1": "Colonne 2",
+        "vertical-2": "Colonne 3",
+        "vertical-3": "Colonne 4",
+        "vertical-4": "Colonne 5",
+        "diagonal-main": "Diagonale (Haut-Gauche)",
+        "diagonal-anti": "Diagonale (Haut-Droite)"
+      },
+      "rules": {
+        "title": "🎰 Bingo de Noël Rapide",
+        "howToPlay": {
+          "title": "Comment jouer",
+          "description1": "Vous avez une carte de bingo 5x5 avec des articles de Noël !",
+          "description2": "Appuyez sur les cellules lorsque les articles sont appelés pour les marquer.",
+          "description3": "Complétez une ligne horizontale, verticale ou diagonale pour gagner la manche !"
+        },
+        "scoring": {
+          "title": "📊 Système de points",
+          "item1": {
+            "label": "✅ Complétez une ligne :",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Bonus de vitesse (Premier à compléter) :",
+            "points": "Jusqu'à +150 points"
+          },
+          "note": "⚡ Plus vous complétez une ligne rapidement, plus vous obtenez de points bonus !"
         }
       }
     }
@@ -835,6 +888,13 @@
       "filterPG13": "PG-13",
       "filterNone": "Aucun",
       "promptSet": "Jeu d'invites"
+    },
+    "bingo": {
+      "title": "Paramètres Bingo de Noël Rapide",
+      "roundCount": "Nombre de manches",
+      "callIntervalSeconds": "Intervalle d'appel",
+      "pointsPerLine": "Points par ligne",
+      "speedBonusMultiplier": "Multiplicateur de bonus de vitesse"
     }
   }
 }

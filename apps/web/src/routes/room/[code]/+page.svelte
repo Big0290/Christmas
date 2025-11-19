@@ -28,6 +28,7 @@
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let showSettingsModal = false;
   let selectedGameForSettings: GameType | null = null;
+  let games: Array<{ type: GameType; name: string; desc: string }> = [];
   
   // Debug logging (dev mode only)
   $: if (import.meta.env.DEV) {
@@ -35,14 +36,31 @@
     console.log('[Room] Players count:', $players.length);
     console.log('[Room] Socket connected:', $connected);
     console.log('[Room] Is host:', isHost);
+    console.log('[Room] GameType.BINGO:', GameType.BINGO);
+    console.log('[Room] All GameTypes:', GameType);
   }
 
-  $: games = [
-    { type: GameType.TRIVIA_ROYALE, name: t('room.games.triviaRoyale.name'), desc: t('room.games.triviaRoyale.desc') },
-    { type: GameType.EMOJI_CAROL, name: t('room.games.emojiCarol.name'), desc: t('room.games.emojiCarol.desc') },
-    { type: GameType.NAUGHTY_OR_NICE, name: t('room.games.naughtyOrNice.name'), desc: t('room.games.naughtyOrNice.desc') },
-    { type: GameType.PRICE_IS_RIGHT, name: t('room.games.priceIsRight.name'), desc: t('room.games.priceIsRight.desc') },
-  ];
+  $: {
+    // Use GameType.BINGO if available, otherwise fallback to the string literal
+    const bingoType = GameType.BINGO || ('bingo' as GameType);
+    const bingoName = t('room.games.bingo.name') || 'Christmas Speed Bingo';
+    const bingoDesc = t('room.games.bingo.desc') || 'Dynamic bingo with pictures';
+    
+    console.log('[Room] Creating games array, bingoType:', bingoType, 'GameType.BINGO:', GameType.BINGO, 'bingoName:', bingoName);
+    
+    const gamesList = [
+      { type: GameType.TRIVIA_ROYALE, name: t('room.games.triviaRoyale.name'), desc: t('room.games.triviaRoyale.desc') },
+      { type: GameType.EMOJI_CAROL, name: t('room.games.emojiCarol.name'), desc: t('room.games.emojiCarol.desc') },
+      { type: GameType.NAUGHTY_OR_NICE, name: t('room.games.naughtyOrNice.name'), desc: t('room.games.naughtyOrNice.desc') },
+      { type: GameType.PRICE_IS_RIGHT, name: t('room.games.priceIsRight.name'), desc: t('room.games.priceIsRight.desc') },
+      { type: bingoType, name: bingoName, desc: bingoDesc },
+    ];
+    
+    console.log('[Room] Games array created:', gamesList.map(g => ({ type: g.type, name: g.name })));
+    
+    games = gamesList.filter(game => game.type); // Filter out any games with undefined type
+    console.log('[Room] Games array after filter:', games.map(g => ({ type: g.type, name: g.name })));
+  }
 
   // Computed: sorted players by score
   $: sortedPlayers = [...$players].sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -271,13 +289,6 @@
     }
   });
 
-  function startGame() {
-    if (selectedGame && isHost) {
-      // Show settings modal instead of starting immediately
-      selectedGameForSettings = selectedGame;
-      showSettingsModal = true;
-    }
-  }
 
   function handleStartWithSettings(settings: any) {
     if (selectedGameForSettings && isHost && $socket) {
@@ -293,7 +304,22 @@
   }
 
   function selectGame(gameType: GameType) {
+    console.log('[Room] Selecting game:', gameType);
     selectedGame = gameType;
+    console.log('[Room] Selected game set to:', selectedGame);
+  }
+
+  function startGame() {
+    console.log('[Room] Start game called, selectedGame:', selectedGame, 'isHost:', isHost);
+    if (selectedGame && isHost) {
+      console.log('[Room] Opening settings modal for:', selectedGame);
+      // Show settings modal instead of starting immediately
+      selectedGameForSettings = selectedGame;
+      showSettingsModal = true;
+      console.log('[Room] Settings modal opened:', showSettingsModal);
+    } else {
+      console.warn('[Room] Cannot start game - selectedGame:', selectedGame, 'isHost:', isHost);
+    }
   }
 </script>
 
@@ -437,16 +463,18 @@
           <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-5 text-center">🎮 {t('room.selectGame')}</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3 md:gap-4">
             {#each games as game}
-              <GameTile
-                gameType={game.type}
-                name={game.name}
-                description={game.desc}
-                playerCount={$players.length}
-                isHost={isHost}
-                selected={selectedGame === game.type}
-                onSelect={() => selectGame(game.type)}
-                onStart={startGame}
-              />
+              {#if game.type}
+                <GameTile
+                  gameType={game.type}
+                  name={game.name}
+                  description={game.desc}
+                  playerCount={$players.length}
+                  isHost={isHost}
+                  selected={selectedGame === game.type}
+                  onSelect={() => selectGame(game.type)}
+                  onStart={startGame}
+                />
+              {/if}
             {/each}
           </div>
 

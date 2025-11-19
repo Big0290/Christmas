@@ -16,6 +16,7 @@
     [GameType.EMOJI_CAROL]: '🎶',
     [GameType.NAUGHTY_OR_NICE]: '😇',
     [GameType.PRICE_IS_RIGHT]: '💰',
+    [GameType.BINGO]: '🎰',
   };
 
   const gameColors: Record<GameType, { bg: string; border: string; hover: string }> = {
@@ -39,15 +40,39 @@
       border: 'border-green-400/50',
       hover: 'hover:border-green-400',
     },
+    [GameType.BINGO]: {
+      bg: 'bg-gradient-to-br from-orange-600/30 to-amber-800/30',
+      border: 'border-orange-400/50',
+      hover: 'hover:border-orange-400',
+    },
   };
 
-  const icon = gameIcons[gameType];
-  const colors = gameColors[gameType];
+  const icon = gameIcons[gameType] || '🎮';
+  const colors = gameColors[gameType] || {
+    bg: 'bg-gradient-to-br from-gray-600/30 to-gray-800/30',
+    border: 'border-gray-400/50',
+    hover: 'hover:border-gray-400',
+  };
+
+  function handleClick() {
+    console.log('[GameTile] Clicked, gameType:', gameType, 'onSelect:', onSelect);
+    if (onSelect) {
+      onSelect();
+    }
+  }
+
+  function handleStart(e: MouseEvent) {
+    e.stopPropagation();
+    console.log('[GameTile] Start button clicked, gameType:', gameType, 'onStart:', onStart);
+    if (onStart) {
+      onStart();
+    }
+  }
 </script>
 
 <div
   class="game-tile frosted-glass {colors.bg} border-2 {selected ? colors.border + ' ring-4 ring-christmas-gold/50' : colors.border} {colors.hover} transition-all duration-300 cursor-pointer {selected ? 'scale-105 shadow-2xl' : 'hover:scale-102'} relative overflow-hidden"
-  on:click={() => onSelect?.()}
+  on:click={handleClick}
   role="button"
   tabindex="0"
   on:keydown={(e) => {
@@ -81,7 +106,7 @@
     <!-- Start Button (Host Only) -->
     {#if isHost && selected}
       <button
-        on:click|stopPropagation={() => onStart?.()}
+        on:click={handleStart}
         class="btn-primary mt-4 text-xl px-8 py-4 w-full max-w-xs transform transition-transform hover:scale-105"
       >
         🚀 {t('gameTile.startGame')}

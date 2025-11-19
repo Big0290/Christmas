@@ -9,11 +9,13 @@ import {
   PriceIsRightSettings,
   NaughtyOrNiceSettings,
   EmojiCarolSettings,
+  BingoSettings,
 } from '@christmas/core';
 import { TriviaRoyaleGame } from './trivia-royale.js';
 import { EmojiCarolGame } from './emoji-carol.js';
 import { NaughtyOrNiceGame } from './naughty-or-nice.js';
 import { PriceIsRightGame } from './price-is-right.js';
+import { BingoGame } from './bingo.js';
 
 export class GameFactory {
   static createGame(
@@ -27,6 +29,7 @@ export class GameFactory {
       | PriceIsRightSettings
       | NaughtyOrNiceSettings
       | EmojiCarolSettings
+      | BingoSettings
   ): BaseGameEngine | null {
     switch (gameType) {
       case GameType.TRIVIA_ROYALE:
@@ -40,6 +43,9 @@ export class GameFactory {
 
       case GameType.PRICE_IS_RIGHT:
         return new PriceIsRightGame(players, customItems, settings as PriceIsRightSettings);
+
+      case GameType.BINGO:
+        return new BingoGame(players, settings as BingoSettings);
 
       default:
         return null;

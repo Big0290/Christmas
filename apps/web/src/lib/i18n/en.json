@@ -169,6 +169,10 @@
       "priceIsRight": {
         "name": "Price Is Right",
         "desc": "Guess the price game"
+      },
+      "bingo": {
+        "name": "Christmas Speed Bingo",
+        "desc": "Dynamic bingo with pictures"
       }
     }
   },
@@ -392,6 +396,55 @@
             "points": "100 + speed bonus"
           },
           "note": "⚡ Fastest closest guess gets the speed bonus!"
+        }
+      }
+    },
+    "bingo": {
+      "loading": "Loading game...",
+      "getReady": "Get Ready!",
+      "round": "Round {round}/{maxRounds}",
+      "calledItems": "Called Items",
+      "currentlyCalling": "Currently Calling",
+      "free": "FREE",
+      "lineComplete": "LINE COMPLETE!",
+      "waitingForOthers": "Waiting for others to finish...",
+      "roundResults": "Round Results",
+      "youWon": "You Won This Round!",
+      "completedLines": "Completed Lines",
+      "leaderboard": "Leaderboard",
+      "lineTypes": {
+        "horizontal-0": "Row 1",
+        "horizontal-1": "Row 2",
+        "horizontal-2": "Row 3",
+        "horizontal-3": "Row 4",
+        "horizontal-4": "Row 5",
+        "vertical-0": "Column 1",
+        "vertical-1": "Column 2",
+        "vertical-2": "Column 3",
+        "vertical-3": "Column 4",
+        "vertical-4": "Column 5",
+        "diagonal-main": "Diagonal (Top-Left)",
+        "diagonal-anti": "Diagonal (Top-Right)"
+      },
+      "rules": {
+        "title": "🎰 Christmas Speed Bingo",
+        "howToPlay": {
+          "title": "How to Play",
+          "description1": "You have a 5x5 bingo card with Christmas items!",
+          "description2": "Tap cells when items are called to mark them.",
+          "description3": "Complete a horizontal, vertical, or diagonal line to win the round!"
+        },
+        "scoring": {
+          "title": "📊 Scoring System",
+          "item1": {
+            "label": "✅ Complete a Line:",
+            "points": "100 points"
+          },
+          "item2": {
+            "label": "⚡ Speed Bonus (First to Complete):",
+            "points": "Up to +150 points"
+          },
+          "note": "⚡ The faster you complete a line, the more bonus points you get!"
         }
       }
     }
@@ -814,6 +867,13 @@
       "filterPG13": "PG-13",
       "filterNone": "None",
       "promptSet": "Prompt Set"
+    },
+    "bingo": {
+      "title": "Christmas Speed Bingo Settings",
+      "roundCount": "Number of Rounds",
+      "callIntervalSeconds": "Call Interval",
+      "pointsPerLine": "Points Per Line",
+      "speedBonusMultiplier": "Speed Bonus Multiplier"
     }
   }
 }

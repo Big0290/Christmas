@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GameType } from '@christmas/core';
-  import type { TriviaRoyaleSettings, EmojiCarolSettings, PriceIsRightSettings, NaughtyOrNiceSettings } from '@christmas/core';
+  import type { TriviaRoyaleSettings, EmojiCarolSettings, PriceIsRightSettings, NaughtyOrNiceSettings, BingoSettings } from '@christmas/core';
   import { socket } from '$lib/socket';
   import { t } from '$lib/i18n';
   import { onMount } from 'svelte';
@@ -49,25 +49,39 @@
     anonymousVoting: true,
   };
 
+  let bingoSettings: BingoSettings = {
+    roundCount: 5,
+    itemsPerCall: 1,
+    callIntervalSeconds: 2.5,
+    pointsPerLine: 100,
+    speedBonusMultiplier: 1.5,
+  };
+
   // Sets for dropdowns
   let questionSets: Array<{ id: string; name: string; description?: string; questionCount: number }> = [];
   let itemSets: Array<{ id: string; name: string; description?: string; itemCount: number }> = [];
   let promptSets: Array<{ id: string; name: string; description?: string; promptCount: number }> = [];
   let loadingSets = false;
 
+  // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
+  function isBingo(gt: GameType): boolean {
+    return gt === GameType.BINGO || gt === 'bingo';
+  }
+
   // Get current settings based on game type
   $: currentSettings = (() => {
-    switch (gameType) {
-      case GameType.TRIVIA_ROYALE:
-        return triviaSettings;
-      case GameType.EMOJI_CAROL:
-        return emojiSettings;
-      case GameType.PRICE_IS_RIGHT:
-        return priceSettings;
-      case GameType.NAUGHTY_OR_NICE:
-        return naughtySettings;
-      default:
-        return null;
+    if (gameType === GameType.TRIVIA_ROYALE || gameType === 'trivia_royale') {
+      return triviaSettings;
+    } else if (gameType === GameType.EMOJI_CAROL || gameType === 'emoji_carol') {
+      return emojiSettings;
+    } else if (gameType === GameType.PRICE_IS_RIGHT || gameType === 'price_is_right') {
+      return priceSettings;
+    } else if (gameType === GameType.NAUGHTY_OR_NICE || gameType === 'naughty_or_nice') {
+      return naughtySettings;
+    } else if (isBingo(gameType)) {
+      return bingoSettings;
+    } else {
+      return null;
     }
   })();
 
@@ -133,14 +147,16 @@
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
         <h2 id="modal-title" class="modal-title">
-          {#if gameType === GameType.TRIVIA_ROYALE}
+          {#if gameType === GameType.TRIVIA_ROYALE || gameType === 'trivia_royale'}
             🎄 {t('gameSettings.trivia.title')}
-          {:else if gameType === GameType.EMOJI_CAROL}
+          {:else if gameType === GameType.EMOJI_CAROL || gameType === 'emoji_carol'}
             🎶 {t('gameSettings.emoji.title')}
-          {:else if gameType === GameType.PRICE_IS_RIGHT}
+          {:else if gameType === GameType.PRICE_IS_RIGHT || gameType === 'price_is_right'}
             💰 {t('gameSettings.price.title')}
-          {:else if gameType === GameType.NAUGHTY_OR_NICE}
+          {:else if gameType === GameType.NAUGHTY_OR_NICE || gameType === 'naughty_or_nice'}
             😇 {t('gameSettings.naughty.title')}
+          {:else if isBingo(gameType)}
+            🎰 {t('gameSettings.bingo.title')}
           {/if}
         </h2>
         <button class="close-button" on:click={handleCancel} aria-label={t('common.button.close')}>
@@ -149,7 +165,7 @@
       </div>
 
       <div class="modal-body">
-        {#if gameType === GameType.TRIVIA_ROYALE}
+        {#if gameType === GameType.TRIVIA_ROYALE || gameType === 'trivia_royale'}
           <!-- Trivia Royale Settings -->
           <div class="settings-group">
             <label class="settings-label">
@@ -212,7 +228,7 @@
             </label>
           </div>
 
-        {:else if gameType === GameType.EMOJI_CAROL}
+        {:else if gameType === GameType.EMOJI_CAROL || gameType === 'emoji_carol'}
           <!-- Emoji Carol Settings -->
           <div class="settings-group">
             <label class="settings-label">
@@ -253,7 +269,7 @@
             </label>
           </div>
 
-        {:else if gameType === GameType.PRICE_IS_RIGHT}
+        {:else if gameType === GameType.PRICE_IS_RIGHT || gameType === 'price_is_right'}
           <!-- Price Is Right Settings -->
           <div class="settings-group">
             <label class="settings-label">
@@ -303,7 +319,7 @@
             </label>
           </div>
 
-        {:else if gameType === GameType.NAUGHTY_OR_NICE}
+        {:else if gameType === GameType.NAUGHTY_OR_NICE || gameType === 'naughty_or_nice'}
           <!-- Naughty or Nice Settings -->
           <div class="settings-group">
             <label class="settings-label">
@@ -351,6 +367,61 @@
                   <option value={set.id}>{set.name} ({set.promptCount} {t('gameSettings.prompts')})</option>
                 {/each}
               </select>
+            </label>
+          </div>
+        {:else if isBingo(gameType)}
+          <!-- Bingo Settings -->
+          <div class="settings-group">
+            <label class="settings-label">
+              {t('gameSettings.bingo.roundCount')}
+              <input
+                type="number"
+                min="3"
+                max="15"
+                bind:value={bingoSettings.roundCount}
+                class="settings-input"
+              />
+            </label>
+          </div>
+
+          <div class="settings-group">
+            <label class="settings-label">
+              {t('gameSettings.bingo.callIntervalSeconds')} (seconds)
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="0.5"
+                bind:value={bingoSettings.callIntervalSeconds}
+                class="settings-input"
+              />
+            </label>
+          </div>
+
+          <div class="settings-group">
+            <label class="settings-label">
+              {t('gameSettings.bingo.pointsPerLine')}
+              <input
+                type="number"
+                min="50"
+                max="500"
+                bind:value={bingoSettings.pointsPerLine}
+                class="settings-input"
+              />
+            </label>
+          </div>
+
+          <div class="settings-group">
+            <label class="settings-label">
+              {t('gameSettings.bingo.speedBonusMultiplier')}
+              <input
+                type="number"
+                min="1"
+                max="3"
+                step="0.1"
+                bind:value={bingoSettings.speedBonusMultiplier}
+                class="settings-input"
+              />
             </label>
           </div>
         {/if}

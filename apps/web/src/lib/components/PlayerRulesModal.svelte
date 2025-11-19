@@ -10,13 +10,23 @@
   const AUTO_DISMISS_DURATION = 5000; // 5 seconds
   let autoDismissTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
+  function isBingo(gt: GameType | string | null): boolean {
+    return gt === GameType.BINGO || gt === 'bingo';
+  }
+
   // Debug logging
   $: {
-    console.log('[PlayerRulesModal] Props changed:', {
-      show,
-      gameType,
-      shouldRender: show && gameType
-    });
+    if (import.meta.env.DEV) {
+      console.log('[PlayerRulesModal] Props changed:', {
+        show,
+        gameType,
+        isBingoType: isBingo(gameType),
+        GameType_BINGO: GameType.BINGO,
+        shouldRender: show && gameType,
+        hasBingoRules: !!t('games.bingo.rules.title')
+      });
+    }
   }
 
   $: if (show && gameType) {
@@ -162,6 +172,38 @@
           </div>
           <p class="scoring-note">{t('games.priceIsRight.rules.scoring.note')}</p>
         </div>
+      {:else if isBingo(gameType)}
+        <h1 class="rules-title">{t('games.bingo.rules.title')}</h1>
+        <div class="rules-section">
+          <h2 class="rules-subtitle">{t('games.bingo.rules.howToPlay.title')}</h2>
+          <p class="rules-text">{t('games.bingo.rules.howToPlay.description1')}</p>
+          <p class="rules-text">{t('games.bingo.rules.howToPlay.description2')}</p>
+          <p class="rules-text">{t('games.bingo.rules.howToPlay.description3')}</p>
+        </div>
+        <div class="scoring-section">
+          <h2 class="rules-subtitle">{t('games.bingo.rules.scoring.title')}</h2>
+          <div class="scoring-breakdown">
+            <div class="scoring-item">
+              <span class="scoring-label">{t('games.bingo.rules.scoring.item1.label')}</span>
+              <span class="scoring-points">{t('games.bingo.rules.scoring.item1.points')}</span>
+            </div>
+            <div class="scoring-item highlight">
+              <span class="scoring-label">{t('games.bingo.rules.scoring.item2.label')}</span>
+              <span class="scoring-points">{t('games.bingo.rules.scoring.item2.points')}</span>
+            </div>
+          </div>
+          <p class="scoring-note">{t('games.bingo.rules.scoring.note')}</p>
+        </div>
+      {:else}
+        <!-- Fallback for unknown game type (debug) -->
+        {#if import.meta.env.DEV}
+          <div class="rules-section">
+            <h1 class="rules-title">⚠️ Unknown Game Type</h1>
+            <p class="rules-text">gameType: {String(gameType)}</p>
+            <p class="rules-text">isBingo: {String(isBingo(gameType))}</p>
+            <p class="rules-text">GameType.BINGO: {String(GameType.BINGO)}</p>
+          </div>
+        {/if}
       {/if}
       <button class="close-button" on:click={handleClose} aria-label={t('common.button.close')}>
         {t('common.button.close')}

@@ -904,8 +904,10 @@ export function setupSocketHandlers(
         }
       }
 
+      console.log(`[Game] Attempting to start ${gameType} in room ${room.code} with settings:`, settings);
       const game = await roomManager.startGame(room.code, gameType, settings);
       if (!game) {
+        console.error(`[Game] Failed to start ${gameType} in room ${room.code} - startGame returned null`);
         socket.emit('error', 'Failed to start game');
         return;
       }
@@ -1168,6 +1170,10 @@ export function setupSocketHandlers(
 
     socket.on('price_guess', (guess: number) => {
       handleGameAction('guess', { guess });
+    });
+
+    socket.on('bingo_mark', (row: number, col: number) => {
+      handleGameAction('mark', { row, col });
     });
 
     // ========================================================================
@@ -3870,6 +3876,38 @@ export function setupSocketHandlers(
           // Check if state has changed (use JSON string comparison for simplicity)
           const currentState = JSON.stringify(game.getState());
           const lastState = lastBroadcastState.get(code);
+          
+          // Special handling for bingo: emit item_called event when new item is called
+          const gameState = game.getState();
+          if (gameState.gameType === GameType.BINGO && 'currentItem' in gameState) {
+            const bingoState = gameState as any;
+            const lastBingoState = JSON.parse(lastState || '{}');
+            
+            // Check if currentItem changed
+            if (bingoState.currentItem && 
+                (!lastBingoState.currentItem || lastBingoState.currentItem.id !== bingoState.currentItem.id)) {
+              // New item was called - emit event
+              io.to(code).emit('bingo_item_called', bingoState.currentItem, bingoState.itemsCalled || 0);
+              console.log(`[Bingo] Item called: ${bingoState.currentItem.emoji} ${bingoState.currentItem.name} in room ${code}`);
+              
+              // Also check for completed lines and emit those events
+              if (bingoState.winners && bingoState.winners.length > 0) {
+                bingoState.winners.forEach((winnerId: string) => {
+                  const completedLines = bingoState.completedLines?.[winnerId] || [];
+                  if (completedLines.length > 0) {
+                    const player = room.players.get(winnerId);
+                    if (player) {
+                      // Calculate points for this line (simplified)
+                      const points = bingoState.scores?.[winnerId] || 0;
+                      const lineType = completedLines[completedLines.length - 1]; // Last completed line
+                      io.to(code).emit('bingo_line_completed', winnerId, lineType, points);
+                      console.log(`[Bingo] Line completed by ${player.name}: ${lineType} for ${points} points`);
+                    }
+                  }
+                });
+              }
+            }
+          }
 
           // Only broadcast if state changed or every 200ms (5Hz instead of 10Hz)
           const shouldBroadcast = currentState !== lastState || Date.now() % 200 < 100; // Throttle to 5Hz
@@ -3882,6 +3920,15 @@ export function setupSocketHandlers(
                 socket.emit('game_state_update', game.getClientState(player.id));
               }
             });
+            
+            // Also send to host
+            const hostSocket = io.sockets.sockets.get(room.hostId);
+            if (hostSocket) {
+              const firstPlayerId = room.players.size > 0 ? room.players.keys().next().value : room.hostId;
+              if (firstPlayerId) {
+                hostSocket.emit('game_state_update', game.getClientState(firstPlayerId));
+              }
+            }
           }
         } else if (game && game.getState().state === GameState.GAME_END) {
           // Auto-finalize when games end themselves (e.g., last round)
