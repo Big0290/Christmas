@@ -92,13 +92,23 @@
       // Store player info with normalized room code
       localStorage.setItem('christmas_playerName', playerName);
       localStorage.setItem('christmas_role', 'player');
-      localStorage.setItem('christmas_roomCode', pendingJoinResponse.roomCode || roomCode.trim().toUpperCase());
+      const normalizedCode = pendingJoinResponse.roomCode || roomCode.trim().toUpperCase();
+      localStorage.setItem('christmas_roomCode', normalizedCode);
       if (selectedAvatar) {
         localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
         localStorage.setItem('christmas_avatarStyle', avatarStyle);
       }
       if (pendingJoinResponse.playerToken) {
         localStorage.setItem('christmas_playerToken', pendingJoinResponse.playerToken);
+      }
+      
+      // Set session flag to indicate this is a fresh join (not a reconnection)
+      // This tells the play page that socket is already in the room
+      try {
+        sessionStorage.setItem('just_joined_room', normalizedCode);
+        console.log(`[Join] Set just_joined_room session flag for room ${normalizedCode}`);
+      } catch (error) {
+        console.warn('[Join] Failed to set session flag:', error);
       }
     }
     
@@ -155,6 +165,14 @@
         console.log(`[Join] ✅ Successfully joined room ${normalizedCode}`);
         console.log(`[Join] Response players:`, response.players || []);
         console.log(`[Join] Player count:`, response.players?.length || 0);
+        
+        // Verify socket room membership
+        if ($socket) {
+          // Check if socket is in the room (socket.io stores rooms in socket.rooms)
+          // Note: We can't directly check socket.rooms from client, but server confirmed join
+          console.log(`[Join] Socket ${$socket.id.substring(0, 8)} successfully joined room ${normalizedCode}`);
+          console.log(`[Join] Socket connected: ${$connected}, Socket ID: ${$socket.id}`);
+        }
         
         // Store the response temporarily
         pendingJoinResponse = response;

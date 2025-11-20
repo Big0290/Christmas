@@ -505,7 +505,7 @@
       <!-- Visualizer -->
       <div class="visualizer-container">
         {#key visualizerKey}
-          <AudioVisualizer mode="bars" width={300} height={35} barCount={20} color="#c41e3a" />
+          <AudioVisualizer mode="bars" width={300} height={25} barCount={20} color="#c41e3a" />
         {/key}
       </div>
 
@@ -646,17 +646,18 @@
       rgba(15, 134, 68, 0.3) 50%, 
       rgba(255, 215, 0, 0.2) 100%);
     border: 2px solid rgba(255, 215, 0, 0.5);
-    border-radius: 16px;
-    padding: 1rem;
+    border-radius: 12px;
+    padding: clamp(0.5rem, 1vh, 0.75rem);
     backdrop-filter: blur(20px);
     box-shadow: 
-      0 8px 32px rgba(0, 0, 0, 0.5),
-      0 0 20px rgba(255, 215, 0, 0.15),
+      0 4px 16px rgba(0, 0, 0, 0.4),
+      0 0 15px rgba(255, 215, 0, 0.12),
       inset 0 1px 0 rgba(255, 255, 255, 0.15),
       inset 0 -1px 0 rgba(0, 0, 0, 0.2);
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+    flex-shrink: 0;
   }
   
   .jukebox-container::after {
@@ -712,26 +713,26 @@
   }
 
   .jukebox-container.minimized {
-    padding: 0.4rem 0.75rem;
+    padding: 0.3rem 0.5rem;
   }
 
   .jukebox-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: clamp(0.25rem, 0.5vh, 0.5rem);
   }
 
   .jukebox-title {
-    font-size: 1.1rem;
+    font-size: clamp(0.875rem, 1.2vw, 1rem);
     font-weight: 900;
     color: #ffd700;
     text-shadow: 
-      0 0 12px rgba(255, 215, 0, 0.8),
-      0 2px 4px rgba(0, 0, 0, 0.8),
+      0 0 8px rgba(255, 215, 0, 0.8),
+      0 1px 3px rgba(0, 0, 0, 0.8),
       1px 1px 2px rgba(0, 0, 0, 0.9);
     margin: 0;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     position: relative;
     animation: title-glow 2s ease-in-out infinite;
   }
@@ -841,21 +842,21 @@
   .jukebox-content {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: clamp(0.4rem, 0.8vh, 0.6rem);
   }
 
   .track-display {
     text-align: center;
-    padding: 0.75rem 1rem;
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.5rem, 1vw, 0.75rem);
     background: linear-gradient(135deg, 
       rgba(0, 0, 0, 0.4) 0%, 
       rgba(196, 30, 58, 0.15) 50%, 
       rgba(0, 0, 0, 0.4) 100%);
-    border-radius: 12px;
-    border: 2px solid rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.3);
     box-shadow: 
-      inset 0 2px 4px rgba(0, 0, 0, 0.4),
-      0 0 12px rgba(255, 215, 0, 0.1);
+      inset 0 1px 3px rgba(0, 0, 0, 0.4),
+      0 0 8px rgba(255, 215, 0, 0.08);
     position: relative;
     overflow: hidden;
   }
@@ -880,18 +881,18 @@
   }
 
   .track-name {
-    font-size: 0.95rem;
+    font-size: clamp(0.75rem, 1vw, 0.875rem);
     font-weight: 800;
     color: #ffd700;
-    margin-bottom: 0.25rem;
+    margin-bottom: clamp(0.15rem, 0.3vh, 0.25rem);
     text-shadow: 
-      0 0 10px rgba(255, 215, 0, 0.6),
-      0 2px 4px rgba(0, 0, 0, 0.8),
+      0 0 8px rgba(255, 215, 0, 0.6),
+      0 1px 3px rgba(0, 0, 0, 0.8),
       1px 1px 2px rgba(0, 0, 0, 0.9);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     position: relative;
     z-index: 1;
   }
@@ -906,11 +907,11 @@
   }
 
   .track-time {
-    font-size: 0.75rem;
+    font-size: clamp(0.65rem, 0.9vw, 0.75rem);
     color: rgba(255, 255, 255, 0.95);
     font-family: 'Courier New', monospace;
     font-weight: 700;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
     position: relative;
     z-index: 1;
   }
@@ -922,18 +923,18 @@
 
   .visualizer-container {
     width: 100%;
-    height: 40px;
-    margin: 0.25rem 0;
-    padding: 0.5rem;
+    height: clamp(25px, 3vh, 35px);
+    margin: clamp(0.15rem, 0.3vh, 0.25rem) 0;
+    padding: clamp(0.25rem, 0.5vh, 0.4rem);
     background: linear-gradient(135deg, 
       rgba(0, 0, 0, 0.4) 0%, 
       rgba(196, 30, 58, 0.1) 50%, 
       rgba(0, 0, 0, 0.4) 100%);
-    border-radius: 12px;
-    border: 2px solid rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.3);
     box-shadow: 
-      inset 0 2px 4px rgba(0, 0, 0, 0.3),
-      0 0 8px rgba(255, 215, 0, 0.1);
+      inset 0 1px 3px rgba(0, 0, 0, 0.3),
+      0 0 6px rgba(255, 215, 0, 0.08);
     position: relative;
     overflow: hidden;
   }
@@ -1062,24 +1063,24 @@
   .controls {
     display: flex;
     justify-content: center;
-    gap: 0.3rem;
+    gap: clamp(0.2rem, 0.4vw, 0.3rem);
     flex-wrap: wrap;
   }
 
   .btn-control {
     background: linear-gradient(135deg, rgba(196, 30, 58, 0.3), rgba(15, 134, 68, 0.3));
-    border: 2px solid rgba(255, 215, 0, 0.5);
-    border-radius: 14px;
-    padding: 0.5rem 0.75rem;
+    border: 1px solid rgba(255, 215, 0, 0.5);
+    border-radius: 10px;
+    padding: clamp(0.3rem, 0.6vh, 0.4rem) clamp(0.4rem, 0.8vw, 0.6rem);
     cursor: pointer;
     color: white;
-    font-size: 1.1rem;
+    font-size: clamp(0.875rem, 1.2vw, 1rem);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    min-width: 44px;
+    min-width: clamp(36px, 4vw, 40px);
     box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.3),
-      0 0 8px rgba(255, 215, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      0 0 6px rgba(255, 215, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
     position: relative;
     overflow: hidden;
   }
@@ -1151,13 +1152,13 @@
   .btn-play {
     background: linear-gradient(135deg, rgba(15, 134, 68, 0.6), rgba(15, 134, 68, 0.4));
     border-color: #0f8644;
-    font-size: 1.5rem;
-    padding: 0.6rem 1rem;
-    min-width: 52px;
+    font-size: clamp(1rem, 1.5vw, 1.25rem);
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.6rem, 1.2vw, 0.8rem);
+    min-width: clamp(44px, 5vw, 48px);
     box-shadow: 
-      0 6px 16px rgba(15, 134, 68, 0.5),
-      0 0 12px rgba(15, 134, 68, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      0 4px 12px rgba(15, 134, 68, 0.4),
+      0 0 10px rgba(15, 134, 68, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
   .btn-play:hover:not(:disabled) {
@@ -1172,21 +1173,21 @@
   .volume-container {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.75rem;
+    gap: clamp(0.3rem, 0.6vw, 0.5rem);
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.5rem, 1vw, 0.75rem);
     background: linear-gradient(135deg, 
       rgba(0, 0, 0, 0.4) 0%, 
       rgba(15, 134, 68, 0.15) 50%, 
       rgba(0, 0, 0, 0.4) 100%);
-    border-radius: 12px;
-    border: 2px solid rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.3);
     box-shadow: 
-      inset 0 2px 4px rgba(0, 0, 0, 0.3),
-      0 0 8px rgba(255, 215, 0, 0.1);
+      inset 0 1px 3px rgba(0, 0, 0, 0.3),
+      0 0 6px rgba(255, 215, 0, 0.08);
   }
 
   .volume-label {
-    font-size: 0.85rem;
+    font-size: clamp(0.75rem, 1vw, 0.85rem);
   }
 
   .volume-slider {
@@ -1258,55 +1259,55 @@
   }
 
   .volume-value {
-    min-width: 35px;
+    min-width: clamp(30px, 4vw, 35px);
     text-align: right;
     color: white;
-    font-size: 0.75rem;
+    font-size: clamp(0.65rem, 0.9vw, 0.75rem);
   }
 
   .playlist-container {
-    max-height: 120px;
+    max-height: clamp(80px, 12vh, 100px);
     overflow-y: auto;
     background: linear-gradient(135deg, 
       rgba(0, 0, 0, 0.4) 0%, 
       rgba(15, 134, 68, 0.15) 50%, 
       rgba(0, 0, 0, 0.4) 100%);
-    border-radius: 12px;
-    padding: 0.5rem;
-    border: 2px solid rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    padding: clamp(0.3rem, 0.6vh, 0.4rem);
+    border: 1px solid rgba(255, 215, 0, 0.3);
     box-shadow: 
-      inset 0 2px 4px rgba(0, 0, 0, 0.3),
-      0 0 8px rgba(255, 215, 0, 0.1);
+      inset 0 1px 3px rgba(0, 0, 0, 0.3),
+      0 0 6px rgba(255, 215, 0, 0.08);
   }
 
   .playlist-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.3rem;
-    padding: 0.3rem;
+    margin-bottom: clamp(0.2rem, 0.4vh, 0.3rem);
+    padding: clamp(0.2rem, 0.4vh, 0.3rem);
   }
 
   .playlist-header h4 {
     margin: 0;
     color: white;
-    font-size: 0.85rem;
+    font-size: clamp(0.75rem, 1vw, 0.85rem);
   }
 
   .btn-toggle {
     background: linear-gradient(135deg, 
       rgba(196, 30, 58, 0.2), 
       rgba(15, 134, 68, 0.2));
-    border: 2px solid rgba(255, 215, 0, 0.4);
-    border-radius: 10px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    border-radius: 8px;
     color: #ffd700;
     cursor: pointer;
-    font-size: 1.2rem;
-    padding: 0.4rem 0.6rem;
+    font-size: clamp(0.875rem, 1.2vw, 1rem);
+    padding: clamp(0.3rem, 0.6vh, 0.4rem) clamp(0.4rem, 0.8vw, 0.6rem);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 
-      0 2px 6px rgba(0, 0, 0, 0.2),
-      0 0 6px rgba(255, 215, 0, 0.15);
+      0 1px 4px rgba(0, 0, 0, 0.2),
+      0 0 4px rgba(255, 215, 0, 0.12);
   }
   
   .btn-toggle:hover {
@@ -1329,13 +1330,14 @@
   .playlist-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 10px;
+    gap: clamp(0.3rem, 0.6vw, 0.5rem);
+    padding: clamp(0.3rem, 0.6vh, 0.4rem) clamp(0.4rem, 0.8vw, 0.6rem);
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: rgba(255, 255, 255, 0.85);
     border: 1px solid transparent;
+    font-size: clamp(0.75rem, 1vw, 0.85rem);
   }
 
   .playlist-item:hover {
@@ -1381,13 +1383,13 @@
 
   .playlist-toggle {
     text-align: center;
-    padding: 0.5rem;
+    padding: clamp(0.3rem, 0.6vh, 0.4rem);
   }
   
   .playlist-toggle .btn-toggle {
     width: 100%;
-    font-size: 0.9rem;
-    padding: 0.5rem 1rem;
+    font-size: clamp(0.75rem, 1vw, 0.85rem);
+    padding: clamp(0.3rem, 0.6vh, 0.4rem) clamp(0.6rem, 1.2vw, 0.8rem);
     background: linear-gradient(135deg, 
       rgba(196, 30, 58, 0.25), 
       rgba(15, 134, 68, 0.25));

@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { RoomManager } from './managers/room-manager.js';
 import { AchievementManager } from './managers/achievement-manager.js';
+import { RoomEngine } from './engine/room-engine.js';
 import { setupSocketHandlers } from './socket/handlers.js';
 import { createSupabaseClient } from './lib/supabase.js';
 
@@ -231,8 +232,8 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  pingTimeout: 120000, // 120 seconds (2 minutes) - increased from 60s to handle slower networks
+  pingInterval: 25000, // 25 seconds - reasonable interval for ping checks
   // Increase max message size to allow image uploads (5MB base64 = ~6.7MB encoded)
   maxHttpBufferSize: 10 * 1024 * 1024, // 10MB to handle 5MB files in base64
   // Allow auth token in handshake
@@ -243,14 +244,16 @@ const io = new Server(httpServer, {
 });
 
 // Initialize managers
-const roomManager = new RoomManager();
 const achievementManager = new AchievementManager();
 const supabase = createSupabaseClient();
-roomManager.setSupabaseClient(supabase);
 achievementManager.setSupabaseClient(supabase);
 
+// Initialize room engine (it will initialize RoomManager internally)
+const roomEngine = new RoomEngine(io, achievementManager);
+roomEngine.setSupabaseClient(supabase);
+
 // Restore active rooms from database on startup
-roomManager.restoreActiveRooms().then((count) => {
+roomEngine.restoreActiveRooms().then((count) => {
   if (count > 0) {
     console.log(`[Startup] Restored ${count} active room(s) from database`);
   }
@@ -259,12 +262,12 @@ roomManager.restoreActiveRooms().then((count) => {
 });
 
 // Setup Socket.IO handlers
-setupSocketHandlers(io, roomManager, supabase, achievementManager);
+setupSocketHandlers(io, roomEngine, supabase, achievementManager);
 
 // Cleanup expired rooms every 5 minutes
 setInterval(() => {
-  roomManager.cleanupExpiredRooms();
-  console.log(`[Cleanup] Removed expired rooms. Active rooms: ${roomManager.getActiveRoomCount()}`);
+  roomEngine.cleanupExpiredRooms();
+  console.log(`[Cleanup] Removed expired rooms. Active rooms: ${roomEngine.getActiveRoomCount()}`);
 }, 5 * 60 * 1000);
 
 // Start server

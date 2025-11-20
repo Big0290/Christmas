@@ -6,6 +6,8 @@
   import { t } from '$lib/i18n';
   import PlayerRulesModal from '$lib/components/PlayerRulesModal.svelte';
   import { get } from 'svelte/store';
+  import { page } from '$app/stores';
+  import { hasDismissedRules, dismissRules } from '$lib/utils/rules-modal-storage';
 
   $: question = $gameState?.currentQuestion;
   $: hasAnswered = $gameState?.hasAnswered;
@@ -77,8 +79,9 @@
   // Watch gameState store directly to catch all state changes
   $: currentState = $gameState?.state;
   $: currentGameType = $gameState?.gameType;
+  $: roomCode = $page.params.code;
   
-  // Show rules modal when game starts - simplified reactive logic
+  // Show rules modal when game starts - only on game start, not on round transitions
   $: {
     const state = currentState;
     const gameType = currentGameType;
@@ -94,13 +97,27 @@
       });
     }
     
-    if (state !== undefined && state !== null && gameType) {
+    if (state !== undefined && state !== null && gameType && roomCode) {
       // Use enum comparisons only - state is normalized in socket.ts
       const isStartingOrPlaying = 
         state === GameState.STARTING || state === GameState.PLAYING;
       
-      // Show modal if state is STARTING/PLAYING and we haven't shown it for this gameType yet
-      if (isStartingOrPlaying && rulesShownForGameType !== gameType) {
+      // Only show modal when transitioning from LOBBY to STARTING/PLAYING (game start)
+      // NOT when transitioning from ROUND_END to STARTING/PLAYING (round transition)
+      const isGameStart = 
+        previousState === GameState.LOBBY || 
+        previousState === undefined || 
+        previousState === null;
+      
+      // Show modal only if:
+      // 1. State is STARTING/PLAYING
+      // 2. This is a game start (not a round transition)
+      // 3. We haven't shown it for this gameType yet (in memory)
+      // 4. Rules haven't been dismissed (in sessionStorage)
+      if (isStartingOrPlaying && 
+          isGameStart && 
+          rulesShownForGameType !== gameType && 
+          !hasDismissedRules(roomCode, gameType)) {
         console.log('[TriviaRoyale] Showing rules modal for gameType:', gameType, 'state:', state);
         showRulesModal = true;
         rulesShownForGameType = gameType;
@@ -123,6 +140,9 @@
   }
   
   function closeRulesModal() {
+    if (roomCode && currentGameType) {
+      dismissRules(roomCode, currentGameType);
+    }
     showRulesModal = false;
   }
 

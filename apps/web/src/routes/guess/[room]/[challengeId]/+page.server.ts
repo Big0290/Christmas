@@ -11,15 +11,20 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
   const roomCode = params.room?.toUpperCase();
   const challengeId = params.challengeId;
 
-  // Validate room code (should be 4 uppercase letters)
-  if (!roomCode || !/^[A-Z]{4}$/.test(roomCode)) {
+  // Validate room code (should be 4-8 uppercase alphanumeric characters)
+  // Room codes can contain both letters and numbers (e.g., "USA5", "ABCD")
+  if (!roomCode || !/^[A-Z0-9]{4,8}$/.test(roomCode)) {
+    console.error('[Guess Page] Invalid room code:', params.room);
     throw redirect(302, '/');
   }
 
   // Validate challenge ID (should be a UUID)
   if (!challengeId || !UUID_REGEX.test(challengeId)) {
+    console.error('[Guess Page] Invalid challenge ID:', challengeId);
     throw redirect(302, '/');
   }
+  
+  console.log('[Guess Page] Loading challenge:', { roomCode, challengeId });
 
   try {
     // Fetch challenge data from public API
@@ -34,18 +39,19 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
         message: fetchError?.message,
         stack: fetchError?.stack,
         url: apiUrl,
+        roomCode,
+        challengeId,
       });
-      throw redirect(302, '/');
+      // Return error instead of redirecting
+      return {
+        challenge: null,
+        roomCode,
+        error: `Network error: ${fetchError?.message || 'Failed to fetch challenge'}`,
+      };
     }
     
     if (!response.ok) {
-      // If 404, challenge doesn't exist - redirect to home
-      if (response.status === 404) {
-        console.log('[Guess Page] Challenge not found (404)');
-        throw redirect(302, '/');
-      }
-      
-      // For 500 errors, try to get error details from response
+      // Try to get error details from response
       let errorDetails: any = null;
       try {
         errorDetails = await response.json();
@@ -58,8 +64,16 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
         statusText: response.statusText,
         error: errorDetails,
         url: apiUrl,
+        roomCode,
+        challengeId,
       });
-      throw redirect(302, '/');
+      
+      // Return error data instead of redirecting so users can see what went wrong
+      return {
+        challenge: null,
+        roomCode,
+        error: errorDetails?.error || `Failed to load challenge (${response.status})`,
+      };
     }
     
     let result: any;
@@ -83,22 +97,40 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
         hasResult: !!result,
         hasSuccess: !!result?.success,
         hasChallenge: !!result?.challenge,
+        roomCode,
+        challengeId,
       });
-      throw redirect(302, '/');
+      // Return error data instead of redirecting so we can show an error page
+      return {
+        challenge: null,
+        roomCode,
+        error: result?.error || 'Challenge not found or invalid response',
+      };
     }
 
     return {
       challenge: result.challenge as GuessingChallengePublic,
       roomCode,
+      error: null,
     };
   } catch (error: any) {
     // Don't redirect if it's already a redirect
     if (error?.status === 302) {
       throw error;
     }
-    console.error('[Guess Page] Error loading challenge:', error);
+    console.error('[Guess Page] Unexpected error loading challenge:', error);
     console.error('[Guess Page] Error stack:', error?.stack);
-    throw redirect(302, '/');
+    console.error('[Guess Page] Request details:', {
+      roomCode,
+      challengeId,
+      url: url.toString(),
+    });
+    // Return error data instead of redirecting
+    return {
+      challenge: null,
+      roomCode,
+      error: `Unexpected error: ${error?.message || 'Failed to load challenge'}`,
+    };
   }
 };
 
@@ -150,6 +182,11 @@ export const actions: Actions = {
 
       if (challengeError || !challenge) {
         return fail(404, { error: 'Challenge not found' });
+      }
+
+      // Prevent submissions if challenge is revealed
+      if (challenge.is_revealed) {
+        return fail(400, { error: 'This challenge has been revealed. Submissions are no longer accepted.' });
       }
 
       // Validate guess is within bounds

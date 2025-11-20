@@ -660,6 +660,8 @@
     "colorSchemeTraditional": "Traditional Christmas",
     "colorSchemeWinter": "Winter Wonderland",
     "colorSchemeMixed": "Mixed Theme",
+    "language": "Language",
+    "languageDesc": "Choose the language for the host interface",
     "saveSettings": "Save Settings",
     "saving": "Saving..."
   },
@@ -903,8 +905,16 @@
       "delete": "Delete",
       "viewSubmissions": "View Submissions",
       "hideSubmissions": "Hide Submissions",
+      "showDetails": "Show Details",
+      "hideDetails": "Hide Details",
       "loadingSubmissions": "Loading submissions...",
       "shareChallenge": "Share Challenge",
+      "tabs": {
+        "running": "Running",
+        "revealed": "Revealed"
+      },
+      "noRunningChallenges": "No active challenges. Create one to get started!",
+      "noRevealedChallenges": "No revealed challenges yet.",
       "confirmDelete": "Are you sure you want to delete the challenge \"{title}\"?",
       "confirmReveal": "Reveal Challenge",
       "confirmRevealMessage": "Are you sure you want to reveal \"{title}\"? This will show the correct answer and results to players.",

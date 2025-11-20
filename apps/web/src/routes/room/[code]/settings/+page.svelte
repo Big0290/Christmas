@@ -6,7 +6,7 @@
   import { get } from 'svelte/store';
   import { socket, connectSocket, connected } from '$lib/socket';
   import { GameType } from '@christmas/core';
-  import { loadRoomTheme, roomTheme, updateRoomTheme } from '$lib/theme';
+  import { loadRoomTheme, roomTheme, updateRoomTheme, applyRoomTheme } from '$lib/theme';
 
   // Tab Components
   import RoomSettingsTab from '$lib/components/room/RoomSettingsTab.svelte';
@@ -186,13 +186,14 @@
         if (hostToken && savedRoomCode === roomCode) {
           $socket.emit('reconnect_host', roomCode, hostToken, (response: any) => {
             if (response && response.success) {
-              if (isHost && $socket) {
-                loadRoomSettings();
-                loadQuestionSets();
-                loadAllSettings();
-              } else {
-                loadRoomSettings();
-              }
+            if (isHost && $socket) {
+              loadRoomSettings();
+              loadQuestionSets();
+              loadItemSets();
+              loadAllSettings();
+            } else {
+              loadRoomSettings();
+            }
             }
           });
         } else {
@@ -200,6 +201,7 @@
           if (isHost && $socket) {
             loadRoomSettings();
             loadQuestionSets();
+            loadItemSets();
             loadAllSettings();
           }
         }
@@ -228,15 +230,32 @@
         if (settings.snowEffect !== undefined) {
           snowEffect = settings.snowEffect;
         }
+        // Update theme store directly instead of reloading from server
         if (
           settings.sparkles !== undefined ||
           settings.icicles !== undefined ||
           settings.frostPattern !== undefined ||
           settings.colorScheme !== undefined ||
           settings.backgroundMusic !== undefined ||
-          settings.snowEffect !== undefined
+          settings.snowEffect !== undefined ||
+          settings.language !== undefined
         ) {
-          loadRoomTheme(roomCode);
+          roomTheme.update((theme) => {
+            if (!theme) return theme;
+            const updated = { ...theme };
+            if (settings.backgroundMusic !== undefined) updated.backgroundMusic = settings.backgroundMusic;
+            if (settings.snowEffect !== undefined) updated.snowEffect = settings.snowEffect;
+            if (settings.sparkles !== undefined) updated.sparkles = settings.sparkles;
+            if (settings.icicles !== undefined) updated.icicles = settings.icicles;
+            if (settings.frostPattern !== undefined) updated.frostPattern = settings.frostPattern;
+            if (settings.colorScheme !== undefined) updated.colorScheme = settings.colorScheme;
+            if (settings.language !== undefined) {
+              updated.language = settings.language;
+              language.set(settings.language);
+            }
+            applyRoomTheme(updated);
+            return updated;
+          });
         }
       });
     }
@@ -247,6 +266,10 @@
       if (theme) {
         backgroundMusic = theme.backgroundMusic;
         snowEffect = theme.snowEffect;
+        // Ensure theme is applied after loading
+        if (theme) {
+          applyRoomTheme(theme);
+        }
       }
     });
     roomName = '';
@@ -258,6 +281,7 @@
     loadingSettings = true;
     $socket.emit(
       'update_room_settings',
+      roomCode,
       {
         roomName: roomName.trim() || undefined,
         description: roomDescription.trim() || undefined,
@@ -875,15 +899,20 @@
     );
   }
 
-  function saveGeneralSettings() {
+  async function saveGeneralSettings() {
     if (!$socket || !isHost) return;
     loadingSettings = true;
-    // Read ALL settings from store
-    const currentTheme = get(roomTheme);
+    
+    // Load theme if not already loaded
+    let currentTheme = get(roomTheme);
     if (!currentTheme) {
-      loadingSettings = false;
-      alert(t('settings.errors.themeNotLoaded'));
-      return;
+      // Try to load theme first
+      currentTheme = await loadRoomTheme(roomCode);
+      if (!currentTheme) {
+        loadingSettings = false;
+        alert(t('settings.errors.themeNotLoaded'));
+        return;
+      }
     }
     
     const themeUpdates: any = {
@@ -893,15 +922,22 @@
       icicles: currentTheme.icicles ?? false,
       frostPattern: currentTheme.frostPattern ?? true,
       colorScheme: currentTheme.colorScheme ?? 'mixed',
+      language: currentTheme.language ?? $language ?? 'en',
     };
     
     updateRoomTheme(roomCode, themeUpdates).then((success) => {
       loadingSettings = false;
       if (success) {
+        console.log('[Settings] Theme saved successfully');
         showMessage(t('settings.saved'));
       } else {
+        console.error('[Settings] Save failed: updateRoomTheme returned false');
         alert(t('settings.errors.failedSave'));
       }
+    }).catch((error) => {
+      loadingSettings = false;
+      console.error('[Settings] Save error:', error);
+      alert(t('settings.errors.failedSave') + ': ' + (error?.message || 'Unknown error'));
     });
   }
 

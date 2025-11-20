@@ -313,12 +313,12 @@
   /* Main projection container - side-by-side layout */
   .price-host-projection {
     display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 1.5rem;
+    grid-template-columns: 1fr clamp(300px, 25vw, 400px);
+    gap: clamp(1rem, 1.5vw, 1.5rem);
     width: 100%;
-    max-width: 1600px;
+    max-width: min(98vw, calc(100vw - clamp(2rem, 4vw, 4rem)));
     margin: 0 auto;
-    padding: 1rem;
+    padding: clamp(0.75rem, 1vw, 1rem);
     min-height: fit-content;
     position: relative;
   }

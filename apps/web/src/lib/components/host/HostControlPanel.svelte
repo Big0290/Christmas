@@ -295,11 +295,11 @@
     position: fixed;
     top: 0;
     right: 0;
-    width: 400px;
-    max-width: 90vw;
+    width: clamp(280px, 25vw, 400px);
+    max-width: min(90vw, 400px);
     height: 100vh;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-left: 3px solid #ffd700;
+    border-left: 2px solid #ffd700;
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
     z-index: 1000;
     transform: translateX(100%);
@@ -323,7 +323,7 @@
 
   .panel-header h2 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
     color: #ffd700;
   }
 
@@ -331,7 +331,7 @@
     background: transparent;
     border: none;
     color: #ffd700;
-    font-size: 1.5rem;
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
     cursor: pointer;
     padding: 0.5rem;
     line-height: 1;
@@ -343,12 +343,12 @@
   }
 
   .panel-content {
-    padding: 1.5rem;
+    padding: clamp(1rem, 1.5vh, 1.5rem);
   }
 
   .panel-section {
-    margin-bottom: 2rem;
-    padding-bottom: 1.5rem;
+    margin-bottom: clamp(1rem, 1.5vh, 1.5rem);
+    padding-bottom: clamp(0.75rem, 1vh, 1rem);
     border-bottom: 1px solid rgba(255, 215, 0, 0.2);
   }
 
@@ -357,8 +357,8 @@
   }
 
   .panel-section h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1.2rem;
+    margin: 0 0 clamp(0.5rem, 1vh, 0.75rem) 0;
+    font-size: clamp(1rem, 1.3vw, 1.2rem);
     color: #ffd700;
   }
 
@@ -443,7 +443,7 @@
   }
 
   .player-avatar-small {
-    font-size: 1.5rem;
+    font-size: clamp(1.25rem, 1.8vw, 1.5rem);
   }
 
   .player-details {
@@ -455,10 +455,11 @@
   .player-name-small {
     font-weight: bold;
     color: white;
+    font-size: clamp(0.875rem, 1.1vw, 1rem);
   }
 
   .player-score-small {
-    font-size: 0.875rem;
+    font-size: clamp(0.75rem, 1vw, 0.875rem);
     color: rgba(255, 255, 255, 0.7);
   }
 
@@ -486,7 +487,7 @@
     color: #ffd700;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: clamp(0.65rem, 0.9vw, 0.75rem);
     font-weight: bold;
   }
 
@@ -500,7 +501,7 @@
 
   .room-info-panel p {
     margin: 0.5rem 0;
-    font-size: 0.875rem;
+    font-size: clamp(0.75rem, 1vw, 0.875rem);
     color: rgba(255, 255, 255, 0.8);
   }
 
@@ -510,13 +511,13 @@
     padding: 0.5rem;
     background: rgba(0, 0, 0, 0.5);
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: clamp(0.65rem, 0.9vw, 0.75rem);
     word-break: break-all;
     color: #ffd700;
   }
 
   .join-url {
-    font-size: 0.7rem !important;
+    font-size: clamp(0.6rem, 0.8vw, 0.7rem) !important;
   }
 
   /* Status Info */

@@ -71,7 +71,7 @@
 </script>
 
 <div
-  class="game-tile frosted-glass {colors.bg} border-2 {selected ? colors.border + ' ring-4 ring-christmas-gold/50' : colors.border} {colors.hover} transition-all duration-300 cursor-pointer {selected ? 'scale-105 shadow-2xl' : 'hover:scale-102'} relative overflow-hidden"
+  class="game-tile frosted-glass {colors.bg} border-2 {selected ? 'border-christmas-gold ring-2 ring-christmas-gold/50' : colors.border} {colors.hover} transition-all duration-300 cursor-pointer {selected ? 'shadow-xl scale-[1.02]' : 'hover:scale-[1.01] hover:shadow-lg'} relative overflow-hidden"
   on:click={handleClick}
   role="button"
   tabindex="0"
@@ -82,62 +82,98 @@
     }
   }}
 >
-  <!-- Decorative sparkle effect -->
-  <div class="absolute top-2 right-2 text-2xl opacity-50">✨</div>
+  <!-- Christmas decorative elements -->
+  <div class="absolute top-1 right-1 text-lg opacity-60">✨</div>
+  <div class="absolute bottom-1 left-1 text-xs opacity-40">🎄</div>
   
-  <div class="p-6 md:p-8 flex flex-col items-center text-center space-y-4">
-    <!-- Game Icon -->
-    <div class="text-7xl md:text-8xl mb-2 transform transition-transform duration-300 {selected ? 'scale-110 rotate-6' : ''}">
+  <!-- Compact horizontal layout -->
+  <div class="p-3 md:p-4 flex items-center gap-3 md:gap-4 h-full">
+    <!-- Game Icon - Compact -->
+    <div class="flex-shrink-0 text-4xl md:text-5xl transform transition-transform duration-300 {selected ? 'scale-110' : ''}">
       {icon}
     </div>
     
-    <!-- Game Name -->
-    <h3 class="text-3xl md:text-4xl font-bold text-white mb-2">{name}</h3>
-    
-    <!-- Description -->
-    <p class="text-lg md:text-xl text-white/80 mb-4">{description}</p>
-    
-    <!-- Player Count -->
-    <div class="flex items-center gap-2 text-white/70 text-lg">
-      <span>👥</span>
-      <span>{playerCount} {playerCount === 1 ? t('gameTile.player') : t('gameTile.players')}</span>
+    <!-- Content Section -->
+    <div class="flex-1 min-w-0">
+      <!-- Game Name -->
+      <h3 class="text-base md:text-lg font-bold text-white mb-1 truncate">{name}</h3>
+      
+      <!-- Description -->
+      <p class="text-xs md:text-sm text-white/70 mb-2 line-clamp-2">{description}</p>
+      
+      <!-- Player Count & Status -->
+      <div class="flex items-center gap-2 text-white/60 text-xs md:text-sm">
+        <span>👥</span>
+        <span>{playerCount} {playerCount === 1 ? t('gameTile.player') : t('gameTile.players')}</span>
+        {#if selected}
+          <span class="ml-auto bg-christmas-gold/20 text-christmas-gold px-2 py-0.5 rounded-full text-xs font-bold">
+            ✓ {t('gameTile.selected')}
+          </span>
+        {/if}
+      </div>
     </div>
     
-    <!-- Start Button (Host Only) -->
+    <!-- Start Button (Host Only) - Compact -->
     {#if isHost && selected}
       <button
         on:click={handleStart}
-        class="btn-primary mt-4 text-xl px-8 py-4 w-full max-w-xs transform transition-transform hover:scale-105"
+        class="flex-shrink-0 btn-primary text-sm px-4 py-2 transform transition-transform hover:scale-105 whitespace-nowrap"
       >
         🚀 {t('gameTile.startGame')}
       </button>
     {/if}
   </div>
   
-  <!-- Selected indicator -->
+  <!-- Christmas border accent on selected -->
   {#if selected}
-    <div class="absolute top-4 left-4 bg-christmas-gold text-black px-3 py-1 rounded-full text-sm font-bold">
-      ✓ {t('gameTile.selected')}
-    </div>
+    <div class="absolute inset-0 border-2 border-christmas-gold/30 pointer-events-none"></div>
   {/if}
 </div>
 
 <style>
   .game-tile {
-    min-height: 280px;
-    border-radius: 1.5rem;
+    height: clamp(100px, 12vh, 140px);
+    min-height: clamp(100px, 12vh, 140px);
+    max-height: clamp(100px, 12vh, 140px);
+    border-radius: 1rem;
     backdrop-filter: blur(20px) saturate(180%);
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(255, 215, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      0 0 15px rgba(255, 215, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.1) 100%);
+    position: relative;
+  }
+
+  .game-tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1rem;
+    padding: 1px;
+    background: linear-gradient(135deg, 
+      rgba(255, 215, 0, 0.1) 0%, 
+      rgba(196, 30, 58, 0.1) 50%,
+      rgba(255, 215, 0, 0.1) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.6;
+    pointer-events: none;
   }
 
   .game-tile:hover {
     box-shadow:
-      0 12px 40px rgba(0, 0, 0, 0.4),
-      0 0 30px rgba(255, 215, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      0 6px 20px rgba(0, 0, 0, 0.4),
+      0 0 25px rgba(255, 215, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .game-tile.selected {
+    box-shadow:
+      0 6px 24px rgba(0, 0, 0, 0.4),
+      0 0 30px rgba(255, 215, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
 
   .game-tile:focus {
@@ -145,10 +181,12 @@
     outline-offset: 2px;
   }
 
-  @media (max-width: 768px) {
-    .game-tile {
-      min-height: 240px;
-    }
+  /* Line clamp utility */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 </style>
 

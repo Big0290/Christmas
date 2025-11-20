@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
-  import { socket, connectSocket, gameState, connected } from '$lib/socket';
+  import { onMount, onDestroy } from 'svelte';
+  import { socket, connectSocket, gameState, connected, players } from '$lib/socket';
   import { GameType, GameState } from '@christmas/core';
   import ScoreAnimation from '$lib/components/ScoreAnimation.svelte';
   import NotificationToast from '$lib/components/NotificationToast.svelte';
@@ -10,6 +10,7 @@
   import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
   import { language } from '$lib/i18n';
+  import { clearDismissedRules } from '$lib/utils/rules-modal-storage';
   
   import TriviaRoyale from '$lib/games/TriviaRoyale.svelte';
   import EmojiCarol from '$lib/games/EmojiCarol.svelte';
@@ -34,6 +35,10 @@
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 3;
   let showFinalLeaderboard = false;
+  
+  // Store timeout IDs at component level for reactive cleanup
+  let freshJoinTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let oldFlowTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Safe localStorage helper for mobile browsers (handles errors gracefully)
   function getLocalStorageItem(key: string): string | null {
@@ -53,6 +58,28 @@
       return true;
     } catch (error) {
       console.warn(`[Player] Failed to set localStorage item "${key}":`, error);
+      return false;
+    }
+  }
+
+  // Safe sessionStorage helper for mobile browsers (handles errors gracefully)
+  function getSessionStorageItem(key: string): string | null {
+    if (!browser) return null;
+    try {
+      return sessionStorage.getItem(key);
+    } catch (error) {
+      console.warn(`[Player] Failed to get sessionStorage item "${key}":`, error);
+      return null;
+    }
+  }
+
+  function removeSessionStorageItem(key: string): boolean {
+    if (!browser) return false;
+    try {
+      sessionStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      console.warn(`[Player] Failed to remove sessionStorage item "${key}":`, error);
       return false;
     }
   }
@@ -202,7 +229,12 @@
   }
 
   onMount(() => {
-    connectSocket();
+    // Don't call connectSocket() here - it's already initialized by the layout
+    // Only ensure socket is available, don't create a new connection
+    if (!$socket) {
+      console.warn('[Player] Socket not available, layout should have initialized it');
+      connectSocket();
+    }
     
     // Setup socket event listeners
     const setupSocketListeners = () => {
@@ -308,31 +340,137 @@
         const savedRoomCode = getLocalStorageItem('christmas_roomCode');
         const playerToken = getLocalStorageItem('christmas_playerToken');
         const playerName = getLocalStorageItem('christmas_playerName');
+        const justJoinedRoom = getSessionStorageItem('just_joined_room');
         
-        if (playerToken && savedRoomCode === roomCode && $socket?.id) {
-          // Attempt to reconnect player with token
+        // Check if this is a fresh join (just came from join page)
+        if (justJoinedRoom === roomCode) {
+          console.log(`[Player] Fresh join detected for room ${roomCode}, socket already in room`);
+          // Clear the flag
+          removeSessionStorageItem('just_joined_room');
+          
+          // Socket should already be in the room from join_room
+          // Wait for room_update or game_state_update events instead of reconnecting
+          hasAttemptedReconnect = true;
+          
+          // CRITICAL: Set isConnecting to false immediately for fresh joins
+          // The socket is already connected and in the room, so we should show content
+          isConnecting = false;
+          console.log(`[Player] ✅ Fresh join - Set isConnecting=false immediately`);
+          
+          // CRITICAL: If socket is connected, we're fine - don't set timeout at all
+          // The view might not have state yet, but if socket is connected, state will arrive
+          if ($connected && $socket?.connected) {
+            console.log(`[Player] ✅ Fresh join - Socket is connected, no timeout needed`, {
+              socketId: $socket.id?.substring(0, 8),
+              hasState: $players.length > 0 || $gameState,
+              playersCount: $players.length,
+              hasGameState: !!$gameState
+            });
+            // Clear any existing timeout
+            if (freshJoinTimeoutId) {
+              clearTimeout(freshJoinTimeoutId);
+              freshJoinTimeoutId = null;
+            }
+            // Socket is connected, so we're good - state will arrive via events
+            // Just set up event handlers to catch state when it arrives
+            if ($socket) {
+              const roomUpdateHandler = () => {
+                console.log(`[Player] ✅ Received room_update for fresh join`);
+                isConnecting = false;
+                if ($socket) {
+                  $socket.off('room_update', roomUpdateHandler);
+                  $socket.off('game_state_update', gameStateHandler);
+                }
+              };
+              const gameStateHandler = () => {
+                console.log(`[Player] ✅ Received game_state_update for fresh join`);
+                isConnecting = false;
+                if ($socket) {
+                  $socket.off('room_update', roomUpdateHandler);
+                  $socket.off('game_state_update', gameStateHandler);
+                }
+              };
+              $socket.on('room_update', roomUpdateHandler);
+              $socket.on('game_state_update', gameStateHandler);
+            }
+            return; // Exit early - socket is connected, no timeout needed
+          }
+          
+          // If socket is not connected, wait for it to connect first
+          // Don't set timeout until socket is actually connected
+          console.log(`[Player] ⏳ Fresh join - Socket not connected yet, waiting...`, {
+            socketExists: !!$socket,
+            socketConnected: $socket?.connected,
+            connectedStore: $connected
+          });
+          
+          // Wait for socket to connect, then proceed
+          const waitForConnection = () => {
+            if ($connected && $socket?.connected) {
+              console.log(`[Player] ✅ Socket connected, proceeding without timeout`);
+              isConnecting = false;
+              // Socket is now connected - state will arrive via events
+              // No timeout needed since socket is connected
+              return;
+            }
+            // Check again after a delay
+            setTimeout(waitForConnection, 500);
+          };
+          waitForConnection();
+        } else if (playerToken && savedRoomCode === roomCode && $socket?.id) {
+          // This is a reconnection attempt (has token but no just_joined flag)
+          console.log(`[Player] Reconnection attempt detected for room ${roomCode}`);
           attemptReconnection(savedRoomCode, playerToken);
         } else if (playerName && savedRoomCode === roomCode) {
-          // No token - might be first time entering after joining
+          // No token - might be first time entering after joining (older flow)
           // Wait a moment to see if we receive room_update or game_state_update events
           hasAttemptedReconnect = true;
           setTimeout(() => {
-            // If we don't receive any updates within 2 seconds, redirect to join
+            // Track if we've received any events
+            let receivedEventForOldFlow = false;
+            
+            // If we don't receive any updates within 3 seconds, redirect to join
             const timeout = setTimeout(() => {
-              if (!$gameState && !connectionError) {
-                notifications = [
-                  ...notifications,
-                  { id: notificationId++, message: t('player.errors.notConnected'), type: 'error' },
-                ];
-                // Redirect to join page
+              if (!receivedEventForOldFlow && !connectionError) {
+                // Check if we have players or gameState from socket.ts listeners
+                if ($players.length > 0 || $gameState) {
+                  console.log(`[Player] ✅ Found players or gameState from socket.ts listeners, connection is valid`);
+                  receivedEventForOldFlow = true;
+                  isConnecting = false;
+                  return; // Don't redirect, we have valid state
+                }
+                
+                // Add a micro-delay check for state - catches state that arrives in the brief window
+                // between timeout scheduling and execution
                 setTimeout(() => {
-                  goto(`/join?code=${roomCode}`);
-                }, 1500);
+                  // Final check for state before showing error
+                  if ($players.length > 0 || $gameState) {
+                    console.log(`[Player] ✅ Final check found state (old flow) - aborting error`);
+                    receivedEventForOldFlow = true;
+                    isConnecting = false;
+                    return; // Don't show error
+                  }
+                  
+                  // Only show error if state still doesn't exist after micro-delay
+                  console.warn(`[Player] No room_update or game_state_update received after 3 seconds`);
+                  notifications = [
+                    ...notifications,
+                    { id: notificationId++, message: t('player.errors.notConnected'), type: 'error' },
+                  ];
+                  // Redirect to join page
+                  setTimeout(() => {
+                    goto(`/join?code=${roomCode}`);
+                  }, 1500);
+                }, 50); // Micro-delay to catch late-arriving state
               }
-            }, 2000);
+            }, 3000);
+            
+            // Store timeout ID at component level for reactive cleanup
+            oldFlowTimeoutId = timeout;
             
             // Clear timeout if we get room_update or game_state_update
             const roomUpdateHandler = () => {
+              receivedEventForOldFlow = true;
               clearTimeout(timeout);
               if ($socket) {
                 $socket.off('room_update', roomUpdateHandler);
@@ -340,12 +478,45 @@
               }
             };
             const gameStateHandler = () => {
+              receivedEventForOldFlow = true;
               clearTimeout(timeout);
               if ($socket) {
                 $socket.off('room_update', roomUpdateHandler);
                 $socket.off('game_state_update', gameStateHandler);
               }
             };
+            
+            // Also check if socket.ts listeners already set the state
+            const checkExistingState = () => {
+              if ($players.length > 0 || $gameState) {
+                console.log(`[Player] ✅ Found existing state from socket.ts listeners (old flow), connection is valid`, {
+                  playersCount: $players.length,
+                  hasGameState: !!$gameState,
+                  gameStateType: $gameState?.gameType,
+                  gameStateState: $gameState?.state,
+                  socketConnected: $connected,
+                  socketId: $socket?.id?.substring(0, 8)
+                });
+                receivedEventForOldFlow = true;
+                clearTimeout(timeout);
+                isConnecting = false;
+                if ($socket) {
+                  $socket.off('room_update', roomUpdateHandler);
+                  $socket.off('game_state_update', gameStateHandler);
+                }
+              } else {
+                console.log(`[Player] ⏳ checkExistingState (old flow): No state found yet`, {
+                  playersCount: $players.length,
+                  hasGameState: !!$gameState,
+                  socketConnected: $connected
+                });
+              }
+            };
+            
+            // Check immediately and after a short delay
+            checkExistingState();
+            setTimeout(checkExistingState, 500);
+            
             if ($socket) {
               $socket.on('room_update', roomUpdateHandler);
               $socket.on('game_state_update', gameStateHandler);
@@ -382,6 +553,14 @@
           setTimeout(() => {
             loadLeaderboardRanks();
           }, 500); // Wait a bit for socket to be ready
+          
+          // If we have state, make sure isConnecting is false
+          setTimeout(() => {
+            if ($players.length > 0 || $gameState) {
+              console.log(`[Player] Setting isConnecting=false - socket connected and state exists`);
+              isConnecting = false;
+            }
+          }, 1500);
         }
       }
     });
@@ -397,6 +576,13 @@
     };
   });
 
+  // Cleanup when player leaves the room - clear dismissed rules
+  onDestroy(() => {
+    if (roomCode) {
+      clearDismissedRules(roomCode);
+    }
+  });
+
   // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
   function isBingo(gt: GameType | string | null | undefined): boolean {
     return gt === GameType.BINGO || gt === 'bingo';
@@ -405,6 +591,100 @@
   $: currentGame = $gameState?.gameType;
   $: playerScore = $gameState?.scores?.[$socket?.id] || 0;
   $: currentState = $gameState?.state;
+  
+  // CRITICAL: Auto-set isConnecting to false when we have valid connection and state
+  // This prevents getting stuck on loading screen
+  $: if ($connected && $socket) {
+    // If we have players or gameState, we're connected and should show content
+    if (($players.length > 0 || $gameState) && isConnecting) {
+      console.log(`[Player Page] ✅ Reactive: Auto-setting isConnecting=false - have connection and state`, {
+        playersCount: $players.length,
+        hasGameState: !!$gameState,
+        currentGame,
+        currentState,
+        wasConnecting: isConnecting
+      });
+      isConnecting = false;
+      connectionError = false; // Also clear any connection errors
+    }
+  }
+  
+  // Separate reactive statement to prevent timeout errors when state exists
+  // This runs whenever players or gameState changes
+  $: if (($players.length > 0 || $gameState) && $connected && $socket) {
+    // If we have state and connection, we're definitely connected - clear any pending errors
+    if (connectionError) {
+      console.log(`[Player Page] ✅ Clearing connectionError - state exists and socket is connected`);
+      connectionError = false;
+    }
+    if (isConnecting) {
+      console.log(`[Player Page] ✅ Clearing isConnecting - state exists and socket is connected`);
+      isConnecting = false;
+    }
+  }
+  
+  // Reactive statement to remove error notifications when state exists
+  // This ensures error notifications are automatically cleared when valid state is detected
+  $: if (($players.length > 0 || $gameState) && $connected && $socket) {
+    // Remove any "notConnected" or "pleaseRejoin" error notifications
+    const errorMessages = [t('player.errors.notConnected'), t('player.errors.pleaseRejoin')];
+    const hadErrors = notifications.some(n => n.type === 'error' && errorMessages.includes(n.message));
+    if (hadErrors) {
+      notifications = notifications.filter(n => 
+        !(n.type === 'error' && errorMessages.includes(n.message))
+      );
+      console.log(`[Player Page] ✅ Removed error notifications - state exists and socket is connected`);
+    }
+  }
+  
+  // Reactive statement to clear timeouts when state is detected
+  // This prevents timeouts from firing if state arrives after they're scheduled
+  // CRITICAL for mobile: This runs immediately when state changes
+  // Also clear connection errors when we have valid state
+  $: if (($players.length > 0 || $gameState) && $connected && $socket) {
+    // Clear fresh join timeout immediately when state is detected
+    if (freshJoinTimeoutId) {
+      const timeoutToClear = freshJoinTimeoutId;
+      console.log(`[Player Page] ✅ Reactive: Clearing freshJoinTimeout - state exists`, {
+        playersCount: $players.length,
+        hasGameState: !!$gameState,
+        gameStateType: $gameState?.gameType,
+        gameStateState: $gameState?.state,
+        socketConnected: $connected,
+        socketId: $socket?.id?.substring(0, 8),
+        timeoutId: timeoutToClear
+      });
+      clearTimeout(timeoutToClear);
+      freshJoinTimeoutId = null;
+    }
+    // Clear old flow timeout immediately when state is detected
+    if (oldFlowTimeoutId) {
+      const timeoutToClear = oldFlowTimeoutId;
+      console.log(`[Player Page] ✅ Reactive: Clearing oldFlowTimeout - state exists`, {
+        playersCount: $players.length,
+        hasGameState: !!$gameState,
+        gameStateType: $gameState?.gameType,
+        gameStateState: $gameState?.state,
+        socketConnected: $connected,
+        socketId: $socket?.id?.substring(0, 8),
+        timeoutId: timeoutToClear
+      });
+      clearTimeout(timeoutToClear);
+      oldFlowTimeoutId = null;
+    }
+    
+    // CRITICAL for mobile: Also clear connectionError when we have valid state
+    if (connectionError) {
+      console.log(`[Player Page] ✅ Reactive: Clearing connectionError - state exists and socket is connected`);
+      connectionError = false;
+    }
+    
+    // CRITICAL for mobile: Ensure isConnecting is false when we have state
+    if (isConnecting) {
+      console.log(`[Player Page] ✅ Reactive: Setting isConnecting=false - state exists and socket is connected`);
+      isConnecting = false;
+    }
+  }
   
   // Debug logging for game component rendering
   $: {
@@ -417,7 +697,10 @@
       matchesTrivia: currentGame === GameType.TRIVIA_ROYALE,
       currentState,
       hasGameState: !!$gameState,
-      hasPlayerCard: !!$gameState?.playerCard
+      hasPlayerCard: !!$gameState?.playerCard,
+      isConnecting,
+      connected: $connected,
+      playersCount: $players.length
     });
   }
   
@@ -609,22 +892,34 @@
         </div>
       </div>
     {:else if isConnecting}
-      <div class="flex items-center justify-center h-full">
+      <div class="flex items-center justify-center h-full" style="min-height: 50vh;">
         <div class="text-center">
           <div class="text-6xl mb-4 animate-spin">⏳</div>
           <h2 class="text-2xl font-bold mb-2">{t('player.connection.connecting')}</h2>
-          <p class="text-white/70">
+          <p class="text-white/70 mb-4">
             {t('player.connection.pleaseWait')}
+          </p>
+          <p class="text-white/50 text-sm">
+            Room: {roomCode} | Connected: {$connected ? '✅' : '❌'} | Socket: {$socket?.id?.substring(0, 8) || 'none'}
+          </p>
+          <p class="text-white/50 text-xs mt-2">
+            Players: {$players.length} | GameState: {$gameState ? '✅' : '❌'} | isConnecting: {isConnecting}
           </p>
         </div>
       </div>
     {:else if !currentGame}
       <div class="flex items-center justify-center h-full">
         <div class="text-center">
-          <div class="text-6xl mb-4">⏳</div>
+          <div class="text-6xl mb-4">🎄</div>
           <h2 class="text-2xl font-bold mb-2">{t('player.connection.waitingStart')}</h2>
-          <p class="text-white/70">
+          <p class="text-white/70 mb-4">
             {t('player.connection.hostWillStart')}
+          </p>
+          <p class="text-white/50 text-sm">
+            Room: {roomCode} | Players: {$players.length}
+          </p>
+          <p class="text-white/50 text-xs mt-2">
+            Connected: {$connected ? '✅' : '❌'} | Socket: {$socket?.id?.substring(0, 8) || 'none'}
           </p>
         </div>
       </div>
@@ -813,3 +1108,4 @@
     margin-bottom: 1.5rem;
   }
 </style>
+

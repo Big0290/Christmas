@@ -70,17 +70,17 @@
 </script>
 
 <div class="share-room card frosted-glass">
-  <h3 class="text-2xl md:text-3xl font-bold mb-4 text-center">🔗 {t('shareRoom.title')}</h3>
+  <h3 class="text-base md:text-lg font-bold mb-2 md:mb-3 text-center">🔗 {t('shareRoom.title')}</h3>
   
-  <div class="space-y-4">
+  <div class="space-y-2 md:space-y-3">
     <!-- Room Code Display -->
     <div class="text-center">
-      <p class="text-lg md:text-xl text-white/70 mb-2">{t('shareRoom.roomCode')}</p>
-      <div class="inline-flex items-center gap-3 bg-white/10 px-6 py-3 rounded-lg border-2 border-christmas-gold/50">
-        <span class="text-3xl md:text-4xl font-mono font-bold text-christmas-gold">{roomCode}</span>
+      <p class="text-xs md:text-sm text-white/70 mb-1.5">{t('shareRoom.roomCode')}</p>
+      <div class="inline-flex items-center gap-2 bg-white/10 px-3 md:px-4 py-2 rounded-lg border-2 border-christmas-gold/50">
+        <span class="text-xl md:text-2xl font-mono font-bold text-christmas-gold">{roomCode}</span>
         <button
           on:click={copyUrl}
-          class="text-2xl hover:scale-110 transition-transform"
+          class="text-lg md:text-xl hover:scale-110 transition-transform"
           title={t('shareRoom.copyCode')}
         >
           📋
@@ -90,37 +90,37 @@
 
     <!-- Join URL Display -->
     <div>
-      <p class="text-lg md:text-xl text-white/70 mb-2">{t('shareRoom.joinUrl')}</p>
-      <div class="flex gap-2">
+      <p class="text-xs md:text-sm text-white/70 mb-1.5">{t('shareRoom.joinUrl')}</p>
+      <div class="flex gap-1.5 md:gap-2">
         <input
           type="text"
           readonly
           value={joinUrl}
-          class="input flex-1 text-sm md:text-base"
+          class="input flex-1 text-xs md:text-sm px-2 py-1.5"
           id="join-url-input"
         />
         <button
           on:click={copyUrl}
-          class="btn-secondary px-4 md:px-6 whitespace-nowrap min-w-[100px]"
+          class="btn-secondary px-2 md:px-3 py-1.5 whitespace-nowrap text-xs md:text-sm"
         >
-          {copied ? `✓ ${t('shareRoom.copied')}` : `📋 ${t('shareRoom.copy')}`}
+          {copied ? `✓` : `📋`}
         </button>
       </div>
     </div>
 
     <!-- Share Buttons -->
-    <div class="flex flex-col sm:flex-row gap-3">
+    <div class="flex flex-col gap-2">
       {#if shareSupported}
         <button
           on:click={shareUrl}
-          class="btn-primary flex-1 text-lg md:text-xl py-4 flex items-center justify-center gap-2"
+          class="btn-primary text-sm md:text-base py-2 flex items-center justify-center gap-2"
         >
           📤 {t('shareRoom.shareVia')}
         </button>
       {/if}
       <button
         on:click={copyUrl}
-        class="btn-secondary flex-1 text-lg md:text-xl py-4 flex items-center justify-center gap-2"
+        class="btn-secondary text-sm md:text-base py-2 flex items-center justify-center gap-2"
       >
         {copied ? `✓ ${t('shareRoom.copied')}` : `📋 ${t('shareRoom.copyUrl')}`}
       </button>

@@ -6,8 +6,7 @@
   import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
 
-  // Accept params prop to suppress SvelteKit warning
-  export const params: Record<string, string> = {};
+  // Params are accessed via $page.params in SvelteKit, not as a prop
 
   let email = '';
   let password = '';

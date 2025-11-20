@@ -1,13 +1,14 @@
 import { Socket } from 'socket.io';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { RoomManager } from '../managers/room-manager.js';
+import type { RoomEngine } from '../engine/room-engine.js';
 import type { GuessingChallenge, GuessingSubmission, GuessingChallengeForm } from '@christmas/core';
 
 /**
  * Check if socket is host of the room
  */
-function isHost(socket: Socket, roomManager: RoomManager): boolean {
-  const roomInfo = roomManager.getRoomBySocketId(socket.id);
+function isHost(socket: Socket, roomEngine: RoomEngine): boolean {
+  const roomInfo = roomEngine.getRoomBySocketId(socket.id);
   return roomInfo?.isHost === true;
 }
 
@@ -27,9 +28,10 @@ async function sha256(data: string): Promise<string> {
  */
 export function setupGuessingHandlers(
   socket: Socket,
-  roomManager: RoomManager,
+  roomEngine: RoomEngine,
   supabase: SupabaseClient | null
 ) {
+  const roomManager = roomEngine.roomManager;
   // ========================================================================
   // CREATE GUESSING CHALLENGE
   // ========================================================================
@@ -38,7 +40,7 @@ export function setupGuessingHandlers(
     async (roomCode: string, challengeData: GuessingChallengeForm, callback: (response: any) => void) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -50,7 +52,7 @@ export function setupGuessingHandlers(
           return;
         }
 
-        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (!roomInfo || roomInfo.room.hostId !== socket.id) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
@@ -96,10 +98,10 @@ export function setupGuessingHandlers(
           console.warn('[Guessing Game] Room exists in memory but not in database, attempting to save:', normalizedCode);
           
           // Get room info to save it
-          const roomInfo = roomManager.getRoomBySocketId(socket.id);
+          const roomInfo = roomEngine.getRoomBySocketId(socket.id);
           if (roomInfo && roomInfo.room.code === normalizedCode) {
             const room = roomInfo.room;
-            const hostToken = roomManager.getHostToken(normalizedCode);
+            const hostToken = roomEngine.getHostToken(normalizedCode);
             
             // Try to get userId from database first (in case room was created by another instance)
             let hostUserId = (room as any).hostUserId;
@@ -227,7 +229,7 @@ export function setupGuessingHandlers(
     ) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -239,7 +241,7 @@ export function setupGuessingHandlers(
           return;
         }
 
-        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (!roomInfo || roomInfo.room.hostId !== socket.id) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
@@ -324,7 +326,7 @@ export function setupGuessingHandlers(
     async (challengeId: string, roomCode: string, callback: (response: any) => void) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -336,7 +338,7 @@ export function setupGuessingHandlers(
           return;
         }
 
-        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (!roomInfo || roomInfo.room.hostId !== socket.id) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
@@ -409,7 +411,7 @@ export function setupGuessingHandlers(
     async (challengeId: string, roomCode: string, callback: (response: any) => void) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -450,7 +452,7 @@ export function setupGuessingHandlers(
     async (challengeId: string, roomCode: string, callback: (response: any) => void) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -462,7 +464,7 @@ export function setupGuessingHandlers(
           return;
         }
 
-        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (!roomInfo || roomInfo.room.hostId !== socket.id) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
@@ -505,7 +507,7 @@ export function setupGuessingHandlers(
     async (fileData: { name: string; type: string; data: string }, callback: (response: any) => void) => {
       try {
         // Verify host permissions
-        if (!isHost(socket, roomManager)) {
+        if (!isHost(socket, roomEngine)) {
           callback({ success: false, error: 'You must be a host' });
           return;
         }
@@ -515,7 +517,7 @@ export function setupGuessingHandlers(
           return;
         }
 
-        const roomInfo = roomManager.getRoomBySocketId(socket.id);
+        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (!roomInfo) {
           callback({ success: false, error: 'Room not found' });
           return;

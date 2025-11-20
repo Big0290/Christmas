@@ -55,11 +55,13 @@ export async function connectSocket(url?: string, forceReconnect: boolean = fals
   
   // If socket exists and is connected, return it immediately (before setting isConnecting)
   if (socketInstance?.connected && !forceReconnect) {
+    console.log('[Socket] Reusing existing connected socket');
     socket.set(socketInstance);
     return socketInstance;
   }
   
   // If socket exists but not connected, reuse it (before setting isConnecting)
+  // This prevents creating multiple socket instances during navigation
   if (socketInstance && !forceReconnect) {
     console.log('[Socket] Socket instance already exists, reusing it (socket.io will handle reconnection)');
     socket.set(socketInstance);
@@ -68,6 +70,7 @@ export async function connectSocket(url?: string, forceReconnect: boolean = fals
       registerSocketListeners(socketInstance);
       listenersRegistered = true;
     }
+    // Don't create a new connection - let socket.io handle reconnection automatically
     return socketInstance;
   }
   

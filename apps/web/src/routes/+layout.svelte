@@ -14,8 +14,7 @@
   import IciclesEffect from '$lib/components/IciclesEffect.svelte';
   import FrostPattern from '$lib/components/FrostPattern.svelte';
 
-  // Accept params prop to suppress SvelteKit warning
-  export const params: Record<string, string> = {};
+  // Params are accessed via $page.params in SvelteKit, not as a prop
 
   let snowflakes: HTMLElement[] = [];
   let showSparkles = false;
@@ -27,10 +26,20 @@
 
   onMount(() => {
     if (browser) {
-      // Initialize auth first
-      initializeAuth();
-      // Connect socket (now async but we don't need to await)
-      connectSocket().catch(err => console.error('[Socket] Connection error:', err));
+      // Check if we're on a public page (like guessing game) that doesn't need auth
+      const currentPath = window.location.pathname;
+      const isPublicPage = currentPath.startsWith('/guess/');
+      
+      // Only initialize auth and socket for pages that need them
+      // Guessing game is public and doesn't require authentication
+      if (!isPublicPage) {
+        // Initialize auth first
+        initializeAuth();
+        // Connect socket (now async but we don't need to await)
+        connectSocket().catch(err => console.error('[Socket] Connection error:', err));
+      } else {
+        console.log('[Layout] Skipping auth/socket initialization for public page:', currentPath);
+      }
       
       // Initialize settings after socket is connected
       setTimeout(() => {
@@ -114,6 +123,7 @@
     // Get current route
     const currentPath = $page.url.pathname;
     
+    // CRITICAL: Check for public pages FIRST - guessing game should NEVER trigger this function
     // Don't redirect if already on room-related pages or auth pages
     const roomRelatedPaths = ['/room/', '/play/', '/host/', '/guess/'];
     const authPaths = ['/auth/', '/login', '/signup'];
@@ -186,30 +196,50 @@
   }
 
   // Check for active room when auth and socket are ready
+  // Skip this check for public pages like guessing game - MUST check path FIRST
   $: {
-    if ($authUser && $connected && $socket && !isRedirecting) {
-      // Small delay to ensure everything is initialized
-      setTimeout(() => {
-        checkAndRedirectToActiveRoom();
-      }, 500);
-    } else if (!$authUser || !$connected) {
-      // Reset check flag when disconnected or logged out
-      checkedForRoom = false;
-      isRedirecting = false;
+    // CRITICAL: Check if we're on a public page FIRST before ANY auth store access
+    // This prevents any auth-related reactive logic from running on guessing game routes
+    if (browser) {
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+      const isPublicPage = currentPath && currentPath.startsWith('/guess/');
+      
+      // EARLY EXIT: Do not run ANY auth checks on public pages like guessing game
+      // Don't even access auth stores if we're on a public page
+      if (!isPublicPage) {
+        // Only proceed with auth checks if NOT on a public page
+        if ($authUser && $connected && $socket && !isRedirecting) {
+          // Small delay to ensure everything is initialized
+          setTimeout(() => {
+            checkAndRedirectToActiveRoom();
+          }, 500);
+        } else if (!$authUser || !$connected) {
+          // Reset check flag when disconnected or logged out
+          checkedForRoom = false;
+          isRedirecting = false;
+        }
+      }
+      // If isPublicPage is true, do nothing - no auth checks, no redirects
     }
   }
 
   // Check when route changes (but skip if already checked)
+  // CRITICAL: Check for public pages FIRST to prevent any auth-related logic
   $: {
     const path = $page.url.pathname;
-    // Reset check flag when navigating to non-room pages
-    if (!path.startsWith('/room/') && !path.startsWith('/play/') && !path.startsWith('/host/') && !path.startsWith('/guess/')) {
-      // Small delay before checking again (to avoid race conditions)
-      setTimeout(() => {
-        if (!$page.url.pathname.startsWith('/auth/')) {
-          checkedForRoom = false;
-        }
-      }, 100);
+    
+    // Skip ALL processing for public pages like guessing game
+    // Only proceed with route checks if NOT on a public page
+    if (!path.startsWith('/guess/')) {
+      // Reset check flag when navigating to non-room pages
+      if (!path.startsWith('/room/') && !path.startsWith('/play/') && !path.startsWith('/host/')) {
+        // Small delay before checking again (to avoid race conditions)
+        setTimeout(() => {
+          if (!$page.url.pathname.startsWith('/auth/')) {
+            checkedForRoom = false;
+          }
+        }, 100);
+      }
     }
   }
   

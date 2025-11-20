@@ -6,6 +6,8 @@
   import { t } from '$lib/i18n';
   import PlayerRulesModal from '$lib/components/PlayerRulesModal.svelte';
   import { get } from 'svelte/store';
+  import { page } from '$app/stores';
+  import { hasDismissedRules, dismissRules } from '$lib/utils/rules-modal-storage';
   import type { BingoItem, BingoCard } from '@christmas/core';
 
   $: playerCard = $gameState?.playerCard as BingoCard | null;
@@ -42,6 +44,7 @@
   // Watch gameState store directly to catch all state changes
   $: currentState = $gameState?.state;
   $: currentGameType = $gameState?.gameType;
+  $: roomCode = $page.params.code;
   
   // Helper to check if game type is BINGO (handles undefined GameType.BINGO)
   function isBingoType(gt: GameType | string | null | undefined): boolean {
@@ -51,7 +54,7 @@
   // Get GameType.BINGO with fallback
   $: bingoGameType = GameType.BINGO || 'bingo';
   
-  // Show rules modal when game starts
+  // Show rules modal when game starts - only on game start, not on round transitions
   $: {
     const state = currentState;
     const gameType = currentGameType;
@@ -65,16 +68,34 @@
         isBingoType: isBingoType(gameType),
         rulesShownForGameType,
         showRulesModal,
+        previousState,
         isStartingOrPlaying: state === GameState.STARTING || state === GameState.PLAYING
       });
     }
 
-    if (state !== undefined && state !== null && gameType) {
+    if (state !== undefined && state !== null && gameType && roomCode) {
       const isStartingOrPlaying =
         state === GameState.STARTING || state === GameState.PLAYING;
 
-      // Show modal on STARTING or early PLAYING if we haven't shown it for this game type
-      if (isStartingOrPlaying && rulesShownForGameType !== gameType && !showRulesModal && isBingoType(gameType)) {
+      // Only show modal when transitioning from LOBBY to STARTING/PLAYING (game start)
+      // NOT when transitioning from ROUND_END to STARTING/PLAYING (round transition)
+      const isGameStart = 
+        previousState === GameState.LOBBY || 
+        previousState === undefined || 
+        previousState === null;
+
+      // Show modal only if:
+      // 1. State is STARTING/PLAYING
+      // 2. This is a game start (not a round transition)
+      // 3. We haven't shown it for this gameType yet (in memory)
+      // 4. Rules haven't been dismissed (in sessionStorage)
+      // 5. Game type is BINGO
+      if (isStartingOrPlaying && 
+          isGameStart && 
+          rulesShownForGameType !== gameType && 
+          !hasDismissedRules(roomCode, gameType) &&
+          !showRulesModal && 
+          isBingoType(gameType)) {
         console.log('[Bingo] Showing rules modal for gameType:', gameType);
         showRulesModal = true;
         rulesShownForGameType = gameType;
@@ -92,6 +113,9 @@
   }
 
   function closeRulesModal() {
+    if (roomCode && currentGameType) {
+      dismissRules(roomCode, currentGameType);
+    }
     showRulesModal = false;
   }
 

@@ -2,6 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { socket } from './socket';
 import { updateGlobalSettings, globalSettings } from './settings';
+import { language } from './i18n';
 import type { GlobalSettings } from '@christmas/core';
 
 export interface RoomTheme {
@@ -11,6 +12,7 @@ export interface RoomTheme {
   icicles: boolean;
   frostPattern: boolean;
   colorScheme: 'traditional' | 'winter' | 'mixed';
+  language?: 'en' | 'fr';
 }
 
 const defaultTheme: RoomTheme = {
@@ -20,6 +22,7 @@ const defaultTheme: RoomTheme = {
   icicles: false,
   frostPattern: true,
   colorScheme: 'mixed',
+  language: get(language),
 };
 
 // Current room theme store
@@ -57,9 +60,14 @@ export function loadRoomTheme(roomCode: string): Promise<RoomTheme | null> {
           icicles: response.theme.icicles ?? defaultTheme.icicles,
           frostPattern: response.theme.frostPattern ?? defaultTheme.frostPattern,
           colorScheme: response.theme.colorScheme ?? defaultTheme.colorScheme,
+          language: response.theme.language ?? defaultTheme.language,
         };
         roomTheme.set(theme);
         currentRoomCode.set(roomCode);
+        // Update language store if theme has language preference
+        if (theme.language) {
+          language.set(theme.language);
+        }
         applyRoomTheme(theme);
         resolve(theme);
       } else {
@@ -78,6 +86,11 @@ export function loadRoomTheme(roomCode: string): Promise<RoomTheme | null> {
  */
 export function applyRoomTheme(theme: RoomTheme): void {
   if (!browser) return;
+
+  // Update language store if theme has language preference
+  if (theme.language) {
+    language.set(theme.language);
+  }
 
   // Update global settings store
   updateGlobalSettings({
@@ -139,18 +152,41 @@ export function updateRoomTheme(roomCode: string, updates: Partial<RoomTheme>): 
       return;
     }
 
-    $socket.emit('update_room_settings', {
+    $socket.emit('update_room_settings', roomCode, {
       backgroundMusic: updates.backgroundMusic,
       snowEffect: updates.snowEffect,
       sparkles: updates.sparkles,
       icicles: updates.icicles,
       frostPattern: updates.frostPattern,
       colorScheme: updates.colorScheme,
+      language: updates.language,
     }, (response: any) => {
       if (response?.success) {
-        // Theme will be updated via room_settings_updated event
+        // Apply theme immediately after successful save
+        if (updates) {
+          roomTheme.update((theme) => {
+            if (!theme) {
+              // Create new theme from updates
+              const newTheme: RoomTheme = {
+                snowEffect: updates.snowEffect ?? defaultTheme.snowEffect,
+                backgroundMusic: updates.backgroundMusic ?? defaultTheme.backgroundMusic,
+                sparkles: updates.sparkles ?? defaultTheme.sparkles,
+                icicles: updates.icicles ?? defaultTheme.icicles,
+                frostPattern: updates.frostPattern ?? defaultTheme.frostPattern,
+                colorScheme: updates.colorScheme ?? defaultTheme.colorScheme,
+                language: updates.language ?? defaultTheme.language,
+              };
+              applyRoomTheme(newTheme);
+              return newTheme;
+            }
+            const updated = { ...theme, ...updates };
+            applyRoomTheme(updated);
+            return updated;
+          });
+        }
         resolve(true);
       } else {
+        console.error('[Theme] Save failed:', response?.error || 'Unknown error');
         resolve(false);
       }
     });

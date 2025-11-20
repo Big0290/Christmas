@@ -42,15 +42,25 @@ export async function getClientFingerprint(): Promise<string> {
     const hashed = await sha256(visitorId);
     return hashed;
   } catch (error) {
-    console.error('[Fingerprint] Error generating fingerprint:', error);
+    console.error('[Fingerprint] Error generating fingerprint with FingerprintJS:', error);
     // Fallback: generate a basic hash from available browser info
-    const fallbackData = [
-      navigator.userAgent,
-      navigator.language,
-      screen.width + 'x' + screen.height,
-      new Date().getTimezoneOffset().toString(),
-    ].join('|');
-    return sha256(fallbackData);
+    try {
+      const fallbackData = [
+        navigator.userAgent || 'unknown',
+        navigator.language || 'en',
+        typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : 'unknown',
+        new Date().getTimezoneOffset().toString(),
+        Date.now().toString(), // Add timestamp for uniqueness
+      ].join('|');
+      const hashed = await sha256(fallbackData);
+      console.log('[Fingerprint] Using fallback fingerprint generation');
+      return hashed;
+    } catch (fallbackError) {
+      console.error('[Fingerprint] Fallback fingerprint generation also failed:', fallbackError);
+      // Last resort: generate a simple hash from timestamp and random number
+      const simpleHash = await sha256(`${Date.now()}-${Math.random()}`);
+      return simpleHash;
+    }
   }
 }
 

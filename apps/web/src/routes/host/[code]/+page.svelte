@@ -114,10 +114,15 @@
     // This prevents duplicate triggers between onMount and reactive statements
     console.log('[Host] onMount - skipping initial instructions, reactive statement will handle it');
     
-    connectSocket().catch((err) => {
-      console.error('[Host] Failed to connect socket:', err);
-      error = 'Failed to connect to server. Please refresh the page.';
-    });
+    // Don't call connectSocket() here - it's already initialized by the layout
+    // Only ensure socket is available
+    if (!$socket) {
+      console.warn('[Host] Socket not available, layout should have initialized it');
+      connectSocket().catch((err) => {
+        console.error('[Host] Failed to connect socket:', err);
+        error = 'Failed to connect to server. Please refresh the page.';
+      });
+    }
 
     if (browser) {
       origin = window.location.origin;
@@ -1013,7 +1018,8 @@
 
 <style>
   .host-screen {
-    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
     background: linear-gradient(135deg, #0a1a2e 0%, #1a2a4e 30%, #2a3a6e 60%, #1a2a4e 100%);
@@ -1052,16 +1058,51 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5rem;
-    padding-bottom: calc(1.5rem + 80px); /* Account for bottom scorebar */
+    padding: clamp(0.5rem, 1vw, 1rem);
     transition: margin-right 0.3s ease-in-out;
     position: relative;
     z-index: 1;
     overflow-y: auto;
+    overflow-x: hidden;
+    height: calc(100vh - clamp(60px, 8vh, 70px) - clamp(60px, 7vh, 70px)); /* header + scorebar */
+    max-height: calc(100vh - clamp(60px, 8vh, 70px) - clamp(60px, 7vh, 70px));
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 215, 0, 0.5) transparent;
+  }
+
+  .host-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .host-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+
+  .host-content::-webkit-scrollbar-thumb {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255, 215, 0, 0.6) 0px,
+      rgba(255, 215, 0, 0.6) 4px,
+      rgba(255, 255, 255, 0.3) 4px,
+      rgba(255, 255, 255, 0.3) 8px
+    );
+    border-radius: 4px;
+  }
+
+  .host-content::-webkit-scrollbar-thumb:hover {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255, 215, 0, 0.8) 0px,
+      rgba(255, 215, 0, 0.8) 4px,
+      rgba(255, 255, 255, 0.4) 4px,
+      rgba(255, 255, 255, 0.4) 8px
+    );
   }
 
   .host-screen.panel-open .host-content {
-    margin-right: 400px;
+    margin-right: clamp(300px, 25vw, 400px);
   }
 
   @media (max-width: 768px) {
@@ -1074,14 +1115,14 @@
   .playing-screen,
   .paused-screen {
     width: 100%;
-    max-width: 1600px;
-    min-height: fit-content;
+    max-width: min(98vw, calc(100vw - clamp(2rem, 4vw, 4rem)));
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
     text-align: center;
-    padding: 1rem;
+    padding: clamp(0.5rem, 1vw, 1rem);
     box-sizing: border-box;
     position: relative;
   }
@@ -1094,19 +1135,18 @@
 
   .game-display-container {
     width: 100%;
-    flex: 1;
+    min-height: 100%;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    overflow: auto;
-    padding: 0.5rem;
+    padding: clamp(0.25rem, 0.5vw, 0.5rem);
     box-sizing: border-box;
     position: relative;
   }
 
   .countdown-text {
-    font-size: 3rem;
-    margin-bottom: 1.5rem;
+    font-size: clamp(2rem, 4vw, 3rem);
+    margin-bottom: clamp(1rem, 2vh, 1.5rem);
     color: #e0f2fe;
     text-shadow: 
       0 0 10px rgba(224, 242, 254, 0.8),
@@ -1115,7 +1155,7 @@
   }
 
   .countdown-number {
-    font-size: 12rem;
+    font-size: clamp(8rem, 15vw, 12rem);
     font-weight: bold;
     color: #ffd700;
     text-shadow: 
@@ -1132,18 +1172,18 @@
   }
 
   .countdown-subtitle {
-    font-size: 1.5rem;
+    font-size: clamp(1rem, 2vw, 1.5rem);
     color: rgba(224, 242, 254, 0.8);
-    margin-top: 1.5rem;
+    margin-top: clamp(1rem, 2vh, 1.5rem);
     text-shadow: 
       0 0 10px rgba(224, 242, 254, 0.5),
       1px 1px 3px rgba(0, 0, 0, 0.5);
   }
 
   .mega-title {
-    font-size: 4rem;
+    font-size: clamp(2.5rem, 5vw, 4rem);
     font-weight: bold;
-    margin-bottom: 1.5rem;
+    margin-bottom: clamp(1rem, 2vh, 1.5rem);
     color: #e0f2fe;
     text-shadow: 
       0 0 15px rgba(224, 242, 254, 0.8),
@@ -1153,9 +1193,9 @@
   }
 
   .instruction-text {
-    font-size: 1.125rem;
+    font-size: clamp(0.875rem, 1.5vw, 1.125rem);
     color: rgba(224, 242, 254, 0.8);
-    margin-bottom: 1.5rem;
+    margin-bottom: clamp(1rem, 2vh, 1.5rem);
     text-shadow: 
       0 0 8px rgba(224, 242, 254, 0.4),
       1px 1px 3px rgba(0, 0, 0, 0.5);
@@ -1163,7 +1203,7 @@
 
   .btn-primary-large {
     padding: 1.5rem 3rem;
-    font-size: 1.5rem;
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
     font-weight: bold;
     background: linear-gradient(135deg, #c41e3a 0%, #8b1538 100%);
     color: white;

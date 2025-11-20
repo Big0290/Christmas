@@ -53,13 +53,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 2rem;
+    padding: clamp(0.5rem, 1vh, 0.75rem) clamp(1rem, 2vw, 2rem);
     background: linear-gradient(135deg, rgba(196, 30, 58, 0.9) 0%, rgba(15, 134, 68, 0.9) 50%, rgba(15, 52, 96, 0.9) 100%);
-    border-bottom: 3px solid #ffd700;
+    border-bottom: 2px solid #ffd700;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 30px rgba(255, 215, 0, 0.2);
     backdrop-filter: blur(10px);
     position: relative;
     z-index: 100;
+    height: clamp(60px, 8vh, 70px);
+    min-height: clamp(60px, 8vh, 70px);
+    max-height: clamp(60px, 8vh, 70px);
   }
 
   .host-header::before {
@@ -83,20 +86,20 @@
   .header-left {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: clamp(0.75rem, 1.5vw, 1.5rem);
     flex: 1;
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: clamp(0.5rem, 1vw, 1rem);
   }
 
   .room-info {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: clamp(0.5rem, 1vw, 1rem);
   }
 
   .room-code-badge,
@@ -104,11 +107,11 @@
   .paused-badge {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
+    gap: clamp(0.25rem, 0.5vw, 0.5rem);
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.75rem, 1.5vw, 1rem);
     background: rgba(0, 0, 0, 0.4);
     border: 2px solid #ffd700;
-    border-radius: 12px;
+    border-radius: clamp(8px, 1.2vw, 12px);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 215, 0, 0.3);
     backdrop-filter: blur(5px);
     transition: all 0.3s ease;
@@ -127,7 +130,7 @@
   }
 
   .room-code-text {
-    font-size: 1.25rem;
+    font-size: clamp(1rem, 1.5vw, 1.25rem);
     font-weight: bold;
     color: #ffd700;
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 2px 2px 4px rgba(0, 0, 0, 0.8);
@@ -136,7 +139,7 @@
   }
 
   .player-count-text {
-    font-size: 1.1rem;
+    font-size: clamp(0.9rem, 1.3vw, 1.1rem);
     font-weight: bold;
     color: #ffffff;
     text-shadow: 0 0 5px rgba(255, 255, 255, 0.5), 1px 1px 3px rgba(0, 0, 0, 0.8);
@@ -168,10 +171,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0.5rem 1rem;
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.75rem, 1.5vw, 1rem);
     background: rgba(0, 0, 0, 0.3);
     border: 2px solid rgba(255, 215, 0, 0.5);
-    border-radius: 12px;
+    border-radius: clamp(8px, 1.2vw, 12px);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   }
 
@@ -184,7 +187,7 @@
   }
 
   .round-number {
-    font-size: 1.25rem;
+    font-size: clamp(1rem, 1.5vw, 1.25rem);
     font-weight: bold;
     color: #ffd700;
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
@@ -193,11 +196,11 @@
   .reconnect-btn {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1.2rem;
+    gap: clamp(0.25rem, 0.5vw, 0.5rem);
+    padding: clamp(0.5rem, 1vh, 0.6rem) clamp(1rem, 2vw, 1.2rem);
     background: linear-gradient(135deg, rgba(15, 134, 68, 0.8), rgba(10, 93, 46, 0.8));
     border: 2px solid #ffd700;
-    border-radius: 10px;
+    border-radius: clamp(8px, 1vw, 10px);
     color: white;
     font-weight: bold;
     cursor: pointer;

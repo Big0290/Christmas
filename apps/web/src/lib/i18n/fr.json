@@ -675,6 +675,8 @@
     "colorSchemeTraditional": "Noël traditionnel",
     "colorSchemeWinter": "Pays des merveilles hivernal",
     "colorSchemeMixed": "Thème mixte",
+    "language": "Langue",
+    "languageDesc": "Choisissez la langue de l'interface de l'hôte",
     "saveSettings": "Enregistrer les paramètres",
     "saving": "Enregistrement..."
   },
@@ -924,8 +926,16 @@
       "delete": "Supprimer",
       "viewSubmissions": "Voir les soumissions",
       "hideSubmissions": "Masquer les soumissions",
+      "showDetails": "Afficher les détails",
+      "hideDetails": "Masquer les détails",
       "loadingSubmissions": "Chargement des soumissions...",
       "shareChallenge": "Partager le défi",
+      "tabs": {
+        "running": "En cours",
+        "revealed": "Révélés"
+      },
+      "noRunningChallenges": "Aucun défi actif. Créez-en un pour commencer!",
+      "noRevealedChallenges": "Aucun défi révélé pour le moment.",
       "confirmDelete": "Êtes-vous sûr de vouloir supprimer le défi \"{title}\"?",
       "confirmReveal": "Révéler le Défi",
       "confirmRevealMessage": "Êtes-vous sûr de vouloir révéler \"{title}\"? Cela affichera la bonne réponse et les résultats aux joueurs.",

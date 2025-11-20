@@ -1,8 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   
-  // Accept params to suppress warning
-  export const params: Record<string, string> = {};
+  // Params are accessed via $page.params in SvelteKit, not as a prop
   
   // Error page props (required by SvelteKit)
   export let status: number;

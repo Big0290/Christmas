@@ -8,8 +8,7 @@
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import LanguageSelectionModal from '$lib/components/LanguageSelectionModal.svelte';
 
-  // Accept params prop to suppress SvelteKit warning
-  export const params: Record<string, string> = {};
+  // Params are accessed via $page.params in SvelteKit, not as a prop
 
   let playerName = '';
   let roomCode = '';
@@ -186,7 +185,10 @@
   }
 
   onMount(() => {
-    connectSocket();
+    // Socket is initialized by layout, but landing page is entry point so ensure it's connected
+    if (!$socket) {
+      connectSocket();
+    }
 
     // Load saved player name and avatar from localStorage
     if (browser) {

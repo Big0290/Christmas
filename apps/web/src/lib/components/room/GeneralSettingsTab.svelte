@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { roomTheme } from '$lib/theme';
+  import { roomTheme, applyRoomTheme } from '$lib/theme';
   import { get } from 'svelte/store';
-  import { t } from '$lib/i18n';
+  import { t, language } from '$lib/i18n';
   
   export let backgroundMusic: boolean;
   export let snowEffect: boolean;
@@ -10,6 +10,7 @@
   
   // Get theme from store
   $: theme = get(roomTheme);
+  
   // Derive all values from store (store is source of truth)
   $: backgroundMusicFromStore = theme?.backgroundMusic ?? backgroundMusic ?? true;
   $: snowEffectFromStore = theme?.snowEffect ?? snowEffect ?? true;
@@ -17,47 +18,157 @@
   $: icicles = theme?.icicles ?? false;
   $: frostPattern = theme?.frostPattern ?? true;
   $: colorScheme = theme?.colorScheme ?? 'mixed';
+  $: currentLanguage = theme?.language ?? $language ?? 'en';
   
   function updateBackgroundMusic(value: boolean) {
-    if (theme) {
-      theme.backgroundMusic = value;
-      roomTheme.set(theme);
-    }
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: value,
+          sparkles: true,
+          icicles: false,
+          frostPattern: true,
+          colorScheme: 'mixed' as const,
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.backgroundMusic = value;
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
   
   function updateSnowEffect(value: boolean) {
-    if (theme) {
-      theme.snowEffect = value;
-      roomTheme.set(theme);
-    }
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: value,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: true,
+          icicles: false,
+          frostPattern: true,
+          colorScheme: 'mixed' as const,
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.snowEffect = value;
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
   
   function updateSparkles(value: boolean) {
-    if (theme) {
-      theme.sparkles = value;
-      roomTheme.set(theme);
-    }
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: value,
+          icicles: false,
+          frostPattern: true,
+          colorScheme: 'mixed' as const,
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.sparkles = value;
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
   
   function updateIcicles(value: boolean) {
-    if (theme) {
-      theme.icicles = value;
-      roomTheme.set(theme);
-    }
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: true,
+          icicles: value,
+          frostPattern: true,
+          colorScheme: 'mixed' as const,
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.icicles = value;
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
   
   function updateFrostPattern(value: boolean) {
-    if (theme) {
-      theme.frostPattern = value;
-      roomTheme.set(theme);
-    }
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: true,
+          icicles: false,
+          frostPattern: value,
+          colorScheme: 'mixed' as const,
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.frostPattern = value;
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
   
   function updateColorScheme(value: string) {
-    if (theme && (value === 'traditional' || value === 'winter' || value === 'mixed')) {
-      theme.colorScheme = value as 'traditional' | 'winter' | 'mixed';
-      roomTheme.set(theme);
-    }
+    if (value !== 'traditional' && value !== 'winter' && value !== 'mixed') return;
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: true,
+          icicles: false,
+          frostPattern: true,
+          colorScheme: value as 'traditional' | 'winter' | 'mixed',
+          language: $language ?? 'en',
+        };
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.colorScheme = value as 'traditional' | 'winter' | 'mixed';
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
+  }
+  
+  function updateLanguage(value: string) {
+    if (value !== 'en' && value !== 'fr') return;
+    roomTheme.update((currentTheme) => {
+      if (!currentTheme) {
+        const newTheme = {
+          snowEffect: snowEffect ?? true,
+          backgroundMusic: backgroundMusic ?? true,
+          sparkles: true,
+          icicles: false,
+          frostPattern: true,
+          colorScheme: 'mixed' as const,
+          language: value as 'en' | 'fr',
+        };
+        language.set(value as 'en' | 'fr');
+        applyRoomTheme(newTheme);
+        return newTheme;
+      }
+      currentTheme.language = value as 'en' | 'fr';
+      language.set(value as 'en' | 'fr');
+      applyRoomTheme(currentTheme);
+      return currentTheme;
+    });
   }
 </script>
 
@@ -161,6 +272,22 @@
         <option value="traditional">🎄 {t('generalSettings.colorSchemeTraditional')}</option>
         <option value="winter">❄️ {t('generalSettings.colorSchemeWinter')}</option>
         <option value="mixed">🎅 {t('generalSettings.colorSchemeMixed')}</option>
+      </select>
+    </div>
+    
+    <!-- Language Preference -->
+    <div class="setting-item frosted-glass">
+      <div class="setting-content">
+        <label class="setting-label">🌐 {t('generalSettings.language')}</label>
+        <p class="setting-description">{t('generalSettings.languageDesc')}</p>
+      </div>
+      <select
+        value={currentLanguage}
+        on:change={(e) => updateLanguage(e.currentTarget.value)}
+        class="color-scheme-select"
+      >
+        <option value="en">🇬🇧 English</option>
+        <option value="fr">🇫🇷 Français</option>
       </select>
     </div>
     
