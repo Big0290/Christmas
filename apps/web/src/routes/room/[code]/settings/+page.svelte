@@ -349,18 +349,27 @@
       (response: any) => {
         creatingSet = false;
         if (response.success) {
-          questionSets.push(response.set);
-          selectedQuestionSet = response.set.id;
           newSetName = '';
           newSetDescription = '';
+          
+          // Close the dialog
           if (browser) {
             const dialog = document.getElementById('create-set-dialog');
             if (dialog instanceof HTMLDialogElement) {
               dialog.close();
             }
           }
-          loadQuestionsForSet(response.set.id);
-          saveRoomQuestionSet(response.set.id);
+          
+          // Reload question sets list to refresh selection
+          loadQuestionSets();
+          
+          // Set the newly created set as selected after reload
+          setTimeout(() => {
+            selectedQuestionSet = response.set.id;
+            loadQuestionsForSet(response.set.id);
+            saveRoomQuestionSet(response.set.id);
+          }, 100);
+          
           showMessage(t('triviaTab.success.setCreated'));
         } else {
           alert(response.error || t('triviaTab.errors.failedCreateSet'));
@@ -634,14 +643,23 @@
       (response: any) => {
         creatingItemSet = false;
         if (response.success) {
-          itemSets.push(response.set);
-          selectedItemSet = response.set.id;
           newItemSetName = '';
           newItemSetDescription = '';
+          
+          // Close the dialog
           const dialog = document.getElementById('create-item-set-dialog');
           if (dialog instanceof HTMLDialogElement) dialog.close();
-          loadItemsForSet(response.set.id);
-          saveRoomItemSet(response.set.id);
+          
+          // Reload item sets list to refresh selection
+          loadItemSets();
+          
+          // Set the newly created set as selected after reload
+          setTimeout(() => {
+            selectedItemSet = response.set.id;
+            loadItemsForSet(response.set.id);
+            saveRoomItemSet(response.set.id);
+          }, 100);
+          
           showMessage(t('priceTab.success.setCreated'));
         } else {
           alert(response.error || t('priceTab.errors.failedCreateSet'));
@@ -786,14 +804,23 @@
       (response: any) => {
         creatingPromptSet = false;
         if (response.success) {
-          promptSets.push(response.set);
-          selectedPromptSet = response.set.id;
           newPromptSetName = '';
           newPromptSetDescription = '';
+          
+          // Close the dialog
           const dialog = document.getElementById('create-prompt-set-dialog');
           if (dialog instanceof HTMLDialogElement) dialog.close();
-          loadPromptsForSet(response.set.id);
-          saveRoomPromptSet(response.set.id);
+          
+          // Reload prompt sets list to refresh selection
+          loadPromptSets();
+          
+          // Set the newly created set as selected after reload
+          setTimeout(() => {
+            selectedPromptSet = response.set.id;
+            loadPromptsForSet(response.set.id);
+            saveRoomPromptSet(response.set.id);
+          }, 100);
+          
           showMessage(t('naughtyTab.success.setCreated'));
         } else {
           alert(response.error || t('naughtyTab.errors.failedCreateSet'));

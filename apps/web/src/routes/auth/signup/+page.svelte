@@ -16,9 +16,16 @@
   let error = '';
   let success = '';
   let profileLinked = false;
+  let redirectTo = '/host/manage';
 
   onMount(() => {
     connectSocket();
+    
+    // Check for redirect parameter
+    if (browser) {
+      const urlParams = new URLSearchParams(window.location.search);
+      redirectTo = urlParams.get('redirect') || '/host/manage';
+    }
     
     // Load saved player name if available
     if (browser) {
@@ -83,7 +90,7 @@
             }
             // Redirect after a short delay to allow auth state to sync
             setTimeout(() => {
-              goto('/');
+              goto(redirectTo);
             }, 1500);
           });
         } catch (err) {

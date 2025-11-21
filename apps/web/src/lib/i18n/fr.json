@@ -112,6 +112,16 @@
       "playerCountPlural": "{count} joueurs"
     },
     "footer": "6 Jeux | 50 Joueurs | Multijoueur en temps réel",
+    "choice": {
+      "join": {
+        "title": "Rejoindre une salle",
+        "description": "Entrez un code de salle pour rejoindre un jeu existant"
+      },
+      "host": {
+        "title": "Héberger une salle",
+        "description": "Créez et gérez votre propre salle de jeu"
+      }
+    },
     "errors": {
       "enterName": "Veuillez entrer votre nom",
       "validCode": "Veuillez entrer un code de salle valide à 4 lettres",
@@ -139,6 +149,7 @@
     "button": "Rejoindre le jeu",
     "joining": "Rejoindre...",
     "footer": "Pas de code ? Demandez à l'hôte de le partager !",
+    "backToHome": "Retour à l'accueil",
     "errors": {
       "enterName": "Veuillez entrer votre nom",
       "validCode": "Veuillez entrer un code de salle valide à 4 lettres",
@@ -155,6 +166,10 @@
   },
   "room": {
     "title": "Salle {code}",
+    "hostView": "Vue Hôte",
+    "hostWaitingMessage": "Allez à la Vue Hôte pour démarrer les jeux",
+    "hostInstructions": "Cliquez sur \"Vue Hôte\" ci-dessus pour sélectionner et démarrer les jeux",
+    "waitingHostDescription": "L'hôte démarrera un jeu bientôt",
     "gameSettings": "Paramètres du jeu",
     "connection": {
       "error": "Erreur de connexion",
@@ -250,7 +265,26 @@
     "removePlayerTitle": "Retirer le joueur",
     "failedRemovePlayer": "Échec du retrait du joueur",
     "roomCodeCopied": "Code de la salle copié !",
+    "gameSettings": "Paramètres du jeu",
+    "viewSettings": "Voir les paramètres",
+    "editSettings": "Modifier les paramètres",
+    "noGameActive": "Aucun jeu actif",
+    "currentGame": "Jeu actuel",
+    "gameType": "Type de jeu",
+    "settingsRestartWarning": "La modification des paramètres redémarrera le jeu en cours.",
+    "settingsHint": "Démarrez un jeu depuis le hall pour configurer les paramètres.",
+    "confirmRestartGame": "La modification des paramètres redémarrera le jeu en cours. Continuer ?",
+    "contentTheme": "Contenu et thème",
+    "triviaTab": "Trivia",
+    "priceTab": "Prix",
+    "themeTab": "Thème",
+    "errors": {
+      "noConnection": "Non connecté au serveur",
+      "failedEndGame": "Échec de la fin du jeu"
+    },
     "reconnectHost": "Reconnecter l'hôte",
+    "switchMode": "Changer de mode",
+    "selectGameToStart": "Sélectionnez un jeu à démarrer",
     "settingUp": "Configuration de l'écran hôte...",
     "waitingGameState": "En attente de l'état du jeu...",
     "readyToStart": "Prêt à démarrer un jeu !",
@@ -266,6 +300,44 @@
     "leaderboard": {
       "session": "Session",
       "global": "Global"
+    },
+    "modeSelector": {
+      "title": "Choisir le mode hôte",
+      "controllerMode": "Mode contrôleur",
+      "controllerDescription": "Contrôles complets pour démarrer les jeux, gérer les joueurs et contrôler le gameplay",
+      "displayMode": "Mode affichage",
+      "displayDescription": "Vue plein écran pour projecteur - parfait pour TV ou projecteur"
+    },
+    "display": {
+      "title": "Vue affichage {code}",
+      "waitingForGame": "En attente du démarrage du jeu...",
+      "scanToJoin": "Scannez le code QR pour rejoindre",
+      "orVisit": "Ou visitez :",
+      "scanQrCode": "Scannez le code QR pour rejoindre !"
+    },
+    "manage": {
+      "title": "Gestion de la salle",
+      "signedInAs": "Connecté en tant que",
+      "loadingRoom": "Vérification de votre salle...",
+      "existingRoom": "Salle existante",
+      "resumeRoom": "Reprendre la salle",
+      "resuming": "Reprise...",
+      "createNew": "Créer une nouvelle salle",
+      "createDescription": "Démarrez une nouvelle salle de jeu pour votre fête",
+      "createButton": "Créer une nouvelle salle",
+      "creating": "Création...",
+      "hostNameLabel": "Nom de l'hôte",
+      "hostNamePlaceholder": "Entrez votre nom",
+      "hostNameHint": "Ce nom sera affiché en tant qu'hôte",
+      "backToHome": "Retour à l'accueil",
+      "errors": {
+        "notConnected": "Non connecté au serveur. Veuillez attendre...",
+        "mustSignIn": "Vous devez être connecté pour gérer les salles",
+        "failedReconnect": "Échec de la reconnexion à la salle",
+        "failedCreate": "Échec de la création de la salle",
+        "timeout": "La requête a expiré. Veuillez réessayer.",
+        "enterName": "Veuillez entrer votre nom"
+      }
     }
   },
   "games": {

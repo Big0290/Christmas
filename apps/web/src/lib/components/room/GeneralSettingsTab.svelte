@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { roomTheme, applyRoomTheme } from '$lib/theme';
+  import { roomTheme, applyRoomTheme, updateRoomTheme } from '$lib/theme';
   import { get } from 'svelte/store';
   import { t, language } from '$lib/i18n';
   
@@ -7,6 +7,7 @@
   export let snowEffect: boolean;
   export let loadingSettings: boolean;
   export let saveGeneralSettings: () => void;
+  export let roomCode: string = ''; // Add roomCode prop for auto-save
   
   // Get theme from store
   $: theme = get(roomTheme);
@@ -20,7 +21,7 @@
   $: colorScheme = theme?.colorScheme ?? 'mixed';
   $: currentLanguage = theme?.language ?? $language ?? 'en';
   
-  function updateBackgroundMusic(value: boolean) {
+  async function updateBackgroundMusic(value: boolean) {
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
         const newTheme = {
@@ -39,9 +40,28 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode && roomCode.trim() !== '') {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { backgroundMusic: value }).then((success) => {
+          if (success) {
+            console.log('[Theme] ✅ Background music saved:', value);
+          } else {
+            console.error('[Theme] ❌ Failed to save background music - check console for details');
+          }
+        }).catch((err) => {
+          console.error('[Theme] ❌ Error saving background music:', err);
+        });
+      } else {
+        console.warn('[Theme] Cannot save: theme not loaded yet');
+      }
+    } else {
+      console.warn('[Theme] Cannot save: roomCode not provided', { roomCode });
+    }
   }
   
-  function updateSnowEffect(value: boolean) {
+  async function updateSnowEffect(value: boolean) {
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
         const newTheme = {
@@ -60,9 +80,22 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { snowEffect: value }).then((success) => {
+          if (success) {
+            console.log('[Theme] Snow effect saved:', value);
+          } else {
+            console.error('[Theme] Failed to save snow effect');
+          }
+        });
+      }
+    }
   }
   
-  function updateSparkles(value: boolean) {
+  async function updateSparkles(value: boolean) {
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
         const newTheme = {
@@ -81,9 +114,22 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { sparkles: value }).then((success) => {
+          if (success) {
+            console.log('[Theme] Sparkles saved:', value);
+          } else {
+            console.error('[Theme] Failed to save sparkles');
+          }
+        });
+      }
+    }
   }
   
-  function updateIcicles(value: boolean) {
+  async function updateIcicles(value: boolean) {
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
         const newTheme = {
@@ -102,9 +148,22 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { icicles: value }).then((success) => {
+          if (success) {
+            console.log('[Theme] Icicles saved:', value);
+          } else {
+            console.error('[Theme] Failed to save icicles');
+          }
+        });
+      }
+    }
   }
   
-  function updateFrostPattern(value: boolean) {
+  async function updateFrostPattern(value: boolean) {
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
         const newTheme = {
@@ -123,9 +182,22 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { frostPattern: value }).then((success) => {
+          if (success) {
+            console.log('[Theme] Frost pattern saved:', value);
+          } else {
+            console.error('[Theme] Failed to save frost pattern');
+          }
+        });
+      }
+    }
   }
   
-  function updateColorScheme(value: string) {
+  async function updateColorScheme(value: string) {
     if (value !== 'traditional' && value !== 'winter' && value !== 'mixed') return;
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
@@ -145,9 +217,22 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { colorScheme: value as 'traditional' | 'winter' | 'mixed' }).then((success) => {
+          if (success) {
+            console.log('[Theme] Color scheme saved:', value);
+          } else {
+            console.error('[Theme] Failed to save color scheme');
+          }
+        });
+      }
+    }
   }
   
-  function updateLanguage(value: string) {
+  async function updateLanguage(value: string) {
     if (value !== 'en' && value !== 'fr') return;
     roomTheme.update((currentTheme) => {
       if (!currentTheme) {
@@ -169,6 +254,19 @@
       applyRoomTheme(currentTheme);
       return currentTheme;
     });
+    // Auto-save to database
+    if (roomCode) {
+      const theme = get(roomTheme);
+      if (theme) {
+        updateRoomTheme(roomCode, { language: value as 'en' | 'fr' }).then((success) => {
+          if (success) {
+            console.log('[Theme] Language saved:', value);
+          } else {
+            console.error('[Theme] Failed to save language');
+          }
+        });
+      }
+    }
   }
 </script>
 

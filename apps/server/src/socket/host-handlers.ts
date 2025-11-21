@@ -47,6 +47,32 @@ export function setupHostHandlers(
   const broadcastGameState = (roomCode: string): void => {
     roomEngine.broadcastGameState(roomCode);
   };
+
+  /**
+   * Check if socket has host-control permission
+   * Returns true if role is 'host-control', false otherwise
+   */
+  const checkHostControlPermission = (socket: Socket, roomEngine: RoomEngine): boolean => {
+    // Get role from socket.data or ConnectionManager
+    const role = (socket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socket.id);
+    
+    if (!role) {
+      // No role set - check if this is a host (backward compatibility)
+      const roomInfo = roomEngine.getRoomBySocketId(socket.id);
+      if (roomInfo && roomInfo.isHost) {
+        // Default to host-control for hosts without role set
+        return true;
+      }
+      return false;
+    }
+    
+    const hasPermission = role === 'host-control';
+    if (!hasPermission) {
+      console.log(`[Host] Permission denied for socket ${socket.id.substring(0, 8)}: role=${role}, required=host-control`);
+    }
+    return hasPermission;
+  };
+
   // ========================================================================
   // ROOM CREATION
   // ========================================================================
@@ -108,11 +134,8 @@ export function setupHostHandlers(
           hostToken,
         });
 
-        // Emit initial room_update to sync state
-        socket.emit('room_update', {
-          players: Array.from(room.players.values()),
-          playerCount: room.players.size,
-        });
+        // Sync players list to all parties using RoomEngine
+        roomEngine.syncPlayerList(room.code);
 
         console.log(`[Host] Created: ${room.code} by ${sanitizedName} (user: ${authUser.userId})`);
       } catch (error) {
@@ -128,15 +151,42 @@ export function setupHostHandlers(
 
   socket.on(
     'reconnect_host',
-    async (roomCode: string, hostToken: string, language: 'en' | 'fr' | undefined, callback) => {
+    async (
+      roomCode: string,
+      hostToken: string,
+      language: 'en' | 'fr' | undefined,
+      roleOrCallback?: 'player' | 'host-control' | 'host-display' | Function,
+      callback?: Function
+    ) => {
       if (!checkRateLimit()) {
-        if (typeof callback === 'function') {
-          callback({ success: false, error: 'Rate limit exceeded' });
-        }
+        const cb = typeof callback === 'function' ? callback : (typeof roleOrCallback === 'function' ? roleOrCallback : () => {});
+        cb({ success: false, error: 'Rate limit exceeded' });
         return;
       }
 
-      const safeCallback = typeof callback === 'function' ? callback : () => {};
+      // Handle backward compatibility: role is optional
+      let role: 'player' | 'host-control' | 'host-display' | undefined = undefined;
+      let safeCallback: Function;
+      
+      if (typeof roleOrCallback === 'function') {
+        // Old signature: no role parameter
+        safeCallback = roleOrCallback;
+        role = 'host-control'; // Default for backward compatibility
+      } else if (typeof roleOrCallback === 'string' && ['player', 'host-control', 'host-display'].includes(roleOrCallback)) {
+        // New signature: role provided
+        role = roleOrCallback as 'player' | 'host-control' | 'host-display';
+        safeCallback = typeof callback === 'function' ? callback : () => {};
+      } else {
+        // No role, no callback - shouldn't happen but handle gracefully
+        safeCallback = () => {};
+        role = 'host-control'; // Default
+      }
+
+      // Validate role
+      if (role && !['player', 'host-control', 'host-display'].includes(role)) {
+        safeCallback({ success: false, error: 'Invalid role specified' });
+        return;
+      }
 
       try {
         console.log(`[Host] reconnect_host called for room ${roomCode} by socket ${socket.id}`);
@@ -291,10 +341,28 @@ export function setupHostHandlers(
           return;
         }
 
+        // Store role in socket.data before updating host socket
+        const finalRole = role || 'host-control'; // Default to host-control for hosts
+        (socket.data as any).role = finalRole;
+        console.log(`[Host] 🔵 Stored role ${finalRole} in socket.data for socket ${socket.id.substring(0, 8)}`);
+
         // Update host socket (updates room hostId, marks host as connected, and registers in ConnectionManager)
         // Update host socket
         try {
           roomEngine.updateHostSocket(codeNormalized, socket.id);
+          // CRITICAL: Register connection with role BEFORE joining room to ensure role is persisted
+          // This ensures SyncEngine can find the socket role when syncing
+          roomEngine.connectionManager.registerConnection(socket.id, codeNormalized, true, finalRole);
+          // Also update role in ConnectionManager (in case connection already exists)
+          roomEngine.connectionManager.updateSocketRoom(socket.id, codeNormalized, true, finalRole);
+          
+          // Verify role was set correctly
+          const verifiedRole = roomEngine.connectionManager.getSocketRole(socket.id);
+          if (verifiedRole !== finalRole) {
+            console.warn(`[Host] ⚠️ Role mismatch: expected ${finalRole}, got ${verifiedRole}. Re-registering...`);
+            roomEngine.connectionManager.updateSocketRoom(socket.id, codeNormalized, true, finalRole);
+          }
+          console.log(`[Host] ✅ Role ${finalRole} verified in ConnectionManager for socket ${socket.id.substring(0, 8)}`);
         } catch (error: any) {
           console.error(`[Host] ❌ Error updating host socket:`, {
             socketId: socket.id.substring(0, 8),
@@ -306,9 +374,10 @@ export function setupHostHandlers(
           return;
         }
 
-        // Join the room
+        // Join the room AFTER role is set and persisted
         socket.join(codeNormalized);
-
+        console.log(`[Host] 🔵 Socket ${socket.id.substring(0, 8)} joined room ${codeNormalized} as ${finalRole}`);
+        
         // Update last accessed timestamp
         try {
           await roomEngine.updateLastAccessed(codeNormalized);
@@ -323,22 +392,100 @@ export function setupHostHandlers(
         // Get the current host token (might be newly regenerated)
         const currentHostToken = roomEngine.getHostToken(codeNormalized);
         
+        // CRITICAL: Get current players from room.players Map
+        // If room was just restored from DB, players Map might be empty, but active players
+        // should reconnect and repopulate it. For now, use what's in the Map.
+        let playersList = Array.from(room.players.values());
+        
+        // If players list is empty but there are sockets in the room, log a warning
+        // This helps identify when room was restored but players haven't reconnected yet
+        const socketsInRoom = io.sockets.adapter.rooms.get(codeNormalized);
+        const socketCount = socketsInRoom ? socketsInRoom.size : 0;
+        if (playersList.length === 0 && socketCount > 1) {
+          // More than 1 socket (host + at least one other) but no players in Map
+          // This means room was restored but players haven't reconnected yet
+          console.warn(`[Host] ⚠️ Room ${codeNormalized} has ${socketCount} socket(s) but players Map is empty - players may need to reconnect`);
+        }
+        
+        console.log(`[Host] Reconnect response includes ${playersList.length} player(s) for room ${codeNormalized} (${socketCount} total socket(s))`);
+        
+        // Get theme from room settings
+        const theme = room.settings?.theme || {};
+
         safeCallback({
           success: true,
           room: {
             code: room.code,
-            players: Array.from(room.players.values()),
+            players: playersList,
+            playerCount: playersList.length,
             currentGame: room.currentGame,
             gameState: room.gameState,
           },
           // Include host token in response (especially if it was regenerated)
           hostToken: currentHostToken,
+          // Include role in response so client can verify
+          role: finalRole,
+          // Include theme settings for persistence
+          theme: {
+            snowEffect: theme.snowEffect ?? true,
+            backgroundMusic: theme.backgroundMusic ?? theme.soundEnabled ?? true,
+            sparkles: theme.sparkles ?? true,
+            icicles: theme.icicles ?? false,
+            frostPattern: theme.frostPattern ?? true,
+            colorScheme: theme.colorScheme ?? 'mixed',
+            language: theme.language ?? 'en',
+          },
         });
 
-        // Broadcast authoritative players list
-        io.to(codeNormalized).emit('room_update', {
-          players: Array.from(room.players.values()),
-          playerCount: room.players.size,
+        // CRITICAL: Use setImmediate to ensure Socket.IO room membership is fully established
+        // before emitting room_update. This prevents race conditions where the socket
+        // hasn't fully joined the room yet and misses the event.
+        setImmediate(() => {
+          // Verify socket is in the room before syncing
+          const socketsInRoom = io.sockets.adapter.rooms.get(codeNormalized);
+          const socketCount = socketsInRoom ? socketsInRoom.size : 0;
+          const socketIds = socketsInRoom ? Array.from(socketsInRoom).map(id => id.substring(0, 8)).join(', ') : 'none';
+          console.log(`[Host] 🔵 Room ${codeNormalized} now has ${socketCount} socket(s): [${socketIds}]`);
+          
+          // Note: SyncEngine handles fallback emits internally if socket isn't in room yet
+          // We don't need to emit directly here - SyncEngine will handle it with proper ACK tracking
+          const isInRoom = socketsInRoom?.has(socket.id) || false;
+          if (!isInRoom) {
+            console.warn(`[Host] ⚠️ Socket ${socket.id.substring(0, 8)} claims to have joined room ${codeNormalized} but is NOT in the room yet. SyncEngine will handle fallback.`);
+          } else {
+            console.log(`[Host] ✅ Verified: Socket ${socket.id.substring(0, 8)} is confirmed in room ${codeNormalized}`);
+          }
+
+          // CRITICAL: Re-fetch players list right before syncing to ensure we have the latest
+          // This handles cases where players reconnected between getting the room and syncing
+          const currentPlayersList = Array.from(room.players.values());
+          const currentPlayerCount = currentPlayersList.length;
+          
+          if (currentPlayerCount !== playersList.length) {
+            console.log(`[Host] 🔄 Player count changed: ${playersList.length} → ${currentPlayerCount} (players may have reconnected)`);
+            playersList = currentPlayersList;
+          }
+          
+          // Sync players list to all parties using RoomEngine (which uses SyncEngine internally)
+          // RoomEngine handles fallbacks and timing internally
+          console.log(`[Host] 🔵 About to sync ${playersList.length} player(s) to room ${codeNormalized} after reconnect`);
+          roomEngine.syncPlayerList(codeNormalized, playersList);
+          console.log(`[Host] ✅ Synced ${playersList.length} player(s) to room ${codeNormalized} via RoomEngine after reconnect`);
+
+          // Send jukebox state to reconnecting host
+          const jukeboxState = roomEngine.roomManager.getJukeboxState(codeNormalized);
+          if (jukeboxState) {
+            socket.emit('jukebox_state', jukeboxState);
+            console.log(`[Host] ✅ Sent jukebox state to reconnecting host for room ${codeNormalized}`);
+          }
+
+          // Resync missing states using ACK system
+          try {
+            roomEngine.syncEngine.resyncSocket(codeNormalized, socket.id, finalRole);
+            console.log(`[Host] ✅ Resynced missing states for reconnecting host ${socket.id.substring(0, 8)}`);
+          } catch (resyncError) {
+            console.error(`[Host] ❌ Error resyncing states:`, resyncError);
+          }
         });
 
         // Reset reconnection attempts on success
@@ -653,120 +800,226 @@ export function setupHostHandlers(
   // GAME MANAGEMENT (HOST ONLY)
   // ========================================================================
 
-  socket.on('start_game', async (gameType: GameType, settings?: any) => {
-    if (!checkRateLimit()) return;
+  socket.on('start_game', async (gameType: GameType, settings?: any, callback?: (response: { success: boolean; error?: string }) => void) => {
+    console.log(`[Host] start_game received from socket ${socket.id.substring(0, 8)} for game type ${gameType}`);
+    
+    if (!checkRateLimit()) {
+      const errorMsg = 'Rate limit exceeded. Please wait before trying again.';
+      console.log(`[Host] Rate limit exceeded for start_game from socket ${socket.id.substring(0, 8)}`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+      return;
+    }
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
     if (!roomInfo || !roomInfo.isHost) {
-      socket.emit('error', 'Only host can start games');
+      const errorMsg = 'Only host can start games';
+      console.log(`[Host] Permission denied: start_game from socket ${socket.id.substring(0, 8)} - not a host`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
       return;
     }
+
+    // Check host-control permission
+    const role = (socket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socket.id);
+    console.log(`[Host] Checking host-control permission for socket ${socket.id.substring(0, 8)}: role=${role || 'undefined'}, isHost=${roomInfo.isHost}`);
+    
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      const errorMsg = 'Only host controller can perform this action';
+      console.log(`[Host] Permission denied: start_game from socket ${socket.id.substring(0, 8)}: role=${role || 'undefined'}, required=host-control`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+      return;
+    }
+
     const room = roomInfo.room;
+    console.log(`[Host] Processing start_game for room ${room.code}, game type ${gameType}`);
 
-    // Save settings to database if provided
-    if (settings && supabase) {
-      try {
-        const { error } = await supabase.from('game_settings').upsert(
-          {
-            room_code: room.code,
-            game_type: gameType,
-            settings: settings,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'room_code,game_type',
-          }
-        );
-
-        if (error) {
-          console.error(
-            `[Host] Failed to save settings for ${gameType} in room ${room.code}:`,
-            error
+    try {
+      // Save settings to database if provided
+      if (settings && supabase) {
+        try {
+          const { error } = await supabase.from('game_settings').upsert(
+            {
+              room_code: room.code,
+              game_type: gameType,
+              settings: settings,
+              updated_at: new Date().toISOString(),
+            },
+            {
+              onConflict: 'room_code,game_type',
+            }
           );
-        }
-      } catch (error: any) {
-        console.error(`[Host] Error saving settings:`, error);
-      }
-    }
 
-    console.log(`[Host] Attempting to start ${gameType} in room ${room.code}`);
-    const game = await roomEngine.startGame(room.code, gameType, settings);
-    if (!game) {
-      socket.emit('error', 'Failed to start game');
-      return;
-    }
-
-    const gameState = game.getState();
-    console.log(`[Host] Game created successfully: ${gameType} in room ${room.code}`);
-
-    io.to(room.code).emit('game_started', gameType);
-
-    // Broadcast game state
-    broadcastGameState(room.code);
-
-    // Additional broadcasts after state transitions
-    setTimeout(() => {
-      broadcastGameState(room.code);
-    }, 4000);
-
-    setTimeout(() => {
-      const currentGame = roomEngine.getGame(room.code);
-      if (currentGame && currentGame.getState().state === GameState.PLAYING) {
-        const state = currentGame.getState();
-        if ((state as any).currentQuestion || (state as any).currentItem || (state as any).currentPrompt) {
-          broadcastGameState(room.code);
+          if (error) {
+            console.error(
+              `[Host] Failed to save settings for ${gameType} in room ${room.code}:`,
+              error
+            );
+          }
+        } catch (error: any) {
+          console.error(`[Host] Error saving settings:`, error);
         }
       }
-    }, 5000);
 
-    console.log(`[Host] Started ${gameType} in room ${room.code}`);
+      console.log(`[Host] Attempting to start ${gameType} in room ${room.code}`);
+      const game = await roomEngine.startGame(room.code, gameType, settings);
+      if (!game) {
+        const errorMsg = 'Failed to start game';
+        console.error(`[Host] Failed to start game: roomEngine.startGame returned null for room ${room.code}, game type ${gameType}`);
+        socket.emit('error', errorMsg);
+        if (callback) callback({ success: false, error: errorMsg });
+        return;
+      }
+
+      const gameState = game.getState();
+      console.log(`[Host] Game created successfully: ${gameType} in room ${room.code}, initial state: ${gameState.state}`);
+
+      // Emit game_started event
+      io.to(room.code).emit('game_started', gameType);
+
+      // Sync initial state immediately using RoomEngine (STARTING state)
+      // This ensures display and all parties get the initial state
+      roomEngine.syncGameState(room.code, gameState, { force: true });
+      console.log(`[Host] Synced initial game state (${gameState.state}) to all parties for room ${room.code}`);
+
+      // CRITICAL: Game will transition from STARTING to PLAYING after 3 seconds
+      // onPlaying() will load the first question/item, so we need to sync again after that
+      // Set a timeout to sync state again after onPlaying() completes (around 3.5 seconds)
+      setTimeout(() => {
+        const currentGame = roomEngine.getGame(room.code);
+        if (currentGame && currentGame === game) {
+          const updatedState = currentGame.getState();
+          // Only sync if state has transitioned to PLAYING and game data is loaded
+          if (updatedState.state === GameState.PLAYING) {
+            console.log(`[Host] 🔄 Game transitioned to PLAYING, syncing state with game data for room ${room.code}`);
+            roomEngine.syncGameState(room.code, updatedState, { force: true });
+            console.log(`[Host] ✅ Synced PLAYING state with game data to all parties for room ${room.code}`);
+          }
+        }
+      }, 3500); // After game transitions to PLAYING and onPlaying() completes
+
+      console.log(`[Host] Successfully started ${gameType} in room ${room.code}`);
+      if (callback) callback({ success: true });
+    } catch (error: any) {
+      const errorMsg = error?.message || 'Failed to start game';
+      console.error(`[Host] Error starting game in room ${room.code}:`, error);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+    }
   });
 
-  socket.on('end_game', async () => {
-    if (!checkRateLimit()) return;
+  socket.on('end_game', async (callback?: (response: { success: boolean; error?: string }) => void) => {
+    console.log(`[Host] end_game received from socket ${socket.id.substring(0, 8)}`);
+    
+    if (!checkRateLimit()) {
+      const errorMsg = 'Rate limit exceeded. Please wait before trying again.';
+      console.log(`[Host] Rate limit exceeded for end_game from socket ${socket.id.substring(0, 8)}`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+      return;
+    }
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
     if (!roomInfo || !roomInfo.isHost) {
-      socket.emit('error', 'Only host can end games');
+      const errorMsg = 'Only host can end games';
+      console.log(`[Host] Permission denied: end_game from socket ${socket.id.substring(0, 8)} - not a host`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
       return;
     }
-    const room = roomInfo.room;
 
-    const game = roomEngine.getGame(room.code);
-    let scoreboard: Array<{ playerId: string; name: string; score: number }> = [];
-    let gameType: GameType | null = null;
-
-    if (game) {
-      scoreboard = game.getScoreboard();
-      gameType = game.getState().gameType;
-
-      // End the game
-      game.end();
-
-      // Save to leaderboard and check achievements
-      await roomEngine.saveLeaderboard(room.code, gameType, scoreboard, achievementManager, io);
-
-      // Broadcast final game state
-      room.players.forEach((player) => {
-        const playerSocket = io.sockets.sockets.get(player.id);
-        if (playerSocket) {
-          const finalState = game.getClientState(player.id);
-          finalState.state = GameState.GAME_END;
-          finalState.scoreboard = scoreboard;
-          playerSocket.emit('game_state_update', finalState);
-        }
-      });
-
-      io.to(room.code).emit('game_ended', { scoreboard, gameType });
-
-      // Destroy the game
-      roomEngine.endGame(room.code);
-    } else {
-      roomEngine.endGame(room.code);
-      io.to(room.code).emit('game_ended', { scoreboard, gameType });
+    // Check host-control permission
+    const role = (socket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socket.id);
+    console.log(`[Host] Checking host-control permission for socket ${socket.id.substring(0, 8)}: role=${role || 'undefined'}, isHost=${roomInfo.isHost}`);
+    
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      const errorMsg = 'Only host controller can perform this action';
+      console.log(`[Host] Permission denied: end_game from socket ${socket.id.substring(0, 8)}: role=${role || 'undefined'}, required=host-control`);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+      return;
     }
 
-    console.log(`[Host] Ended game in room ${room.code}`);
+    const room = roomInfo.room;
+    console.log(`[Host] Processing end_game for room ${room.code}`);
+
+    try {
+      const game = roomEngine.getGame(room.code);
+      let scoreboard: Array<{ playerId: string; name: string; score: number }> = [];
+      let gameType: GameType | null = null;
+
+      if (game) {
+        scoreboard = game.getScoreboard();
+        gameType = game.getState().gameType;
+
+        // End the game
+        game.end();
+
+        // Save to leaderboard and check achievements
+        await roomEngine.saveLeaderboard(room.code, gameType, scoreboard, achievementManager, io);
+
+        // Get final game state with GAME_END state
+        // Transform scoreboard to match client format (remove playerId, keep name and score)
+        const formattedScoreboard = scoreboard.map(({ name, score }) => ({ name, score }));
+        const finalGameState: any = {
+          ...game.getState(),
+          state: GameState.GAME_END,
+          scoreboard: formattedScoreboard,
+          gameType: gameType,
+        };
+
+        console.log(`[Host] Syncing GAME_END state to room ${room.code} with scoreboard:`, formattedScoreboard);
+
+        // Use RoomEngine to sync final state to all parties
+        // Force sync to ensure display gets the GAME_END state with scoreboard
+        roomEngine.syncGameState(room.code, finalGameState, { force: true });
+
+        // Emit game_ended event to entire room (includes scoreboard and gameType)
+        // Also format scoreboard for game_ended event
+        io.to(room.code).emit('game_ended', { scoreboard: formattedScoreboard, gameType });
+
+        // Destroy the game
+        roomEngine.endGame(room.code);
+        
+        // Clean up sync data for this room
+        roomEngine.syncEngine.cleanupRoom(room.code);
+      } else {
+        // No game exists, but still need to sync all parties
+        // Transform scoreboard to match client format
+        const formattedScoreboard = scoreboard.map(({ name, score }) => ({ name, score }));
+        const finalState = {
+          state: GameState.GAME_END,
+          gameType: gameType,
+          round: 0,
+          maxRounds: 0,
+          startedAt: 0,
+          scores: {},
+          scoreboard: formattedScoreboard,
+        };
+
+        console.log(`[Host] Syncing GAME_END state (no game) to room ${room.code} with scoreboard:`, formattedScoreboard);
+
+        // Use RoomEngine to sync final state
+        roomEngine.syncGameState(room.code, finalState, { force: true });
+
+        // Emit game_ended event to entire room
+        io.to(room.code).emit('game_ended', { scoreboard: formattedScoreboard, gameType });
+
+        roomEngine.endGame(room.code);
+        
+        // Clean up sync data for this room
+        roomEngine.syncEngine.cleanupRoom(room.code);
+      }
+
+      console.log(`[Host] Successfully ended game in room ${room.code}`);
+      if (callback) callback({ success: true });
+    } catch (error: any) {
+      const errorMsg = error?.message || 'Failed to end game';
+      console.error(`[Host] Error ending game in room ${room.code}:`, error);
+      socket.emit('error', errorMsg);
+      if (callback) callback({ success: false, error: errorMsg });
+    }
   });
 
   socket.on('pause_game', () => {
@@ -774,10 +1027,18 @@ export function setupHostHandlers(
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
     if (!roomInfo || !roomInfo.isHost) return;
+
+    // Check host-control permission
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      socket.emit('error', 'Only host controller can perform this action');
+      console.log(`[Host] Permission denied: pause_game from socket ${socket.id.substring(0, 8)}`);
+      return;
+    }
+
     const room = roomInfo.room;
 
     roomEngine.pauseGame(room.code);
-    io.to(room.code).emit('game_state_update', { state: 'paused' });
+    // SyncEngine will handle state sync via broadcastGameState
     broadcastGameState(room.code);
   });
 
@@ -786,10 +1047,18 @@ export function setupHostHandlers(
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
     if (!roomInfo || !roomInfo.isHost) return;
+
+    // Check host-control permission
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      socket.emit('error', 'Only host controller can perform this action');
+      console.log(`[Host] Permission denied: resume_game from socket ${socket.id.substring(0, 8)}`);
+      return;
+    }
+
     const room = roomInfo.room;
 
     roomEngine.resumeGame(room.code);
-    io.to(room.code).emit('game_state_update', { state: 'playing' });
+    // SyncEngine will handle state sync via broadcastGameState
     broadcastGameState(room.code);
   });
 
@@ -801,6 +1070,14 @@ export function setupHostHandlers(
       callback({ success: false, error: 'Only host can kick players' });
       return;
     }
+
+    // Check host-control permission
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      callback({ success: false, error: 'Only host controller can perform this action' });
+      console.log(`[Host] Permission denied: kick_player from socket ${socket.id.substring(0, 8)}`);
+      return;
+    }
+
     const room = roomInfo.room;
 
     if (targetPlayerId === room.hostId) {
@@ -821,13 +1098,309 @@ export function setupHostHandlers(
 
     io.to(room.code).emit('player_left', { playerId: targetPlayerId, player });
 
-    io.to(room.code).emit('room_update', {
-      players: Array.from(room.players.values()),
-      playerCount: room.players.size,
-    });
+    // Sync players list to all parties using RoomEngine
+    roomEngine.syncPlayerList(room.code);
+
+    // Sync game state using RoomEngine (handles both active game and lobby state)
+    roomEngine.syncGameState(room.code, undefined, { force: true });
+    const game = roomEngine.getGame(room.code);
+    if (game) {
+      const gameState = game.getState();
+      console.log(`[Host] Synced game state after kicking player ${targetPlayerId} from room ${room.code}, state: ${gameState.state}`);
+    } else {
+      console.log(`[Host] Synced LOBBY state after kicking player ${targetPlayerId} from room ${room.code}`);
+    }
 
     callback({ success: true, message: `Player ${player?.name} was removed` });
     console.log(`[Host] Player ${targetPlayerId} kicked from room ${room.code}`);
+  });
+
+  // ========================================================================
+  // TRIVIA QUESTION SETS MANAGEMENT
+  // ========================================================================
+
+  socket.on('list_question_sets', async (callback) => {
+    if (!checkRateLimit()) return;
+
+    try {
+      const authToken = (socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.replace('Bearer ', '')) as string | undefined;
+      if (!authToken) {
+        callback({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const authUser = await verifyAuthToken(authToken);
+      if (!authUser) {
+        callback({ success: false, error: 'Invalid authentication token' });
+        return;
+      }
+
+      if (!supabase) {
+        callback({ success: false, error: 'Database not available' });
+        return;
+      }
+
+      const { data: sets, error } = await supabase
+        .from('question_sets')
+        .select('id, name, description, question_count')
+        .eq('host_id', authUser.userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[Host] Error listing question sets:', error);
+        callback({ success: false, error: error.message });
+        return;
+      }
+
+      callback({
+        success: true,
+        sets: sets || [],
+      });
+    } catch (error: any) {
+      console.error('[Host] List question sets error:', error);
+      callback({ success: false, error: error.message || 'Failed to list question sets' });
+    }
+  });
+
+  socket.on('create_question_set', async (name: string, description: string | undefined, callback) => {
+    if (!checkRateLimit()) return;
+
+    try {
+      const authToken = (socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.replace('Bearer ', '')) as string | undefined;
+      if (!authToken) {
+        callback({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const authUser = await verifyAuthToken(authToken);
+      if (!authUser) {
+        callback({ success: false, error: 'Invalid authentication token' });
+        return;
+      }
+
+      if (!supabase) {
+        callback({ success: false, error: 'Database not available' });
+        return;
+      }
+
+      if (!name || !name.trim()) {
+        callback({ success: false, error: 'Question set name is required' });
+        return;
+      }
+
+      // Generate unique ID
+      const setId = `set_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+      const { data, error } = await supabase
+        .from('question_sets')
+        .insert({
+          id: setId,
+          name: name.trim(),
+          description: description?.trim() || null,
+          host_id: authUser.userId,
+          question_count: 0,
+        })
+        .select('id, name, description, question_count')
+        .single();
+
+      if (error) {
+        console.error('[Host] Error creating question set:', error);
+        callback({ success: false, error: error.message });
+        return;
+      }
+
+      callback({
+        success: true,
+        set: data,
+      });
+    } catch (error: any) {
+      console.error('[Host] Create question set error:', error);
+      callback({ success: false, error: error.message || 'Failed to create question set' });
+    }
+  });
+
+  socket.on('get_questions_for_set', async (setId: string, callback) => {
+    if (!checkRateLimit()) return;
+
+    try {
+      const authToken = (socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.replace('Bearer ', '')) as string | undefined;
+      if (!authToken) {
+        callback({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const authUser = await verifyAuthToken(authToken);
+      if (!authUser) {
+        callback({ success: false, error: 'Invalid authentication token' });
+        return;
+      }
+
+      if (!supabase) {
+        callback({ success: false, error: 'Database not available' });
+        return;
+      }
+
+      // Verify set belongs to user
+      const { data: setData, error: setError } = await supabase
+        .from('question_sets')
+        .select('id, host_id')
+        .eq('id', setId)
+        .single();
+
+      if (setError || !setData || setData.host_id !== authUser.userId) {
+        callback({ success: false, error: 'Question set not found or access denied' });
+        return;
+      }
+
+      const { data: questions, error } = await supabase
+        .from('trivia_questions')
+        .select('id, question, answers, correct_index, difficulty, category, image_url, translations')
+        .eq('set_id', setId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('[Host] Error loading questions:', error);
+        callback({ success: false, error: error.message });
+        return;
+      }
+
+      callback({
+        success: true,
+        questions: questions || [],
+      });
+    } catch (error: any) {
+      console.error('[Host] Get questions for set error:', error);
+      callback({ success: false, error: error.message || 'Failed to load questions' });
+    }
+  });
+
+  socket.on('add_question_to_set', async (setId: string, question: any, callback) => {
+    if (!checkRateLimit()) return;
+
+    try {
+      const authToken = (socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.replace('Bearer ', '')) as string | undefined;
+      if (!authToken) {
+        callback({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const authUser = await verifyAuthToken(authToken);
+      if (!authUser) {
+        callback({ success: false, error: 'Invalid authentication token' });
+        return;
+      }
+
+      if (!supabase) {
+        callback({ success: false, error: 'Database not available' });
+        return;
+      }
+
+      // Verify set belongs to user
+      const { data: setData, error: setError } = await supabase
+        .from('question_sets')
+        .select('id, host_id')
+        .eq('id', setId)
+        .single();
+
+      if (setError || !setData || setData.host_id !== authUser.userId) {
+        callback({ success: false, error: 'Question set not found or access denied' });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('trivia_questions')
+        .insert({
+          question: question.question,
+          answers: question.answers,
+          correct_index: question.correctIndex,
+          difficulty: question.difficulty || 'medium',
+          category: question.category || null,
+          image_url: question.imageUrl || null,
+          set_id: setId,
+          translations: question.translations || null,
+        })
+        .select('id, question, answers, correct_index, difficulty, category, image_url, translations')
+        .single();
+
+      if (error) {
+        console.error('[Host] Error adding question:', error);
+        callback({ success: false, error: error.message });
+        return;
+      }
+
+      callback({
+        success: true,
+        question: data,
+      });
+    } catch (error: any) {
+      console.error('[Host] Add question to set error:', error);
+      callback({ success: false, error: error.message || 'Failed to add question' });
+    }
+  });
+
+  socket.on('set_room_question_set', async (roomCode: string, setId: string | null, callback) => {
+    if (!checkRateLimit()) return;
+
+    try {
+      const roomInfo = roomEngine.getRoomBySocketId(socket.id);
+      if (!roomInfo || !roomInfo.isHost) {
+        callback({ success: false, error: 'Only host can set question set' });
+        return;
+      }
+
+      if (!supabase) {
+        callback({ success: false, error: 'Database not available' });
+        return;
+      }
+
+      const normalizedCode = roomCode.toUpperCase();
+
+      // Get current game settings
+      const { data: currentSettings, error: fetchError } = await supabase
+        .from('game_settings')
+        .select('settings')
+        .eq('room_code', normalizedCode)
+        .eq('game_type', 'TRIVIA_ROYALE')
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('[Host] Error fetching game settings:', fetchError);
+        callback({ success: false, error: fetchError.message });
+        return;
+      }
+
+      const currentSettingsObj = currentSettings?.settings || {};
+      const updatedSettings = {
+        ...currentSettingsObj,
+        customQuestionSetId: setId,
+      };
+
+      const { error: updateError } = await supabase
+        .from('game_settings')
+        .upsert({
+          room_code: normalizedCode,
+          game_type: 'TRIVIA_ROYALE',
+          settings: updatedSettings,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'room_code,game_type'
+        });
+
+      if (updateError) {
+        console.error('[Host] Error updating game settings:', updateError);
+        callback({ success: false, error: updateError.message });
+        return;
+      }
+
+      callback({ success: true });
+    } catch (error: any) {
+      console.error('[Host] Set room question set error:', error);
+      callback({ success: false, error: error.message || 'Failed to set question set' });
+    }
   });
 
   // ========================================================================
@@ -1218,6 +1791,13 @@ export function setupHostHandlers(
         return;
       }
 
+      // Check host-control permission
+      if (!checkHostControlPermission(socket, roomEngine)) {
+        callback({ success: false, error: 'Only host controller can perform this action' });
+        console.log(`[Host] Permission denied: set_room_item_set from socket ${socket.id.substring(0, 8)}`);
+        return;
+      }
+
       if (!supabase) {
         callback({ success: false, error: 'Database not available' });
         return;
@@ -1374,8 +1954,8 @@ export function setupHostHandlers(
       }
 
       // If roomCode not provided, try to get it from connection info or database
+      let roomInfo = roomEngine.getRoomBySocketId(socket.id);
       if (!roomCode) {
-        const roomInfo = roomEngine.getRoomBySocketId(socket.id);
         if (roomInfo && roomInfo.isHost) {
           roomCode = roomInfo.room.code;
         } else {
@@ -1398,6 +1978,26 @@ export function setupHostHandlers(
       if (!roomCode) {
         cb({ success: false, error: 'Room not found. Please reconnect to your room.' });
         return;
+      }
+
+      // Get roomInfo if not already retrieved
+      if (!roomInfo) {
+        roomInfo = roomEngine.getRoomBySocketId(socket.id);
+      }
+
+      // Check host-control permission (but allow if roomInfo doesn't exist yet - might be during reconnect)
+      if (roomInfo && roomInfo.isHost) {
+        const socketRole = (socket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socket.id);
+        const isHostControl = socketRole === 'host-control';
+        if (!isHostControl) {
+          console.log(`[Host] Permission check: socket role=${socketRole}, isHost=${roomInfo.isHost}, denying update_room_settings`);
+          cb({ success: false, error: 'Only host controller can perform this action' });
+          return;
+        }
+        console.log(`[Host] Permission granted: socket role=${socketRole}, allowing update_room_settings`);
+      } else if (!roomInfo) {
+        // Room not in memory - might be during reconnect, allow if authenticated as host
+        console.log(`[Host] Room not in memory, checking database authorization...`);
       }
 
       // Get current room settings
@@ -1425,6 +2025,10 @@ export function setupHostHandlers(
       if (settings.colorScheme !== undefined) themeUpdates.colorScheme = settings.colorScheme;
       if (settings.language !== undefined) themeUpdates.language = settings.language;
 
+      if (Object.keys(themeUpdates).length > 0) {
+        console.log(`[Host] Updating theme for room ${roomCode}:`, themeUpdates);
+      }
+
       // Merge theme updates
       const updatedTheme = { ...currentTheme, ...themeUpdates };
 
@@ -1440,13 +2044,15 @@ export function setupHostHandlers(
       };
 
       // Update database
-      const { error: updateError } = await supabase
+      console.log(`[Host] Saving room settings to database for room ${roomCode}...`);
+      const { error: updateError, data: updateData } = await supabase
         .from('rooms')
         .update({
           ...roomUpdates,
           settings: updatedSettings,
         })
-        .eq('code', roomCode);
+        .eq('code', roomCode)
+        .select();
 
       if (updateError) {
         console.error('[Host] Error updating room settings:', updateError);
@@ -1454,8 +2060,16 @@ export function setupHostHandlers(
         return;
       }
 
+      console.log(`[Host] ✅ Successfully saved room settings for room ${roomCode}`, {
+        theme: updatedTheme,
+        updatedRows: updateData?.length || 0,
+      });
+
       // Update in-memory room if it exists
-      const roomInfo = roomEngine.getRoomBySocketId(socket.id);
+      // Reuse roomInfo from earlier in the function
+      if (!roomInfo) {
+        roomInfo = roomEngine.getRoomBySocketId(socket.id);
+      }
       if (roomInfo && roomInfo.isHost && roomInfo.room.code === roomCode) {
         const room = roomInfo.room;
         room.settings = {
@@ -1464,16 +2078,127 @@ export function setupHostHandlers(
         };
       }
 
-      // Broadcast settings update to room
-      io.to(roomCode).emit('room_settings_updated', {
+      // Sync settings update to room using RoomEngine (with ACK tracking)
+      const settingsUpdate = {
         ...roomUpdates,
         ...themeUpdates,
-      });
+      };
+      roomEngine.syncSettings(roomCode, settingsUpdate);
 
+      console.log(`[Host] Sending success callback to socket ${socket.id.substring(0, 8)} for room ${roomCode}`);
       cb({ success: true });
+      console.log(`[Host] Callback sent successfully for room ${roomCode}`);
     } catch (error: any) {
       console.error('[Host] Update room settings error:', error);
       cb({ success: false, error: error.message || 'Failed to update room settings' });
+    }
+  });
+
+  // ========================================================================
+  // JUKEBOX CONTROL (HOST ONLY)
+  // ========================================================================
+
+  socket.on('jukebox_control', (roomCode: string, action: 'play' | 'pause' | 'next' | 'previous' | 'select' | 'shuffle' | 'repeat' | 'volume' | 'seek', data?: any) => {
+    if (!checkRateLimit()) return;
+
+    // Check host-control permission
+    if (!checkHostControlPermission(socket, roomEngine)) {
+      console.log(`[Host] Jukebox control denied for socket ${socket.id.substring(0, 8)}: not host-control`);
+      return;
+    }
+
+    const roomInfo = roomEngine.getRoomBySocketId(socket.id);
+    if (!roomInfo || !roomInfo.isHost || roomInfo.room.code !== roomCode.toUpperCase()) {
+      console.log(`[Host] Jukebox control denied: not host of room ${roomCode}`);
+      return;
+    }
+
+    const normalizedRoomCode = roomCode.toUpperCase();
+    const currentState = roomEngine.roomManager.getJukeboxState(normalizedRoomCode) || {
+      currentTrack: -1,
+      isPlaying: false,
+      shuffle: false,
+      repeat: 'all' as 'none' | 'one' | 'all',
+      volume: 0.3,
+    };
+
+    let newState = { ...currentState };
+
+    try {
+      switch (action) {
+        case 'play':
+          newState.isPlaying = true;
+          break;
+
+        case 'pause':
+          newState.isPlaying = false;
+          break;
+
+        case 'next':
+          // Increment track, wrapping around
+          if (data?.maxTracks && data.maxTracks > 0) {
+            newState.currentTrack = (currentState.currentTrack + 1) % data.maxTracks;
+          }
+          break;
+
+        case 'previous':
+          // Decrement track, wrapping around
+          if (data?.maxTracks && data.maxTracks > 0) {
+            newState.currentTrack = currentState.currentTrack <= 0 
+              ? data.maxTracks - 1 
+              : currentState.currentTrack - 1;
+          }
+          break;
+
+        case 'select':
+          // Select specific track
+          if (data?.trackIndex !== undefined && data.trackIndex >= 0) {
+            newState.currentTrack = data.trackIndex;
+          }
+          break;
+
+        case 'shuffle':
+          // Toggle shuffle
+          newState.shuffle = !currentState.shuffle;
+          break;
+
+        case 'repeat':
+          // Cycle through repeat modes: none -> one -> all -> none
+          if (currentState.repeat === 'none') {
+            newState.repeat = 'one';
+          } else if (currentState.repeat === 'one') {
+            newState.repeat = 'all';
+          } else {
+            newState.repeat = 'none';
+          }
+          break;
+
+        case 'volume':
+          // Set volume
+          if (data?.volume !== undefined && data.volume >= 0 && data.volume <= 1) {
+            newState.volume = data.volume;
+          }
+          break;
+
+        case 'seek':
+          // Seek is handled client-side, but we can log it
+          console.log(`[Host] Jukebox seek requested for room ${normalizedRoomCode}`);
+          break;
+
+        default:
+          console.warn(`[Host] Unknown jukebox action: ${action}`);
+          return;
+      }
+
+      // Update jukebox state in RoomManager
+      roomEngine.roomManager.setJukeboxState(normalizedRoomCode, newState);
+
+      // Broadcast updated state to all clients in room
+      io.to(normalizedRoomCode).emit('jukebox_state', newState);
+
+      console.log(`[Host] Jukebox ${action} for room ${normalizedRoomCode}:`, newState);
+    } catch (error: any) {
+      console.error(`[Host] Jukebox control error for room ${normalizedRoomCode}:`, error);
     }
   });
 }

@@ -17,7 +17,7 @@
   let avatarStyle: 'festive' | 'emoji' = 'festive';
   let socketReady = false;
   let showLanguageModal = false;
-  let pendingJoinResponse: any = null;
+  let pendingJoinData: { roomCode: string; playerName: string; avatar?: string } | null = null;
 
   const festiveAvatars = [
     '🎅', '🤶', '🎄', '⛄', '🦌', '🎁', '🔔', '⭐', '🕯️', '🎿',
@@ -80,48 +80,92 @@
     console.log('[Join] Socket connected (reactive)');
   }
 
-  function handleLanguageSelected(lang: 'en' | 'fr') {
-    if (!pendingJoinResponse) return;
+  async function handleLanguageSelected(lang: 'en' | 'fr') {
+    if (!pendingJoinData) return;
     
-    // Update language if it changed
-    if ($language !== lang) {
-      language.set(lang);
-    }
+    // Update language
+    language.set(lang);
     
-    if (browser) {
-      // Store player info with normalized room code
-      localStorage.setItem('christmas_playerName', playerName);
-      localStorage.setItem('christmas_role', 'player');
-      const normalizedCode = pendingJoinResponse.roomCode || roomCode.trim().toUpperCase();
-      localStorage.setItem('christmas_roomCode', normalizedCode);
-      if (selectedAvatar) {
-        localStorage.setItem('christmas_preferredAvatar', selectedAvatar);
-        localStorage.setItem('christmas_avatarStyle', avatarStyle);
+    // Close modal
+    showLanguageModal = false;
+    
+    // Now call join_room with the selected language
+    const normalizedCode = pendingJoinData.roomCode.trim().toUpperCase();
+    
+    // Ensure socket is connected
+    if (!$socket || !$connected) {
+      error = t('join.errors.notConnected') || 'Not connected to server. Please wait...';
+      console.error('[Join] Socket not connected, attempting to reconnect...');
+      connectSocket();
+      
+      // Wait a bit for connection
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!$connected || !$socket) {
+        error = t('join.errors.connectionFailed') || 'Failed to connect. Please refresh the page.';
+        pendingJoinData = null;
+        return;
       }
-      if (pendingJoinResponse.playerToken) {
-        localStorage.setItem('christmas_playerToken', pendingJoinResponse.playerToken);
+    }
+
+    loading = true;
+    error = '';
+
+    console.log(`[Join] Attempting to join room ${normalizedCode} as ${pendingJoinData.playerName} with language ${lang}`);
+    console.log(`[Join] Socket ID: ${$socket?.id}`);
+    console.log(`[Join] Socket connected: ${$connected}`);
+
+    $socket.emit('join_room', normalizedCode, pendingJoinData.playerName, pendingJoinData.avatar || undefined, lang, (response: any) => {
+      loading = false;
+      
+      console.log(`[Join] join_room response:`, response);
+      
+      if (response.success) {
+        console.log(`[Join] ✅ Successfully joined room ${normalizedCode}`);
+        console.log(`[Join] Response players:`, response.players || []);
+        console.log(`[Join] Player count:`, response.players?.length || 0);
+        
+        // Verify socket room membership
+        if ($socket) {
+          console.log(`[Join] Socket ${$socket.id.substring(0, 8)} successfully joined room ${normalizedCode}`);
+          console.log(`[Join] Socket connected: ${$connected}, Socket ID: ${$socket.id}`);
+        }
+        
+        if (browser) {
+          // Store player info with normalized room code
+          localStorage.setItem('christmas_playerName', pendingJoinData.playerName);
+          localStorage.setItem('christmas_role', 'player');
+          localStorage.setItem('christmas_roomCode', normalizedCode);
+          if (pendingJoinData.avatar) {
+            localStorage.setItem('christmas_preferredAvatar', pendingJoinData.avatar);
+            localStorage.setItem('christmas_avatarStyle', avatarStyle);
+          }
+          if (response.playerToken) {
+            localStorage.setItem('christmas_playerToken', response.playerToken);
+          }
+          
+          // Set session flag to indicate this is a fresh join (not a reconnection)
+          // This tells the play page that socket is already in the room
+          try {
+            sessionStorage.setItem('just_joined_room', normalizedCode);
+            console.log(`[Join] Set just_joined_room session flag for room ${normalizedCode}`);
+          } catch (error) {
+            console.warn('[Join] Failed to set session flag:', error);
+          }
+        }
+        
+        // Navigate directly to play page after successful join
+        goto(`/play/${normalizedCode}`);
+      } else {
+        console.error(`[Join] Failed to join room ${normalizedCode}:`, response.error);
+        error = response.error || t('home.errors.failedJoin');
       }
       
-      // Set session flag to indicate this is a fresh join (not a reconnection)
-      // This tells the play page that socket is already in the room
-      try {
-        sessionStorage.setItem('just_joined_room', normalizedCode);
-        console.log(`[Join] Set just_joined_room session flag for room ${normalizedCode}`);
-      } catch (error) {
-        console.warn('[Join] Failed to set session flag:', error);
-      }
-    }
-    
-    // Close modal and navigate to play page
-    showLanguageModal = false;
-    const normalizedCode = pendingJoinResponse.roomCode || roomCode.trim().toUpperCase();
-    goto(`/play/${normalizedCode}`);
-    
-    // Clear pending response
-    pendingJoinResponse = null;
+      // Clear pending data
+      pendingJoinData = null;
+    });
   }
 
-  async function joinRoom() {
+  function joinRoom() {
     if (!playerName.trim()) {
       error = t('join.errors.enterName');
       return;
@@ -138,52 +182,19 @@
     // Ensure socket is connected
     if (!$socket || !$connected) {
       error = t('join.errors.notConnected') || 'Not connected to server. Please wait...';
-      console.error('[Join] Socket not connected, attempting to reconnect...');
-      connectSocket();
-      
-      // Wait a bit for connection
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (!$connected || !$socket) {
-        error = t('join.errors.connectionFailed') || 'Failed to connect. Please refresh the page.';
-        return;
-      }
+      console.error('[Join] Socket not connected');
+      return;
     }
 
-    loading = true;
-    error = '';
-
-    console.log(`[Join] Attempting to join room ${normalizedCode} as ${playerName}`);
-    console.log(`[Join] Socket ID: ${$socket?.id}`);
-    console.log(`[Join] Socket connected: ${$connected}`);
-
-    $socket.emit('join_room', normalizedCode, playerName, selectedAvatar || undefined, $language, (response: any) => {
-      loading = false;
-      
-      console.log(`[Join] join_room response:`, response);
-      
-      if (response.success) {
-        console.log(`[Join] ✅ Successfully joined room ${normalizedCode}`);
-        console.log(`[Join] Response players:`, response.players || []);
-        console.log(`[Join] Player count:`, response.players?.length || 0);
-        
-        // Verify socket room membership
-        if ($socket) {
-          // Check if socket is in the room (socket.io stores rooms in socket.rooms)
-          // Note: We can't directly check socket.rooms from client, but server confirmed join
-          console.log(`[Join] Socket ${$socket.id.substring(0, 8)} successfully joined room ${normalizedCode}`);
-          console.log(`[Join] Socket connected: ${$connected}, Socket ID: ${$socket.id}`);
-        }
-        
-        // Store the response temporarily
-        pendingJoinResponse = response;
-        
-        // Show language selection modal
-        showLanguageModal = true;
-      } else {
-        console.error(`[Join] Failed to join room ${normalizedCode}:`, response.error);
-        error = response.error || t('home.errors.failedJoin');
-      }
-    });
+    // Store join data and show language selection modal FIRST
+    pendingJoinData = {
+      roomCode: normalizedCode,
+      playerName: playerName.trim(),
+      avatar: selectedAvatar || undefined
+    };
+    
+    // Show language selection modal before joining
+    showLanguageModal = true;
   }
 </script>
 
@@ -290,8 +301,11 @@
       </button>
     </div>
 
-    <div class="text-center text-sm text-white/50">
+    <div class="text-center text-sm text-white/50 space-y-2">
       <p>{t('join.footer')}</p>
+      <a href="/" class="text-christmas-gold hover:underline block">
+        ← {t('join.backToHome')}
+      </a>
     </div>
   </div>
 

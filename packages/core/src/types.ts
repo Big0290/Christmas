@@ -280,6 +280,14 @@ export interface ServerToClientEvents {
   game_started: (gameType: GameType) => void;
   game_state_update: (state: any) => void;
   game_ended: (results: any) => void;
+  display_sync_state: (state: any) => void; // For host-display role synchronization
+  
+  // State transition events (emitted through syncEngine)
+  round_started: (data: { round: number; maxRounds: number; gameType: GameType }) => void;
+  round_ended: (data: { round: number; maxRounds: number; gameType: GameType; scoreboard?: any[] }) => void;
+  game_paused: (data: { gameType: GameType; round: number }) => void;
+  game_resumed: (data: { gameType: GameType; round: number }) => void;
+  state_transition: (data: { from: GameState; to: GameState; gameType: GameType; round?: number }) => void;
   
   // Sound events
   sound_event: (data: { sound: 'gameStart' | 'roundEnd' | 'gameEnd'; timestamp: number }) => void;
@@ -324,8 +332,8 @@ export interface ClientToServerEvents {
   get_room_players: (roomCode: string, callback: (response: { success: boolean; players?: Player[]; error?: string }) => void) => void;
   
   // Host events
-  start_game: (gameType: GameType) => void;
-  end_game: () => void;
+  start_game: (gameType: GameType, settings?: any, callback?: (response: { success: boolean; error?: string }) => void) => void;
+  end_game: (callback?: (response: { success: boolean; error?: string }) => void) => void;
   pause_game: () => void;
   resume_game: () => void;
   

@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n';
   import { goto } from '$app/navigation';
   import type { GuessingChallengePublic, GuessingSubmission } from '@christmas/core';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
   import type { PageData } from './$types';
 
   export let data: PageData;
@@ -122,8 +123,7 @@
     </div>
   {:else if !challenge || !roomCode}
     <div class="loading-screen">
-      <div class="spinner"></div>
-      <p>{t('guessing.loading') || 'Loading challenge...'}</p>
+      <ChristmasLoading message={t('guessing.loading') || 'Loading challenge...'} size="large" />
     </div>
   {:else if isRevealed}
     <!-- Results View -->
@@ -148,8 +148,7 @@
 
       {#if loadingSubmissions}
         <div class="loading-submissions">
-          <div class="spinner"></div>
-          <p>Loading results...</p>
+          <ChristmasLoading message="Loading results..." size="medium" />
         </div>
       {:else if submissions.length > 0}
         <div class="submissions-results">
@@ -580,17 +579,10 @@
   .spinner {
     width: 1.25rem;
     height: 1.25rem;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    border-width: 3px;
   }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+  
+  /* Spinner uses global Christmas-themed style from app.css */
 
   .success-screen {
     max-width: 500px;

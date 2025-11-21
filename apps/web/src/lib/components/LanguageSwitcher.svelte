@@ -3,7 +3,8 @@
   import type { Language } from '$lib/i18n';
 
   function toggleLanguage() {
-    language.update((current) => (current === 'en' ? 'fr' : 'en'));
+    const newLang = $language === 'en' ? 'fr' : 'en';
+    language.set(newLang);
   }
 </script>
 
@@ -18,32 +19,36 @@
 
 <style>
   .language-switcher {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.5rem;
-    padding: 0.375rem 0.75rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid #ffd700;
+    border-radius: clamp(6px, 0.8vw, 8px);
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.6rem, 1vw, 0.75rem);
     color: white;
-    font-size: 0.75rem;
+    font-size: clamp(0.7rem, 1vw, 0.8rem);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 3rem;
+    min-width: 2.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 10px rgba(255, 215, 0, 0.2);
+    backdrop-filter: blur(5px);
   }
 
   .language-switcher:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 215, 0, 0.3);
   }
 
   .language-switcher:active {
-    transform: scale(0.95);
+    transform: translateY(0);
   }
 
   .language-code {
     user-select: none;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
   }
 </style>
 

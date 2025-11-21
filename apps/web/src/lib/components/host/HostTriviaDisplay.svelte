@@ -6,6 +6,10 @@
   export let round: number = 0;
   export let maxRounds: number = 0;
   export let scoreboard: Array<{ name: string; score: number }> = [];
+
+  // Round synchronization: use gameState as source of truth, fallback to prop if gameState not available (ensures sync with players)
+  $: syncedRound = $gameState?.round ?? round ?? 0;
+  $: syncedMaxRounds = $gameState?.maxRounds ?? maxRounds ?? 0;
 </script>
 
 {#if $gameState?.currentQuestion || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
@@ -42,8 +46,8 @@
       <div class="question-display-large">
         <div class="question-number">
           <div class="question-label-bilingual">
-            <span class="question-label-french">Question {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
-            <span class="question-label-english">Question {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+            <span class="question-label-french">Question {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="question-label-english">Question {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
           </div>
         </div>
 
@@ -56,8 +60,7 @@
         {:else if currentState === GameState.PLAYING || currentState === GameState.STARTING}
           <!-- Loading state when question is not yet available -->
           <div class="question-text-english loading-state">
-            <div class="loading-spinner">⏳</div>
-            <p>Loading question...</p>
+            <ChristmasLoading message="Loading question..." size="medium" />
           </div>
         {/if}
 

@@ -17,7 +17,7 @@ export function setupSocketHandlers(
   const lastGameState = new Map<string, GameState>();
   
   // Track last sound event per room to prevent duplicates
-  const lastSoundEvent = new Map<string, { sound: string; state: GameState; timestamp: number }>();
+  // NOTE: lastSoundEvent removed - sound events are handled by SyncEngine.handleStateTransitions()
 
   // Periodic connection health check (every 30 seconds)
   const healthCheckInterval = setInterval(() => {
@@ -50,9 +50,19 @@ export function setupSocketHandlers(
     }
   }, 30 * 1000); // Every 30 seconds
 
-  // Clean up interval on server shutdown
+  // Periodic ACK metrics logging (every 2 minutes)
+  const ackMetricsInterval = setInterval(() => {
+    try {
+      roomEngine.syncEngine.logAckMetrics();
+    } catch (error) {
+      console.error('[ACKMetrics] Error during ACK metrics check:', error);
+    }
+  }, 2 * 60 * 1000); // Every 2 minutes
+
+  // Clean up intervals on server shutdown
   process.on('SIGTERM', () => {
     clearInterval(healthCheckInterval);
+    clearInterval(ackMetricsInterval);
   });
 
   io.on('connection', (socket: Socket) => {
@@ -64,6 +74,61 @@ export function setupSocketHandlers(
     
     // Setup guessing handlers (now uses RoomEngine)
     setupGuessingHandlers(socket, roomEngine, supabase);
+
+    // Handle state ACKs from clients
+    socket.on('state_ack', (data: { version: number; messageType?: 'state' | 'player_list' | 'settings'; timestamp?: number }) => {
+      try {
+        const connectionInfo = roomEngine.connectionManager.getSocketInfo(socket.id);
+        if (!connectionInfo || !connectionInfo.roomCode) {
+          console.warn(`[Socket] ⚠️ Received ACK from socket ${socket.id.substring(0, 8)} but no room found`);
+          return;
+        }
+
+        const { roomCode } = connectionInfo;
+        const version = data.version;
+        const messageType = data.messageType || 'state';
+        const ackTimestamp = data.timestamp;
+
+        console.log(`[Socket] 📥 Received ${messageType} ACK from socket ${socket.id.substring(0, 8)}: version ${version} for room ${roomCode}`);
+
+        // Handle different message types
+        if (messageType === 'player_list' && version > 0) {
+          // Convert to negative version for internal tracking
+          const negativeVersion = -version;
+          console.log(`[Socket] 📥 Processing player_list ACK: converting version ${version} to ${negativeVersion}`);
+          roomEngine.syncEngine.handleAck(roomCode, socket.id, negativeVersion, 'player_list', ackTimestamp);
+        } else if (messageType === 'settings') {
+          // Handle settings ACKs (version passed as-is, SyncEngine handles key mapping)
+          roomEngine.syncEngine.handleAck(roomCode, socket.id, version, 'settings', ackTimestamp);
+        } else {
+          // Handle state ACKs
+          roomEngine.syncEngine.handleAck(roomCode, socket.id, version, 'state', ackTimestamp);
+        }
+      } catch (error: any) {
+        console.error(`[Socket] ❌ Error handling state_ack:`, error);
+      }
+    });
+
+    // Handle state gap detection from clients (request resync)
+    socket.on('state_gap_detected', (data: { lastVersion: number; currentVersion: number; missingVersions: number }) => {
+      try {
+        const connectionInfo = roomEngine.connectionManager.getSocketInfo(socket.id);
+        if (!connectionInfo || !connectionInfo.roomCode) {
+          console.warn(`[Socket] ⚠️ Received gap detection from socket ${socket.id.substring(0, 8)} but no room found`);
+          return;
+        }
+
+        const { roomCode } = connectionInfo;
+        console.warn(`[Socket] ⚠️ Client ${socket.id.substring(0, 8)} detected version gap in room ${roomCode}: missing ${data.missingVersions} version(s) between ${data.lastVersion} and ${data.currentVersion}`);
+        
+        // Trigger resync for this socket
+        const role = roomEngine.connectionManager.getSocketRole(socket.id) || 'player';
+        roomEngine.syncEngine.resyncSocket(roomCode, socket.id, role);
+        console.log(`[Socket] ✅ Triggered resync for socket ${socket.id.substring(0, 8)} due to version gap`);
+      } catch (error: any) {
+        console.error(`[Socket] ❌ Error handling state_gap_detected:`, error);
+      }
+    });
 
     // Handle socket disconnect - mark as disconnected for reconnection
     socket.on('disconnect', (reason) => {
@@ -96,15 +161,25 @@ export function setupSocketHandlers(
               
               const room = roomEngine.getRoom(roomCode);
               if (room) {
-                io.to(roomCode).emit('room_update', {
-                  players: Array.from(room.players.values()),
-                  playerCount: room.players.size,
-                });
+                // Sync players list to all parties using RoomEngine
+                roomEngine.syncPlayerList(roomCode);
                 console.log(`[Socket] ✅ Player ${player.name} (${socket.id.substring(0, 8)}) disconnected from room ${roomCode}`);
+                
+                // Sync game state using RoomEngine (handles both active game and lobby state)
+                roomEngine.syncGameState(roomCode, undefined, { force: true });
+                const game = roomEngine.getGame(roomCode);
+                if (game) {
+                  const gameState = game.getState();
+                  console.log(`[Socket] Synced game state after player disconnect in room ${roomCode}, state: ${gameState.state}`);
+                } else {
+                  console.log(`[Socket] Synced LOBBY state after player disconnect in room ${roomCode}`);
+                }
               }
             } else {
               // Player not found - may have already been removed
-              console.warn(`[Socket] ⚠️ Player ${socket.id.substring(0, 8)} not found in room ${roomCode} during disconnect`);
+            // Still sync players list to ensure consistency
+            console.warn(`[Socket] ⚠️ Player ${socket.id.substring(0, 8)} not found in room ${roomCode} during disconnect`);
+            roomEngine.syncPlayerList(roomCode);
               socket.leave(roomCode);
               roomEngine.connectionManager.removeSocket(socket.id);
             }
@@ -127,10 +202,18 @@ export function setupSocketHandlers(
                 
                 const roomAfterDisconnect = roomEngine.getRoom(roomCode);
                 if (roomAfterDisconnect) {
-                  io.to(roomCode).emit('room_update', {
-                    players: Array.from(roomAfterDisconnect.players.values()),
-                    playerCount: roomAfterDisconnect.players.size,
-                  });
+                  // Sync players list to all parties using RoomEngine
+                  roomEngine.syncPlayerList(roomCode);
+                  
+                  // Sync game state using RoomEngine (handles both active game and lobby state)
+                  roomEngine.syncGameState(roomCode, undefined, { force: true });
+                  const game = roomEngine.getGame(roomCode);
+                  if (game) {
+                    const gameState = game.getState();
+                    console.log(`[Socket] Synced game state after host disconnect in room ${roomCode}, state: ${gameState.state}`);
+                  } else {
+                    console.log(`[Socket] Synced LOBBY state after host disconnect in room ${roomCode}`);
+                  }
                 }
                 
                 if (reason === 'ping timeout' || reason === 'transport close') {
@@ -164,6 +247,23 @@ export function setupSocketHandlers(
         roomEngine.markHostDisconnected(roomCode);
         socket.leave(roomCode);
         io.to(roomCode).emit('host_left', { reason: 'Host disconnected' });
+        
+        // Sync game state through syncEngine after host disconnect
+        const roomAfterHostDisconnect = roomEngine.getRoom(roomCode);
+        if (roomAfterHostDisconnect) {
+          // Sync players list to all parties using RoomEngine
+          roomEngine.syncPlayerList(roomCode);
+          
+          // Sync game state using RoomEngine (handles both active game and lobby state)
+          roomEngine.syncGameState(roomCode, undefined, { force: true });
+          const game = roomEngine.getGame(roomCode);
+          if (game) {
+            const gameState = game.getState();
+            console.log(`[Socket] Synced game state after host disconnect in room ${roomCode}, state: ${gameState.state}`);
+          } else {
+            console.log(`[Socket] Synced LOBBY state after host disconnect in room ${roomCode}`);
+          }
+        }
       } else {
         // Mark player as disconnected for reconnection (handled by PlayerManager)
         // Defensive check: verify player exists in room before marking as disconnected
@@ -177,9 +277,27 @@ export function setupSocketHandlers(
             socket.leave(roomCode);
             socket.to(roomCode).emit('player_disconnected', socket.id);
             console.log(`[Socket] ✅ Player ${player.name} (${socket.id.substring(0, 8)}) marked as disconnected in room ${roomCode}`);
+            
+            // Sync players list to all parties using RoomEngine
+            const roomAfterLeave = roomEngine.getRoom(roomCode);
+            if (roomAfterLeave) {
+              roomEngine.syncPlayerList(roomCode);
+            }
+            
+            // Sync game state using RoomEngine (handles both active game and lobby state)
+            roomEngine.syncGameState(roomCode, undefined, { force: true });
+            const game = roomEngine.getGame(roomCode);
+            if (game) {
+              const gameState = game.getState();
+              console.log(`[Socket] Synced game state after player marked disconnected in room ${roomCode}, state: ${gameState.state}`);
+            } else {
+              console.log(`[Socket] Synced LOBBY state after player marked disconnected in room ${roomCode}`);
+            }
           } else {
             // Player not found in room - may have already been removed
+            // Still sync players list to ensure consistency
             console.warn(`[Socket] ⚠️ Player ${socket.id.substring(0, 8)} not found in room ${roomCode} during disconnect - may have already been removed`);
+            roomEngine.syncPlayerList(roomCode);
             socket.leave(roomCode);
             roomEngine.connectionManager.removeSocket(socket.id);
           }
@@ -191,13 +309,23 @@ export function setupSocketHandlers(
         }
       }
       
-      // After any membership change, broadcast authoritative list (if room still exists)
+      // After any membership change, sync players list and game state (if room still exists)
+      // Note: This is a final sync to ensure consistency, but individual paths above should
+      // have already synced. This acts as a safety net.
       const room = roomEngine.getRoom(roomCode);
       if (room) {
-        io.to(roomCode).emit('room_update', {
-          players: Array.from(room.players.values()),
-          playerCount: room.players.size,
-        });
+        // Sync players list to all parties using RoomEngine
+        roomEngine.syncPlayerList(roomCode);
+        
+        // Sync game state using RoomEngine (handles both active game and lobby state)
+        roomEngine.syncGameState(roomCode, undefined, { force: true });
+        const game = roomEngine.getGame(roomCode);
+        if (game) {
+          const gameState = game.getState();
+          console.log(`[Socket] Synced game state after disconnect in room ${roomCode}, state: ${gameState.state}`);
+        } else {
+          console.log(`[Socket] Synced LOBBY state after disconnect in room ${roomCode}`);
+        }
       }
       
       // Clean up connection manager (already marked as disconnected, now remove completely)
@@ -260,85 +388,85 @@ export function setupSocketHandlers(
             soundToEmit = 'gameEnd';
           }
 
-          if (soundToEmit) {
-            const lastSound = lastSoundEvent.get(code);
-            const shouldEmit =
-              !lastSound ||
-              lastSound.state !== currentGameState ||
-              timestamp - lastSound.timestamp > 1000;
-
-            if (shouldEmit) {
-              io.to(code).emit('sound_event', {
-                sound: soundToEmit,
-                timestamp: timestamp,
-              });
-              lastSoundEvent.set(code, {
-                sound: soundToEmit,
-                state: currentGameState,
-                timestamp: timestamp,
-              });
-              console.log(
-                `[Sound] Emitted ${soundToEmit} event for room ${code} (state: ${currentGameState})`
-              );
-            }
-          }
+          // NOTE: sound_event is handled by SyncEngine.handleStateTransitions()
+          // SyncEngine emits sound_event when state transitions occur via syncState()
+          // No need to emit here - SyncEngine is the authoritative source
 
           lastGameState.set(code, currentGameState);
         }
       }
 
-      if (game && game.getState().state === GameState.PLAYING) {
-        // Only broadcast for games in PLAYING state (real-time games)
-        // This optimizes bandwidth for turn-based games
-
-        // Check if state has changed (use JSON string comparison for simplicity)
-        const currentState = JSON.stringify(game.getState());
-        const lastState = lastBroadcastState.get(code);
-
-        // Special handling for bingo: emit item_called event when new item is called
+      if (game) {
         const gameState = game.getState();
-        if (gameState.gameType === GameType.BINGO && 'currentItem' in gameState) {
-          const bingoState = gameState as any;
-          const lastBingoState = JSON.parse(lastState || '{}');
+        const currentGameState = gameState.state;
+        const previousState = lastGameState.get(code);
 
-          // Check if currentItem changed
-          if (
-            bingoState.currentItem &&
-            (!lastBingoState.currentItem ||
-              lastBingoState.currentItem.id !== bingoState.currentItem.id)
-          ) {
-            // New item was called - emit event
-            io.to(code).emit(
-              'bingo_item_called',
-              bingoState.currentItem,
-              bingoState.itemsCalled || 0
-            );
-            console.log(
-              `[Bingo] Item called: ${bingoState.currentItem.emoji} ${bingoState.currentItem.name} in room ${code}`
-            );
-          }
-        }
-
-        // Only broadcast if state has changed and enough time has passed
-        const now = Date.now();
-        const lastBroadcast = lastBroadcastTime.get(code) || 0;
-        const timeSinceLastBroadcast = now - lastBroadcast;
-        const minBroadcastInterval = 200; // 5Hz = 200ms intervals
-
-        if (
-          (lastState !== currentState || timeSinceLastBroadcast >= minBroadcastInterval) &&
-          timeSinceLastBroadcast >= minBroadcastInterval
-        ) {
+        // Check for state transitions - sync immediately when state changes (critical for ACK tracking)
+        const stateChanged = previousState !== currentGameState;
+        if (stateChanged && previousState !== undefined) {
+          // State transition detected - sync immediately via SyncEngine (includes ACK tracking)
+          console.log(`[PeriodicBroadcast] State transition detected in room ${code}: ${previousState} → ${currentGameState}, syncing immediately`);
           roomEngine.broadcastGameState(code);
-          lastBroadcastState.set(code, currentState);
-          lastBroadcastTime.set(code, now);
+          lastGameState.set(code, currentGameState);
+          // Update last broadcast time to prevent immediate re-broadcast
+          lastBroadcastTime.set(code, Date.now());
         }
-      } else {
-        // Clear cache for ended games
-        lastBroadcastState.delete(code);
-        lastBroadcastTime.delete(code);
-        lastGameState.delete(code);
-        lastSoundEvent.delete(code);
+
+        // For PLAYING state, also do periodic broadcasts for real-time updates
+        if (currentGameState === GameState.PLAYING) {
+          // Check if state has changed (use JSON string comparison for simplicity)
+          const currentState = JSON.stringify(gameState);
+          const lastState = lastBroadcastState.get(code);
+
+          // Special handling for bingo: emit item_called event when new item is called
+          let bingoItemChanged = false;
+          if (gameState.gameType === GameType.BINGO && 'currentItem' in gameState) {
+            const bingoState = gameState as any;
+            const lastBingoState = JSON.parse(lastState || '{}');
+
+            // Check if currentItem changed
+            if (
+              bingoState.currentItem &&
+              (!lastBingoState.currentItem ||
+                lastBingoState.currentItem.id !== bingoState.currentItem.id)
+            ) {
+              bingoItemChanged = true;
+              // New item was called - emit event (for immediate UI feedback)
+              // Note: The state sync below will also include this change with ACK tracking
+              io.to(code).emit(
+                'bingo_item_called',
+                bingoState.currentItem,
+                bingoState.itemsCalled || 0
+              );
+              console.log(
+                `[Bingo] Item called: ${bingoState.currentItem.emoji} ${bingoState.currentItem.name} in room ${code}`
+              );
+            }
+          }
+
+          // Only broadcast if state has changed and enough time has passed
+          // For bingo item changes, sync immediately to ensure ACK tracking
+          const now = Date.now();
+          const lastBroadcast = lastBroadcastTime.get(code) || 0;
+          const timeSinceLastBroadcast = now - lastBroadcast;
+          const minBroadcastInterval = 200; // 5Hz = 200ms intervals
+          const shouldBroadcast = 
+            bingoItemChanged || // Always sync immediately when bingo item changes
+            ((lastState !== currentState || timeSinceLastBroadcast >= minBroadcastInterval) &&
+             timeSinceLastBroadcast >= minBroadcastInterval);
+
+          if (shouldBroadcast) {
+            // Use SyncEngine to sync state (includes ACK tracking)
+            roomEngine.broadcastGameState(code);
+            lastBroadcastState.set(code, currentState);
+            lastBroadcastTime.set(code, now);
+          }
+        } else if (currentGameState === GameState.GAME_END) {
+          // Clear cache for ended games
+          lastBroadcastState.delete(code);
+          lastBroadcastTime.delete(code);
+          lastGameState.delete(code);
+        }
       }
     }
   }, 100); // Check every 100ms but throttle broadcasts to 5Hz (200ms intervals)

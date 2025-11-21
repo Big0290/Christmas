@@ -5,6 +5,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import PlayerRulesModal from '$lib/components/PlayerRulesModal.svelte';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
   import { get } from 'svelte/store';
   import { page } from '$app/stores';
   import { hasDismissedRules, dismissRules } from '$lib/utils/rules-modal-storage';
@@ -243,8 +244,7 @@
 <div class="trivia-container">
   {#if !state}
     <div class="loading-overlay">
-      <div class="text-6xl mb-4 animate-spin">⏳</div>
-      <p class="text-xl text-white/70">{t('games.triviaRoyale.loading')}</p>
+      <ChristmasLoading message={t('games.triviaRoyale.loading')} size="large" />
     </div>
   {:else if state === GameState.STARTING}
     <div class="countdown-overlay">

@@ -6,6 +6,10 @@
   export let round: number;
   export let maxRounds: number;
   export let scoreboard: any[] = [];
+
+  // Round synchronization: use gameState as source of truth, fallback to prop if gameState not available (ensures sync with players)
+  $: syncedRound = $gameState?.round ?? round ?? 0;
+  $: syncedMaxRounds = $gameState?.maxRounds ?? maxRounds ?? 0;
 </script>
 
 <div class="price-host-projection">
@@ -37,8 +41,8 @@
       <div class="item-display-large">
         <div class="round-number">
           <div class="round-label-bilingual">
-            <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
-            <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+            <span class="round-label-french">Ronde {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="round-label-english">Round {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
           </div>
         </div>
 

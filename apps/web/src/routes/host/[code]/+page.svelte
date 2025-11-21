@@ -21,6 +21,7 @@
   import HostControlPanel from '$lib/components/host/HostControlPanel.svelte';
   import HostGameDisplay from '$lib/components/host/HostGameDisplay.svelte';
   import { t, language } from '$lib/i18n';
+  import { loadRoomTheme, applyRoomTheme, roomTheme, currentRoomCode } from '$lib/theme';
 
   // Normalize room code to uppercase (server expects uppercase)
   const roomCode = ($page.params.code || '').toUpperCase();
@@ -83,6 +84,14 @@
             alert(
               `Failed to reconnect: ${response?.error || 'Unknown error'}. Please go to /room/${roomCode} first.`
             );
+          } else if (response.theme) {
+            // Load theme settings for persistence
+            applyRoomTheme(response.theme);
+          } else {
+            // Fallback: load theme from server
+            loadRoomTheme(roomCode).catch((err) => {
+              console.warn('[Host] Failed to load theme:', err);
+            });
           }
         }
       );
@@ -100,6 +109,12 @@
   ];
 
   onMount(() => {
+    // Backward compatibility: redirect to mode selector
+    // This allows old links/bookmarks to still work
+    console.log('[Host] Legacy host route accessed, redirecting to mode selector...');
+    goto(`/room/${roomCode}/host`);
+    return;
+
     console.log('[Host] Component mounted, connecting socket...');
     
     // Check initial state on mount - show instructions if game is already active
@@ -312,19 +327,46 @@
             if (response && response.success && response.room) {
               console.log('[Host] ✅ Successfully reconnected as host');
 
+              // Load theme settings for persistence - reconnect response should have theme
+              if (response.theme) {
+                console.log('[Host] Applying theme from reconnect response:', response.theme);
+                applyRoomTheme(response.theme);
+                // Also update the store
+                roomTheme.set(response.theme);
+                currentRoomCode.set(normalizedRoomCode);
+              } else {
+                console.warn('[Host] No theme in reconnect response, loading from server...');
+                // Fallback: load theme from server (but this requires auth, so might fail)
+                loadRoomTheme(normalizedRoomCode).catch((err) => {
+                  console.warn('[Host] Failed to load theme:', err);
+                });
+              }
+
               // Set players immediately from response
+              // NOTE: This is a temporary snapshot - room_update event will follow with authoritative list
               if (response.room.players && Array.isArray(response.room.players)) {
-                players.set(response.room.players);
+                // Validate player objects have required properties
+                const validPlayers = response.room.players.filter((p: any) => {
+                  const hasName = p && typeof p.name === 'string' && p.name.trim().length > 0;
+                  if (!hasName) {
+                    console.warn('[Host] ⚠️ Invalid player object missing name:', p);
+                  }
+                  return hasName;
+                });
+                
+                players.set(validPlayers);
                 console.log(
-                  `[Host] Set ${response.room.players.length} player(s) from reconnect response`
+                  `[Host] Set ${validPlayers.length} valid player(s) from reconnect response (${response.room.players.length} total)`
                 );
-                // The server emits room_update after reconnect (line 333-336 in handlers.ts)
-                // which will sync the players list, but we set it here for immediate display
-                // The room_update event will arrive shortly and ensure we have the latest state
+                console.log('[Host] Player names:', validPlayers.map((p: any) => p.name).join(', '));
+                // The server emits room_update after reconnect which will sync the authoritative players list
+                // This initial set is just for immediate display - room_update will ensure we have the latest state
+                console.log('[Host] 📡 Waiting for room_update event to sync authoritative player list...');
               } else {
                 console.warn('[Host] Reconnect response missing players array');
-                // Set empty array to prevent undefined state
+                // Set empty array to prevent undefined state - room_update will populate it
                 players.set([]);
+                console.log('[Host] 📡 Waiting for room_update event to populate player list...');
               }
 
               // Verify we're in the room by checking socket rooms (for debugging)
@@ -917,10 +959,15 @@
     isPaused = false;
     playSound('click');
   }
+
+  // Make page title reactive to language changes
+  // Include $language in each reactive statement so Svelte knows to re-run when language changes
+  $: pageTitle = $language && t('host.title', { code: roomCode });
+  $: homeTitle = $language && t('home.title');
 </script>
 
 <svelte:head>
-  <title>{t('host.title', { code: roomCode })} | {t('home.title')}</title>
+  <title>{pageTitle} | {homeTitle}</title>
 </svelte:head>
 
 <div class="host-screen" class:panel-open={controlPanelOpen}>

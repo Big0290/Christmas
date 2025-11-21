@@ -18,6 +18,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { GameFactory } from '../games/factory.js';
 import type { RoomManager } from '../managers/room-manager.js';
 import type { AchievementManager } from '../managers/achievement-manager.js';
+import type { SyncEngine } from './sync-engine.js';
 
 /**
  * GameManager handles all game-related operations:
@@ -34,6 +35,7 @@ export class GameManager {
   private lastSoundEvent: Map<string, { sound: string; state: GameState; timestamp: number }> = new Map();
   private supabase: SupabaseClient | null = null;
   private io: Server | null = null;
+  private syncEngine: SyncEngine | null = null;
 
   constructor(private roomManager: RoomManager) {}
 
@@ -43,6 +45,10 @@ export class GameManager {
 
   setSocketIO(io: Server) {
     this.io = io;
+  }
+
+  setSyncEngine(syncEngine: SyncEngine) {
+    this.syncEngine = syncEngine;
   }
 
   /**
@@ -366,121 +372,36 @@ export class GameManager {
 
   /**
    * Broadcast game state to all players and host in a room
+   * Uses SyncEngine if available, otherwise falls back to legacy method
    */
   broadcastGameState(roomCode: string): void {
-    if (!this.io) {
-      console.warn('[GameManager] Cannot broadcast game state: Socket.IO not set');
-      return;
-    }
-
-    const room = this.roomManager.getRoom(roomCode);
-    if (!room) {
-      console.log(`[GameManager] broadcastGameState: Room ${roomCode} not found`);
+    // Always use SyncEngine - no fallbacks
+    if (!this.syncEngine) {
+      console.error(`[GameManager] Cannot broadcast game state: SyncEngine not initialized for room ${roomCode}`);
       return;
     }
 
     const game = this.games.get(roomCode);
     if (!game) {
-      console.log(`[GameManager] broadcastGameState: Game not found for room ${roomCode}`);
+      console.warn(`[GameManager] Cannot broadcast game state: Game not found for room ${roomCode}`);
       return;
     }
 
+    const gameState = game.getState();
+    
     // Sync room.gameState with game engine's current state
-    // This ensures reconnections get the correct state
-    const gameStateValue = game.getState().state;
-    const previousState = this.lastGameState.get(roomCode);
-
-    // Detect state transitions and emit sound events
-    if (previousState !== gameStateValue) {
-      const timestamp = Date.now();
-      let soundToEmit: 'gameStart' | 'roundEnd' | 'gameEnd' | null = null;
-
-      // Determine which sound to play based on state transition
-      if (gameStateValue === GameState.STARTING) {
-        soundToEmit = 'gameStart';
-      } else if (gameStateValue === GameState.ROUND_END) {
-        soundToEmit = 'roundEnd';
-      } else if (gameStateValue === GameState.GAME_END) {
-        soundToEmit = 'gameEnd';
-      }
-
-      // Emit sound event if state transition warrants it and we haven't already emitted for this state
-      if (soundToEmit) {
-        const lastSound = this.lastSoundEvent.get(roomCode);
-        // Only emit if we haven't already emitted this sound for this state transition
-        // or if enough time has passed (prevent rapid duplicates)
-        const shouldEmit =
-          !lastSound ||
-          lastSound.state !== gameStateValue ||
-          timestamp - lastSound.timestamp > 1000; // 1 second debounce
-
-        if (shouldEmit) {
-          this.io.to(roomCode).emit('sound_event', {
-            sound: soundToEmit,
-            timestamp: timestamp,
-          });
-          this.lastSoundEvent.set(roomCode, {
-            sound: soundToEmit,
-            state: gameStateValue,
-            timestamp: timestamp,
-          });
-          console.log(
-            `[GameManager] Emitted ${soundToEmit} event for room ${roomCode} (state: ${gameStateValue})`
-          );
-        }
-      }
-
-      // Update last known state
-      this.lastGameState.set(roomCode, gameStateValue);
-    }
-
-    if (room.gameState !== gameStateValue) {
+    const gameStateValue = gameState.state;
+    const room = this.roomManager.getRoom(roomCode);
+    if (room && room.gameState !== gameStateValue) {
       room.gameState = gameStateValue;
       console.log(`[GameManager] Synced room.gameState to ${gameStateValue} for room ${roomCode}`);
     }
-
-    // Get a reference player ID for host view (use first player or host ID if no players)
-    const firstPlayerId = room.players.size > 0 ? room.players.keys().next().value : room.hostId;
-
-    if (!firstPlayerId) {
-      console.warn(
-        `[GameManager] No valid player ID found for game state broadcast in room ${roomCode}`
-      );
-      return;
-    }
-
-    // Send personalized state to each player
-    room.players.forEach((player) => {
-      const playerSocket = this.io!.sockets.sockets.get(player.id);
-      if (playerSocket) {
-        const clientState = game.getClientState(player.id);
-        playerSocket.emit('game_state_update', clientState);
-        console.log(
-          `[GameManager] Sent game_state_update to player ${player.id.substring(0, 8)} in room ${roomCode}, state: ${clientState?.state}`
-        );
-      }
-    });
-
-    // Always send game state to host (even if no players exist)
-    const hostSocket = this.io!.sockets.sockets.get(room.hostId);
-    if (hostSocket) {
-      // Host gets a full view of the game (uses first player's view or host ID if no players)
-      const hostState = game.getClientState(firstPlayerId);
-      // Log question presence for debugging
-      if (hostState?.state === GameState.PLAYING || hostState?.state === 'playing') {
-        console.log(
-          `[GameManager] Host state check - state: ${hostState?.state}, hasQuestion: ${!!hostState?.currentQuestion}, hasItem: ${!!hostState?.currentItem}, hasPrompt: ${!!hostState?.currentPrompt}, round: ${hostState?.round}`
-        );
-      }
-      hostSocket.emit('game_state_update', hostState);
-      console.log(
-        `[GameManager] Sent game_state_update to host ${room.hostId.substring(0, 8)} in room ${roomCode}, state: ${hostState?.state}, hasQuestion: ${!!hostState?.currentQuestion}, players: ${room.players.size}`
-      );
-    } else {
-      console.warn(
-        `[GameManager] Host socket ${room.hostId?.substring(0, 8)} not found for room ${roomCode}`
-      );
-    }
+    
+    // Update last known state
+    this.lastGameState.set(roomCode, gameStateValue);
+    
+    // Use SyncEngine to sync state to all parties (players, host-control, host-display)
+    this.syncEngine.syncState(roomCode, gameState);
   }
 
   /**

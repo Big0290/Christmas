@@ -6,6 +6,10 @@
   export let round: number = 0;
   export let maxRounds: number = 0;
   export let scoreboard: Array<{ name: string; score: number }> = [];
+
+  // Round synchronization: use gameState as source of truth, fallback to prop if gameState not available (ensures sync with players)
+  $: syncedRound = $gameState?.round ?? round ?? 0;
+  $: syncedMaxRounds = $gameState?.maxRounds ?? maxRounds ?? 0;
 </script>
 
 {#if $gameState?.availableEmojis || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
@@ -17,8 +21,8 @@
         <div class="emoji-display-large">
           <div class="round-number">
             <div class="round-label-bilingual">
-              <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if} - Résultats</span>
-              <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if} - Results</span>
+              <span class="round-label-french">Ronde {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if} - Résultats</span>
+              <span class="round-label-english">Round {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if} - Results</span>
             </div>
           </div>
           <h3 class="emoji-instruction-large">

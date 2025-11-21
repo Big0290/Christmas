@@ -1,13 +1,25 @@
 <script lang="ts">
   import { players, connected } from '$lib/socket';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-  import { t } from '$lib/i18n';
+  import { goto } from '$app/navigation';
+  import { t, language } from '$lib/i18n';
 
   export let roomCode: string;
   export let isPaused: boolean = false;
   export let round: number = 0;
   export let maxRounds: number = 0;
   export let onReconnect: () => void;
+
+  // Make translations reactive by subscribing to language changes
+  // Include $language in each reactive statement so Svelte knows to re-run when language changes
+  $: pausedText = $language && t('host.gameState.paused');
+  $: roundLabel = $language && t('common.label.round');
+  $: reconnectHostText = $language && t('host.reconnectHost');
+  $: switchModeText = ($language && t('host.switchMode')) || 'Switch Mode';
+
+  function goToModeSelector() {
+    goto(`/room/${roomCode}/host`);
+  }
 </script>
 
 <div class="host-header">
@@ -24,26 +36,32 @@
       {#if isPaused}
         <div class="paused-badge">
           <span class="badge-icon">⏸️</span>
-          <span class="paused-text">{t('host.gameState.paused')}</span>
+          <span class="paused-text">{pausedText}</span>
         </div>
       {/if}
     </div>
     {#if round > 0}
       <div class="round-info">
-        <span class="round-label">{t('common.label.round')}</span>
+        <span class="round-label">{roundLabel}</span>
         <span class="round-number">{round}{#if maxRounds > 0} / {maxRounds}{/if}</span>
       </div>
     {/if}
   </div>
   <div class="header-right">
-    {#if !$connected}
-      <button on:click={onReconnect} class="reconnect-btn">
+    <div class="header-actions">
+      {#if !$connected}
+        <button on:click={onReconnect} class="action-btn reconnect-btn" title={reconnectHostText}>
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">{reconnectHostText}</span>
+        </button>
+      {/if}
+      <button on:click={goToModeSelector} class="action-btn mode-selector-btn" title={switchModeText}>
         <span class="btn-icon">🔄</span>
-        <span class="btn-text">{t('host.reconnectHost')}</span>
+        <span class="btn-text">{switchModeText}</span>
       </button>
-    {/if}
-    <div class="language-switcher-wrapper">
-      <LanguageSwitcher />
+      <div class="language-switcher-wrapper">
+        <LanguageSwitcher />
+      </div>
     </div>
   </div>
 </div>
@@ -94,6 +112,13 @@
     display: flex;
     align-items: center;
     gap: clamp(0.5rem, 1vw, 1rem);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.8vw, 0.75rem);
+    flex-wrap: nowrap;
   }
 
   .room-info {
@@ -193,53 +218,90 @@
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
   }
 
-  .reconnect-btn {
+  .action-btn {
     display: flex;
     align-items: center;
     gap: clamp(0.25rem, 0.5vw, 0.5rem);
-    padding: clamp(0.5rem, 1vh, 0.6rem) clamp(1rem, 2vw, 1.2rem);
-    background: linear-gradient(135deg, rgba(15, 134, 68, 0.8), rgba(10, 93, 46, 0.8));
+    padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.75rem, 1.5vw, 1rem);
+    background: rgba(0, 0, 0, 0.4);
     border: 2px solid #ffd700;
-    border-radius: clamp(8px, 1vw, 10px);
+    border-radius: clamp(6px, 0.8vw, 8px);
     color: white;
-    font-weight: bold;
+    font-weight: 600;
+    font-size: clamp(0.75rem, 1.2vw, 0.875rem);
     cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 215, 0, 0.2);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 10px rgba(255, 215, 0, 0.2);
     backdrop-filter: blur(5px);
+    white-space: nowrap;
   }
 
-  .reconnect-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 25px rgba(255, 215, 0, 0.4);
-    background: linear-gradient(135deg, rgba(15, 134, 68, 1), rgba(10, 93, 46, 1));
+  .action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 215, 0, 0.3);
+    background: rgba(0, 0, 0, 0.5);
   }
 
-  .reconnect-btn:active {
+  .action-btn:active {
     transform: translateY(0);
   }
 
-  .btn-icon {
-    font-size: 1.1rem;
-    animation: spin-slow 3s linear infinite;
+  .mode-selector-btn {
+    background: rgba(15, 52, 96, 0.6);
   }
 
-  @keyframes spin-slow {
-    from {
-      transform: rotate(0deg);
+  .mode-selector-btn:hover {
+    background: rgba(15, 52, 96, 0.8);
+  }
+
+  .reconnect-btn {
+    background: rgba(220, 38, 38, 0.6);
+    border-color: #ff6b6b;
+    animation: pulse-reconnect 2s ease-in-out infinite;
+  }
+
+  .reconnect-btn:hover {
+    background: rgba(220, 38, 38, 0.8);
+    border-color: #ff8787;
+  }
+
+  @keyframes pulse-reconnect {
+    0%, 100% {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 10px rgba(255, 107, 107, 0.3);
     }
-    to {
-      transform: rotate(360deg);
+    50% {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 20px rgba(255, 107, 107, 0.5);
     }
+  }
+
+  .btn-icon {
+    font-size: clamp(0.9rem, 1.3vw, 1rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .btn-text {
-    font-size: 0.9rem;
+    font-size: clamp(0.7rem, 1vw, 0.8rem);
+  }
+
+  /* Compact mode: icon-only on smaller screens */
+  @media (max-width: 1024px) {
+    .action-btn .btn-text {
+      display: none;
+    }
+    
+    .action-btn {
+      padding: clamp(0.4rem, 0.8vh, 0.5rem);
+      min-width: 36px;
+      justify-content: center;
+    }
   }
 
   .language-switcher-wrapper {
     display: flex;
     align-items: center;
+    margin-left: clamp(0.25rem, 0.5vw, 0.5rem);
   }
 
   /* Responsive Design */
@@ -264,7 +326,17 @@
 
     .header-right {
       width: 100%;
-      justify-content: space-between;
+      justify-content: flex-end;
+    }
+
+    .header-actions {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    .action-btn .btn-text {
+      display: inline;
     }
 
     .room-code-text {

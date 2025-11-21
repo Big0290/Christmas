@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GameType } from '@christmas/core';
-  import { t } from '$lib/i18n';
+  import { t, language } from '$lib/i18n';
 
   export let gameType: GameType;
   export let name: string;
@@ -10,6 +10,12 @@
   export let selected: boolean = false;
   export let onSelect: (() => void) | null = null;
   export let onStart: (() => void) | null = null;
+
+  // Make translations reactive by subscribing to language changes
+  // Include $language in each reactive statement so Svelte knows to re-run when language changes
+  $: playerText = $language && (playerCount === 1 ? t('gameTile.player') : t('gameTile.players'));
+  $: selectedText = $language && t('gameTile.selected');
+  $: startGameText = $language && t('gameTile.startGame');
 
   const gameIcons: Record<GameType, string> = {
     [GameType.TRIVIA_ROYALE]: '🎄',
@@ -104,10 +110,10 @@
       <!-- Player Count & Status -->
       <div class="flex items-center gap-2 text-white/60 text-xs md:text-sm">
         <span>👥</span>
-        <span>{playerCount} {playerCount === 1 ? t('gameTile.player') : t('gameTile.players')}</span>
+        <span>{playerCount} {playerText}</span>
         {#if selected}
           <span class="ml-auto bg-christmas-gold/20 text-christmas-gold px-2 py-0.5 rounded-full text-xs font-bold">
-            ✓ {t('gameTile.selected')}
+            ✓ {selectedText}
           </span>
         {/if}
       </div>
@@ -119,7 +125,7 @@
         on:click={handleStart}
         class="flex-shrink-0 btn-primary text-sm px-4 py-2 transform transition-transform hover:scale-105 whitespace-nowrap"
       >
-        🚀 {t('gameTile.startGame')}
+        🚀 {startGameText}
       </button>
     {/if}
   </div>

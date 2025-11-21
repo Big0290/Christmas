@@ -4,6 +4,7 @@
   import { socket, connectSocket, connected } from '$lib/socket';
   import { GameType } from '@christmas/core';
   import { t } from '$lib/i18n';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
 
   let playerName = '';
   let profile: any = null;
@@ -125,8 +126,7 @@
   <div class="max-w-4xl mx-auto">
     {#if loading}
       <div class="card text-center py-12">
-        <div class="text-6xl mb-4 animate-spin">⏳</div>
-        <p class="text-white/70">{t('profile.loading')}</p>
+        <ChristmasLoading message={t('profile.loading')} size="large" />
       </div>
     {:else if error}
       <div class="card">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, language } from '$lib/i18n';
   import { onMount } from 'svelte';
 
   export let showConfirmDialog = false;
@@ -7,6 +7,11 @@
   export let confirmAction: (() => void) | null = null;
 
   let dialogElement: HTMLDivElement | null = null;
+
+  // Make translations reactive by subscribing to language changes
+  // Include $language in each reactive statement so Svelte knows to re-run when language changes
+  $: confirmText = $language && t('common.button.confirm');
+  $: cancelText = $language && t('common.button.cancel');
 
   function cancelConfirm() {
     showConfirmDialog = false;
@@ -58,14 +63,14 @@
       tabindex="-1"
     >
       <div class="confirm-header">
-        <h3 id="confirm-title">⚠️ {t('common.button.confirm')}</h3>
+        <h3 id="confirm-title">⚠️ {confirmText}</h3>
       </div>
       <div class="confirm-body">
         <p id="confirm-message">{confirmMessage}</p>
       </div>
       <div class="confirm-buttons">
-        <button on:click={cancelConfirm} class="btn-secondary">{t('common.button.cancel')}</button>
-        <button on:click={confirm} class="btn-danger">{t('common.button.confirm')}</button>
+        <button on:click={cancelConfirm} class="btn-secondary">{cancelText}</button>
+        <button on:click={confirm} class="btn-danger">{confirmText}</button>
       </div>
     </div>
   </div>

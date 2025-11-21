@@ -10,7 +10,10 @@
   import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
   import { language } from '$lib/i18n';
+  import { get } from 'svelte/store';
   import { clearDismissedRules } from '$lib/utils/rules-modal-storage';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
+  import { loadRoomTheme, applyRoomTheme, roomTheme, currentRoomCode } from '$lib/theme';
   
   import TriviaRoyale from '$lib/games/TriviaRoyale.svelte';
   import EmojiCarol from '$lib/games/EmojiCarol.svelte';
@@ -314,10 +317,85 @@
         gameState.set(data);
         console.log('[Player] Store updated, checking if component should render...');
       });
+
+      // Listen for room settings updates to apply theme
+      $socket.on('room_settings_updated', (settings: any) => {
+        console.log('[Player] 📋 Room settings updated:', settings);
+        
+        // Update theme if theme settings changed
+        if (
+          settings.sparkles !== undefined ||
+          settings.icicles !== undefined ||
+          settings.frostPattern !== undefined ||
+          settings.colorScheme !== undefined ||
+          settings.backgroundMusic !== undefined ||
+          settings.snowEffect !== undefined ||
+          settings.language !== undefined
+        ) {
+          const currentTheme = get(roomTheme);
+          
+          if (currentTheme) {
+            const updated = { ...currentTheme };
+            if (settings.backgroundMusic !== undefined) updated.backgroundMusic = settings.backgroundMusic;
+            if (settings.snowEffect !== undefined) updated.snowEffect = settings.snowEffect;
+            if (settings.sparkles !== undefined) updated.sparkles = settings.sparkles;
+            if (settings.icicles !== undefined) updated.icicles = settings.icicles;
+            if (settings.frostPattern !== undefined) updated.frostPattern = settings.frostPattern;
+            if (settings.colorScheme !== undefined) updated.colorScheme = settings.colorScheme;
+            if (settings.language !== undefined) {
+              updated.language = settings.language;
+              language.set(settings.language);
+            }
+            
+            roomTheme.set(updated);
+            applyRoomTheme(updated);
+            console.log('[Player] 🎨 Applied theme update from room_settings_updated');
+          } else {
+            // No theme loaded yet, load it now
+            loadRoomTheme(roomCode).catch((err) => {
+              console.warn('[Player] Failed to load theme after settings update:', err);
+            });
+          }
+        }
+      });
     };
 
     // Setup listeners immediately or wait for socket
     setupSocketListeners();
+    
+    // Load room theme on mount
+    if ($connected && $socket) {
+      loadRoomTheme(roomCode).catch((err) => {
+        console.warn('[Player] Failed to load room theme:', err);
+      });
+    } else {
+      // Wait for connection then load theme
+      const unsubscribe = connected.subscribe((isConnected) => {
+        if (isConnected && $socket) {
+          unsubscribe();
+          loadRoomTheme(roomCode).catch((err) => {
+            console.warn('[Player] Failed to load room theme:', err);
+          });
+        }
+      });
+    }
+    
+    // Load room theme on mount
+    if ($connected && $socket) {
+      loadRoomTheme(roomCode).catch((err) => {
+        console.warn('[Player] Failed to load room theme:', err);
+      });
+    } else {
+      // Wait for connection then load theme
+      const unsubscribe = connected.subscribe((isConnected) => {
+        if (isConnected && $socket) {
+          unsubscribe();
+          loadRoomTheme(roomCode).catch((err) => {
+            console.warn('[Player] Failed to load room theme:', err);
+          });
+        }
+      });
+    }
     
     // Verify player connection to room
     const verifyPlayerConnection = () => {
@@ -894,8 +972,8 @@
     {:else if isConnecting}
       <div class="flex items-center justify-center h-full" style="min-height: 50vh;">
         <div class="text-center">
-          <div class="text-6xl mb-4 animate-spin">⏳</div>
-          <h2 class="text-2xl font-bold mb-2">{t('player.connection.connecting')}</h2>
+          <ChristmasLoading message={t('player.connection.connecting')} variant="connecting" size="large" />
+          <h2 class="text-2xl font-bold mb-2 mt-4">{t('player.connection.connecting')}</h2>
           <p class="text-white/70 mb-4">
             {t('player.connection.pleaseWait')}
           </p>

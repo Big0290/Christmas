@@ -97,6 +97,16 @@
     "loadingRoom": "Checking for your room...",
     "loading": "Loading...",
     "footer": "6 Games | 50 Players | Real-time Multiplayer",
+    "choice": {
+      "join": {
+        "title": "Join a Room",
+        "description": "Enter a room code to join an existing game"
+      },
+      "host": {
+        "title": "Host a Room",
+        "description": "Create and manage your own game room"
+      }
+    },
     "errors": {
       "enterName": "Please enter your name",
       "validCode": "Please enter a valid 4-letter room code",
@@ -124,6 +134,7 @@
     "button": "Join Game",
     "joining": "Joining...",
     "footer": "No code? Ask the host to share it!",
+    "backToHome": "Back to Home",
     "errors": {
       "enterName": "Please enter your name",
       "validCode": "Please enter a valid 4-letter room code",
@@ -140,6 +151,10 @@
   },
   "room": {
     "title": "Room {code}",
+    "hostView": "Host View",
+    "hostWaitingMessage": "Go to Host View to start games",
+    "hostInstructions": "Click \"Host View\" above to select and start games",
+    "waitingHostDescription": "The host will start a game soon",
     "gameSettings": "Game Settings",
     "connection": {
       "error": "Connection Error",
@@ -235,7 +250,26 @@
     "removePlayerTitle": "Remove player",
     "failedRemovePlayer": "Failed to remove player",
     "roomCodeCopied": "Room code copied!",
+    "gameSettings": "Game Settings",
+    "viewSettings": "View Settings",
+    "editSettings": "Edit Settings",
+    "noGameActive": "No game active",
+    "currentGame": "Current Game",
+    "gameType": "Game Type",
+    "settingsRestartWarning": "Changing settings will restart the current game.",
+    "settingsHint": "Start a game from the lobby to configure settings.",
+    "confirmRestartGame": "Changing settings will restart the current game. Continue?",
+    "contentTheme": "Content & Theme",
+    "triviaTab": "Trivia",
+    "priceTab": "Price",
+    "themeTab": "Theme",
+    "errors": {
+      "noConnection": "Not connected to server",
+      "failedEndGame": "Failed to end game"
+    },
     "reconnectHost": "Reconnect Host",
+    "switchMode": "Switch Mode",
+    "selectGameToStart": "Select a game to start",
     "settingUp": "Setting up host screen...",
     "waitingGameState": "Waiting for game state...",
     "readyToStart": "Ready to start a game!",
@@ -251,6 +285,44 @@
     "leaderboard": {
       "session": "Session",
       "global": "Global"
+    },
+    "modeSelector": {
+      "title": "Choose Host Mode",
+      "controllerMode": "Controller Mode",
+      "controllerDescription": "Full controls to start games, manage players, and control gameplay",
+      "displayMode": "Display Mode",
+      "displayDescription": "Fullscreen projector view - perfect for TV or projector display"
+    },
+    "display": {
+      "title": "Display View {code}",
+      "waitingForGame": "Waiting for game to start...",
+      "scanToJoin": "Scan QR Code to Join",
+      "orVisit": "Or visit:",
+      "scanQrCode": "Scan the QR code to join!"
+    },
+    "manage": {
+      "title": "Room Management",
+      "signedInAs": "Signed in as",
+      "loadingRoom": "Checking for your room...",
+      "existingRoom": "Existing Room",
+      "resumeRoom": "Resume Room",
+      "resuming": "Resuming...",
+      "createNew": "Create New Room",
+      "createDescription": "Start a new game room for your party",
+      "createButton": "Create New Room",
+      "creating": "Creating...",
+      "hostNameLabel": "Host Name",
+      "hostNamePlaceholder": "Enter your name",
+      "hostNameHint": "This name will be displayed as the host",
+      "backToHome": "Back to Home",
+      "errors": {
+        "notConnected": "Not connected to server. Please wait...",
+        "mustSignIn": "You must be signed in to manage rooms",
+        "failedReconnect": "Failed to reconnect to room",
+        "failedCreate": "Failed to create room",
+        "timeout": "Request timed out. Please try again.",
+        "enterName": "Please enter your name"
+      }
     }
   },
   "games": {

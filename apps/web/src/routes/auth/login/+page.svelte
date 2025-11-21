@@ -11,9 +11,9 @@
   let redirectTo = '';
 
   onMount(() => {
-    // Check for redirect parameter
+    // Check for redirect parameter, default to host management
     const urlParams = new URLSearchParams(window.location.search);
-    redirectTo = urlParams.get('redirect') || '/';
+    redirectTo = urlParams.get('redirect') || '/host/manage';
   });
 
   async function handleLogin() {

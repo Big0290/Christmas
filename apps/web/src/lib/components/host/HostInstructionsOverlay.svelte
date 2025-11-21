@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GameType } from '@christmas/core';
-  import { t } from '$lib/i18n';
+  import { t, language } from '$lib/i18n';
 
   export let gameType: GameType | null;
   export let showInstructions: boolean = false;
@@ -9,6 +9,11 @@
   function isBingo(gt: GameType | string | null): boolean {
     return gt === GameType.BINGO || gt === 'bingo';
   }
+
+  // Make component reactive to language changes
+  // Reference $language to ensure component subscribes and re-renders when language changes
+  // This causes all t() calls in the template to re-execute with the new language
+  $: currentLanguage = $language;
 
   // Debug logging
   $: {

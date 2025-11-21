@@ -16,6 +16,14 @@
     }
   }
 
+  // Make translations reactive by subscribing to language changes
+  // Include $language in each reactive statement so Svelte knows to re-run when language changes
+  $: titleText = $language && t('languageModal.title');
+  $: subtitleText = $language && t('languageModal.subtitle');
+  $: englishText = $language && t('languageModal.english');
+  $: frenchText = $language && t('languageModal.french');
+  $: continueText = $language && t('languageModal.continue');
+
   function selectLanguage(lang: 'en' | 'fr') {
     selectedLanguage = lang;
     language.set(lang);
@@ -54,10 +62,10 @@
     >
       <div class="language-modal-header">
         <h2 id="language-modal-title" class="text-3xl font-bold text-christmas-gold mb-2">
-          🌍 {t('languageModal.title')}
+          🌍 {titleText}
         </h2>
         <p class="text-white/70 text-sm">
-          {t('languageModal.subtitle')}
+          {subtitleText}
         </p>
       </div>
 
@@ -71,7 +79,7 @@
           <div class="language-flag">🇬🇧</div>
           <div class="language-info">
             <div class="language-name">English</div>
-            <div class="language-subtitle">{t('languageModal.english')}</div>
+            <div class="language-subtitle">{englishText}</div>
           </div>
           {#if selectedLanguage === 'en'}
             <div class="language-check">✓</div>
@@ -87,7 +95,7 @@
           <div class="language-flag">🇫🇷</div>
           <div class="language-info">
             <div class="language-name">Français</div>
-            <div class="language-subtitle">{t('languageModal.french')}</div>
+            <div class="language-subtitle">{frenchText}</div>
           </div>
           {#if selectedLanguage === 'fr'}
             <div class="language-check">✓</div>
@@ -101,7 +109,7 @@
           class="btn-primary w-full text-lg py-3"
           type="button"
         >
-          {t('languageModal.continue')}
+          {continueText}
         </button>
       </div>
     </div>

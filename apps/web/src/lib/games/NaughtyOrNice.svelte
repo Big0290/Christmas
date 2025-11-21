@@ -201,8 +201,7 @@
 <div class="voting-container">
   {#if !state}
     <div class="loading-overlay">
-      <div class="text-6xl mb-4 animate-spin">⏳</div>
-      <p class="text-xl text-white/70">{t('games.naughtyOrNice.loading')}</p>
+      <ChristmasLoading message={t('games.naughtyOrNice.loading')} size="large" />
     </div>
   {:else if state === GameState.STARTING}
     <div class="countdown-overlay">
@@ -256,8 +255,7 @@
     {:else}
       <!-- Waiting for prompt to load -->
       <div class="loading-overlay">
-        <div class="text-6xl mb-4 animate-spin">⏳</div>
-        <p class="text-xl text-white/70">{t('games.naughtyOrNice.loading')}</p>
+        <ChristmasLoading message={t('games.naughtyOrNice.loading')} size="large" />
       </div>
     {/if}
   {:else if state === GameState.ROUND_END}

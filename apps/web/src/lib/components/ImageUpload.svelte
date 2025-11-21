@@ -3,6 +3,7 @@
   import { socket } from '../socket';
   import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
 
   export let currentImageUrl: string | undefined = undefined;
   export let disabled: boolean = false;
@@ -248,8 +249,7 @@
     >
       {#if isUploading}
         <div class="uploading">
-          <div class="spinner"></div>
-          <p>{t('imageUpload.uploading')}</p>
+          <ChristmasLoading message={t('imageUpload.uploading')} variant="uploading" size="large" />
         </div>
       {:else}
         <div class="upload-content">
@@ -393,20 +393,10 @@
   }
 
   .spinner {
-    width: 3rem;
-    height: 3rem;
-    border: 3px solid rgba(255, 215, 0, 0.3);
-    border-top-color: #ffd700;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
     margin: 0 auto 1rem;
   }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+  
+  /* Spinner uses global Christmas-themed style from app.css with .spinner-large class */
 
   .error-message {
     margin-top: 0.5rem;

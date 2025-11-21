@@ -67,7 +67,8 @@ export function setupPlayerHandlers(
       playerName: string,
       preferredAvatarOrLanguageOrCallback?: string | Function,
       languageOrCallback?: 'en' | 'fr' | Function,
-      callbackOrUndefined?: Function
+      callbackOrRoleOrUndefined?: Function | 'player' | 'host-control' | 'host-display',
+      roleOrCallback?: 'player' | 'host-control' | 'host-display' | Function
     ) => {
       if (!checkRateLimit()) return;
 
@@ -75,19 +76,46 @@ export function setupPlayerHandlers(
       let preferredAvatar: string | undefined;
       let language: 'en' | 'fr' = 'en';
       let callback: Function;
+      let role: 'player' | 'host-control' | 'host-display' | undefined = undefined;
 
+      // Determine callback and role from arguments
       if (typeof preferredAvatarOrLanguageOrCallback === 'function') {
         callback = preferredAvatarOrLanguageOrCallback;
         preferredAvatar = undefined;
         language = 'en';
+        role = undefined;
       } else if (typeof languageOrCallback === 'function') {
         preferredAvatar = preferredAvatarOrLanguageOrCallback;
         callback = languageOrCallback;
         language = 'en';
+        role = undefined;
+      } else if (typeof callbackOrRoleOrUndefined === 'function') {
+        preferredAvatar = preferredAvatarOrLanguageOrCallback;
+        language = (languageOrCallback as 'en' | 'fr') || 'en';
+        callback = callbackOrRoleOrUndefined;
+        // Check if role is provided as next argument
+        if (typeof roleOrCallback === 'string' && ['player', 'host-control', 'host-display'].includes(roleOrCallback)) {
+          role = roleOrCallback as 'player' | 'host-control' | 'host-display';
+        }
       } else {
         preferredAvatar = preferredAvatarOrLanguageOrCallback;
         language = (languageOrCallback as 'en' | 'fr') || 'en';
-        callback = callbackOrUndefined || (() => {});
+        // Check if callbackOrRoleOrUndefined is role or callback
+        if (typeof callbackOrRoleOrUndefined === 'string' && ['player', 'host-control', 'host-display'].includes(callbackOrRoleOrUndefined)) {
+          role = callbackOrRoleOrUndefined as 'player' | 'host-control' | 'host-display';
+          callback = typeof roleOrCallback === 'function' ? roleOrCallback : (() => {});
+        } else {
+          callback = (callbackOrRoleOrUndefined as unknown as Function) || (() => {});
+          if (typeof roleOrCallback === 'string' && ['player', 'host-control', 'host-display'].includes(roleOrCallback)) {
+            role = roleOrCallback as 'player' | 'host-control' | 'host-display';
+          }
+        }
+      }
+
+      // Validate role if provided
+      if (role && !['player', 'host-control', 'host-display'].includes(role)) {
+        callback({ success: false, error: 'Invalid role specified' });
+        return;
       }
 
       try {
@@ -116,12 +144,39 @@ export function setupPlayerHandlers(
 
         console.log(`[Player] ✅ Player ${sanitizedName} (${socket.id.substring(0, 8)}) successfully joined room ${codeNormalized}`);
 
+        // Determine if this is a host joining (for role validation)
+        const room = result.room;
+        const isHostSocket = room?.hostId === socket.id;
+        
+        // Validate role if provided for host roles
+        if (role && (role === 'host-control' || role === 'host-display')) {
+          if (!isHostSocket) {
+            callback({ success: false, error: 'Only the host can use host-control or host-display roles' });
+            return;
+          }
+        }
+
+        // Store role in socket.data for quick access
+        if (role) {
+          (socket.data as any).role = role;
+          console.log(`[Player] Stored role ${role} in socket.data for socket ${socket.id.substring(0, 8)}`);
+        } else {
+          // Default role based on whether this is a host
+          const defaultRole = isHostSocket ? 'host-control' : 'player';
+          (socket.data as any).role = defaultRole;
+        }
+
         // Verify connection is registered (should be done in roomEngine.joinRoom)
         const playerConnectionInfo = roomEngine.connectionManager.getSocketInfo(socket.id);
         if (!playerConnectionInfo || !playerConnectionInfo.roomCode) {
           // Connection wasn't registered - register it now as a fallback
           console.warn(`[Player] Connection not registered for ${socket.id.substring(0, 8)}, registering now...`);
-          roomEngine.connectionManager.registerConnection(socket.id, codeNormalized, false);
+          const finalRole = role || (isHostSocket ? 'host-control' : 'player');
+          roomEngine.connectionManager.registerConnection(socket.id, codeNormalized, isHostSocket, finalRole);
+        } else {
+          // Update role in ConnectionManager if it changed
+          const finalRole = role || (isHostSocket ? 'host-control' : 'player');
+          roomEngine.connectionManager.updateSocketRoom(socket.id, codeNormalized, isHostSocket, finalRole);
         }
 
         // CRITICAL: Join the socket to the room AFTER player is added to room.players
@@ -133,52 +188,49 @@ export function setupPlayerHandlers(
         // Update last accessed timestamp
         await roomEngine.updateLastAccessed(codeNormalized);
 
-        // Notify room of new player
+        // Notify room of new player (excluding the joining player)
         socket.to(codeNormalized).emit('player_joined', result.player);
 
-        // Broadcast authoritative players list to entire room
-        io.to(codeNormalized).emit('room_update', {
-          players: Array.from(result.room?.players.values() || []),
-          playerCount: result.room?.players.size || 0,
-        });
-        
-        // Also send directly to the newly joined socket to ensure it's received
-        // This prevents timing issues where socket.join() hasn't fully processed yet
-        socket.emit('room_update', {
-          players: Array.from(result.room?.players.values() || []),
-          playerCount: result.room?.players.size || 0,
-        });
-        console.log(`[Player] Sent room_update directly to newly joined player ${sanitizedName} (${socket.id.substring(0, 8)})`);
+        // Get players list for syncing
+        const playersList = Array.from(result.room?.players.values() || []);
+        console.log(`[Player] 🔵 About to sync ${playersList.length} player(s) to room ${codeNormalized} via SyncEngine`);
+        console.log(`[Player] 🔵 Players list:`, playersList.map(p => ({ id: p.id.substring(0, 8), name: p.name })));
 
-        // If there's an active game, send game state to the newly joined player
-        // This ensures they see the current game state immediately
+        // CRITICAL: Use setImmediate to ensure Socket.IO room membership is fully established
+        // before emitting room_update. This prevents race conditions where the socket
+        // hasn't fully joined the room yet and misses the event.
+        // Sync players list to all parties using RoomEngine (which uses SyncEngine internally)
+        // RoomEngine handles fallbacks and timing internally
+        roomEngine.syncPlayerList(codeNormalized, playersList);
+        console.log(`[Player] ✅ Synced player list via RoomEngine for newly joined player ${sanitizedName} (${socket.id.substring(0, 8)})`);
+
+        // If there's an active game, sync state to the newly joined player using SyncEngine
+        // This ensures they see the current game state immediately and display also gets synced
         const game = roomEngine.getGame(codeNormalized);
         if (game && result.room) {
-          const clientState = game.getClientState(socket.id);
-          // Send directly to this socket (not broadcast) so they get personalized state
-          socket.emit('game_state_update', clientState);
-          console.log(`[Player] Sent game_state_update to newly joined player ${sanitizedName} (${socket.id.substring(0, 8)}) in room ${codeNormalized}, state: ${clientState?.state}`);
+          const gameState = game.getState();
+          // Use SyncEngine to sync to this specific player (personalized state)
+          roomEngine.syncEngine.syncToPlayer(codeNormalized, socket.id, gameState);
+          console.log(`[Player] Synced game state to newly joined player ${sanitizedName} (${socket.id.substring(0, 8)}) in room ${codeNormalized}, state: ${gameState?.state}`);
+          // Also sync to all parties (including display) to ensure everyone is in sync
+          roomEngine.syncGameState(codeNormalized, gameState);
         } else if (result.room) {
-          // No active game - send LOBBY state so client knows there's no game
+          // No active game - sync LOBBY state using RoomEngine
           const lobbyState = {
             state: result.room.gameState || GameState.LOBBY,
             gameType: result.room.currentGame || null,
             round: 0,
             maxRounds: 0,
+            startedAt: 0,
             scores: {
               [socket.id]: result.player?.score || 0,
             },
             scoreboard: [],
-            players: Array.from(result.room.players.values()).map((p) => ({
-              id: p.id,
-              name: p.name,
-              score: p.score || 0,
-              avatar: p.avatar,
-              status: p.status,
-            })),
           };
-          socket.emit('game_state_update', lobbyState);
-          console.log(`[Player] Sent LOBBY game_state_update to newly joined player ${sanitizedName} (${socket.id.substring(0, 8)}) in room ${codeNormalized}`);
+          // Sync to this player (personalized) and all parties
+          roomEngine.syncEngine.syncToPlayer(codeNormalized, socket.id, lobbyState);
+          roomEngine.syncGameState(codeNormalized, lobbyState);
+          console.log(`[Player] Synced LOBBY state to newly joined player ${sanitizedName} (${socket.id.substring(0, 8)}) in room ${codeNormalized}`);
         }
 
         // Issue player token for reconnection
@@ -213,13 +265,37 @@ export function setupPlayerHandlers(
     const roomCode = roomEngine.leaveRoom(socket.id, false);
     if (roomCode) {
       socket.leave(roomCode);
-      const room = roomEngine.getRoom(roomCode);
-      if (room) {
-        io.to(roomCode).emit('room_update', {
-          players: Array.from(room.players.values()),
-          playerCount: room.players.size,
-        });
-      }
+      
+      // Use setImmediate to ensure socket has fully left the room before syncing
+      setImmediate(() => {
+        const room = roomEngine.getRoom(roomCode);
+        if (room) {
+          // Sync players list to all parties using RoomEngine (which uses SyncEngine internally)
+          // RoomEngine handles fallbacks and errors internally
+          try {
+            roomEngine.syncPlayerList(roomCode);
+            const playersList = Array.from(room.players.values());
+            console.log(`[Player] ✅ Synced player list after player left room ${roomCode}, ${playersList.length} player(s) remaining`);
+          } catch (syncError) {
+            console.error(`[Player] ❌ Error syncing players after leave:`, syncError);
+            // SyncEngine handles fallbacks internally, so we don't need to emit directly
+            // If sync fails, it's logged but we don't bypass the ACK system
+          }
+
+          // Sync game state through syncEngine to ensure display and all parties are updated
+          // Sync game state using RoomEngine (handles both active game and lobby state)
+          roomEngine.syncGameState(roomCode, undefined, { force: true });
+          const game = roomEngine.getGame(roomCode);
+          if (game) {
+            const gameState = game.getState();
+            console.log(`[Player] Synced game state after player left room ${roomCode}, state: ${gameState.state}`);
+          } else {
+            console.log(`[Player] Synced LOBBY state after player left room ${roomCode}`);
+          }
+        } else {
+          console.warn(`[Player] ⚠️ Room ${roomCode} not found after player left - may have been destroyed`);
+        }
+      });
     }
   });
 
@@ -362,10 +438,18 @@ export function setupPlayerHandlers(
           newPlayerId: socket.id,
           player: reconnected,
         });
-        io.to(codeNormalized).emit('room_update', {
-          players: Array.from(room.players.values()),
-          playerCount: room.players.size,
-        });
+        
+        // Sync players list to all parties using RoomEngine (which uses SyncEngine internally)
+        // RoomEngine handles fallbacks and timing internally
+        roomEngine.syncPlayerList(codeNormalized);
+
+        // Resync missing states using ACK system
+        try {
+          roomEngine.syncEngine.resyncSocket(codeNormalized, socket.id, 'player');
+          console.log(`[Player] ✅ Resynced missing states for reconnected player ${socket.id.substring(0, 8)}`);
+        } catch (resyncError) {
+          console.error(`[Player] ❌ Error resyncing states:`, resyncError);
+        }
 
         // Get game state
         const game = roomEngine.getGame(codeNormalized);
@@ -376,7 +460,15 @@ export function setupPlayerHandlers(
           if (restoredScore !== undefined && restoredScore >= 0) {
             roomEngine.restorePlayerScoreInGame(codeNormalized, socket.id, info?.name || '');
           }
-          clientState = game.getClientState(socket.id);
+          
+          // Use SyncEngine to get and sync state for reconnecting player
+          clientState = roomEngine.syncEngine.handleReconnection(codeNormalized, socket.id, 'player');
+          
+          // Also sync to all parties (including display) to ensure everyone is in sync
+          roomEngine.syncGameState(codeNormalized, undefined, { force: true });
+          const gameState = game.getState();
+          console.log(`[Player] Synced game state to all parties after player reconnected in room ${codeNormalized}, state: ${gameState.state}`);
+          
           io.to(codeNormalized).emit('player_reconnected', {
             playerId: socket.id,
             playerName: info?.name || '',
@@ -401,10 +493,29 @@ export function setupPlayerHandlers(
               status: p.status,
             })),
           };
+          
+          // Sync game state to reconnecting player using SyncEngine (personalized) and RoomEngine (all parties)
+          const game = roomEngine.getGame(codeNormalized);
+          if (game) {
+            const gameState = game.getState();
+            roomEngine.syncEngine.syncToPlayer(codeNormalized, socket.id, gameState);
+            // Also sync to all parties to ensure display is updated
+            roomEngine.syncGameState(codeNormalized, gameState);
+          } else {
+            // No game - sync LOBBY state
+            const lobbyState = {
+              state: GameState.LOBBY,
+              gameType: null,
+              round: 0,
+              maxRounds: 0,
+              startedAt: 0,
+              scores: {},
+              scoreboard: [],
+            };
+            roomEngine.syncEngine.syncToPlayer(codeNormalized, socket.id, lobbyState);
+            roomEngine.syncGameState(codeNormalized, lobbyState);
+          }
         }
-
-        // Send game state update to reconnecting player
-        socket.emit('game_state_update', clientState);
 
         callback({
           success: true,
@@ -469,6 +580,90 @@ export function setupPlayerHandlers(
 
   socket.on('bingo_mark', (row: number, col: number) => {
     handleGameAction('mark', { row, col });
+  });
+
+  // ========================================================================
+  // CONNECTION KEEP-ALIVE
+  // ========================================================================
+  socket.on('connection_keepalive', (data: { timestamp: number; roomCode: string; socketId: string }) => {
+    // Update last seen to keep connection alive
+    updateActivity();
+    
+    const roomInfo = roomEngine.connectionManager.getRoomInfoBySocketId(socket.id);
+    const serverTime = Date.now();
+    
+    // Verify room and connection state
+    let verified = false;
+    let roomState = {
+      roomCode: '',
+      playerCount: 0,
+      gameState: null as GameState | null,
+      verified: false,
+    };
+    
+    if (roomInfo) {
+      const room = roomEngine.getRoom(roomInfo.roomCode);
+      if (room) {
+        // Verify socket is actually in the room
+        const socketsInRoom = roomEngine.connectionManager.getSocketsInRoom(roomInfo.roomCode);
+        const isInRoom = socketsInRoom.includes(socket.id);
+        
+        // Verify player is in room's player list
+        const player = room.players.get(socket.id);
+        const isPlayerInRoom = !!player;
+        
+        // Verify room code matches
+        const roomCodeMatches = roomInfo.roomCode === data.roomCode;
+        
+        verified = isInRoom && isPlayerInRoom && roomCodeMatches;
+        
+        // Get current game state
+        const game = roomEngine.getGame(roomInfo.roomCode);
+        const currentGameState = game ? game.getState().state : null;
+        
+        roomState = {
+          roomCode: roomInfo.roomCode,
+          playerCount: room.players.size,
+          gameState: currentGameState,
+          verified,
+        };
+        
+        // Track keep-alive in SyncEngine metrics
+        if (roomEngine.syncEngine) {
+          roomEngine.syncEngine.trackKeepAlive(roomInfo.roomCode, socket.id, verified);
+        }
+        
+        if (!verified) {
+          console.warn(`[KeepAlive] ⚠️ Room verification failed for socket ${socket.id.substring(0, 8)}:`, {
+            isInRoom,
+            isPlayerInRoom,
+            roomCodeMatches,
+            claimedRoomCode: data.roomCode,
+            actualRoomCode: roomInfo.roomCode,
+          });
+        }
+      } else {
+        console.warn(`[KeepAlive] ⚠️ Room ${roomInfo.roomCode} not found for socket ${socket.id.substring(0, 8)}`);
+        roomState.roomCode = roomInfo.roomCode;
+        roomState.verified = false;
+      }
+    } else {
+      console.warn(`[KeepAlive] ⚠️ Socket ${socket.id.substring(0, 8)} not found in ConnectionManager`);
+      roomState.roomCode = data.roomCode;
+      roomState.verified = false;
+    }
+    
+    // Send ACK response with room state
+    socket.emit('connection_keepalive_ack', {
+      ack: true,
+      timestamp: data.timestamp,
+      serverTime,
+      roomState,
+    });
+    
+    if (verified) {
+      console.log(`[KeepAlive] ✅ Socket ${socket.id.substring(0, 8)} keep-alive verified in room ${roomState.roomCode}`);
+    }
   });
 }
 

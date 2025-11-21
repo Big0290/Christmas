@@ -228,8 +228,7 @@
 
   {#if loading && challenges.length === 0}
     <div class="loading-state">
-      <div class="spinner"></div>
-      <p>{t('guessing.dashboard.loading')}</p>
+      <ChristmasLoading message={t('guessing.dashboard.loading')} size="large" />
     </div>
   {:else if challenges.length === 0}
     <div class="empty-state">
@@ -341,8 +340,7 @@
               <div class="submissions-section-compact">
                 {#if loadingSubmissions.has(challenge.id)}
                   <div class="loading-submissions">
-                    <div class="spinner-small"></div>
-                    <p>{t('guessing.dashboard.loadingSubmissions')}</p>
+                    <ChristmasLoading message={t('guessing.dashboard.loadingSubmissions')} size="small" />
                   </div>
                 {:else}
                   <SubmissionsTable
@@ -484,30 +482,20 @@
   }
 
   .spinner {
+    margin: 0 auto clamp(0.75rem, 1.5vh, 1rem);
     width: clamp(2rem, 3vw, 2.5rem);
     height: clamp(2rem, 3vw, 2.5rem);
-    border: 3px solid rgba(255, 215, 0, 0.3);
-    border-top-color: #ffd700;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    margin: 0 auto clamp(0.75rem, 1.5vh, 1rem);
+    border-width: 3px;
   }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
+  
   .spinner-small {
     width: clamp(1rem, 1.5vw, 1.25rem);
     height: clamp(1rem, 1.5vw, 1.25rem);
-    border: 2px solid rgba(255, 215, 0, 0.3);
-    border-top-color: #ffd700;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    border-width: 2px;
     margin: 0 auto clamp(0.4rem, 0.8vh, 0.5rem);
   }
+  
+  /* Spinners use global Christmas-themed style from app.css */
 
   .loading-submissions {
     text-align: center;

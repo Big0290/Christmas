@@ -6,6 +6,10 @@
   export let round: number = 0;
   export let maxRounds: number = 0;
   export let scoreboard: Array<{ name: string; score: number }> = [];
+
+  // Round synchronization: use gameState as source of truth, fallback to prop if gameState not available (ensures sync with players)
+  $: syncedRound = $gameState?.round ?? round ?? 0;
+  $: syncedMaxRounds = $gameState?.maxRounds ?? maxRounds ?? 0;
 </script>
 
 {#if $gameState?.currentPrompt || currentState === GameState.ROUND_END || currentState === GameState.PLAYING || currentState === GameState.STARTING}
@@ -26,8 +30,8 @@
       <div class="prompt-display-large">
         <div class="round-number">
           <div class="round-label-bilingual">
-            <span class="round-label-french">Ronde {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
-            <span class="round-label-english">Round {round}{#if maxRounds > 0} / {maxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
+            <span class="round-label-french">Ronde {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Résultats{/if}</span>
+            <span class="round-label-english">Round {syncedRound}{#if syncedMaxRounds > 0} / {syncedMaxRounds}{/if}{#if currentState === GameState.ROUND_END} - Results{/if}</span>
           </div>
         </div>
         <!-- Bilingual Prompt Display -->

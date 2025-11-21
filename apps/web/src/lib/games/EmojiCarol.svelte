@@ -203,8 +203,7 @@
 <div class="emoji-container">
   {#if !state}
     <div class="loading-overlay">
-      <div class="text-6xl mb-4 animate-spin">⏳</div>
-      <p class="text-xl text-white/70">{t('games.emojiCarol.loading')}</p>
+      <ChristmasLoading message={t('games.emojiCarol.loading')} size="large" />
     </div>
   {:else if state === GameState.STARTING}
     <div class="countdown-overlay">
@@ -247,8 +246,7 @@
     {:else}
       <!-- Waiting for emojis to load -->
       <div class="loading-overlay">
-        <div class="text-6xl mb-4 animate-spin">⏳</div>
-        <p class="text-xl text-white/70">{t('games.emojiCarol.loading')}</p>
+        <ChristmasLoading message={t('games.emojiCarol.loading')} size="large" />
       </div>
     {/if}
   {:else if state === GameState.ROUND_END}

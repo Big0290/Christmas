@@ -13,6 +13,7 @@ export class ConnectionManager {
     connected: boolean;
     lastSeen: number;
     isHost: boolean;
+    role?: 'player' | 'host-control' | 'host-display';
   }> = new Map();
   
   // Track operations in progress to prevent race conditions
@@ -32,7 +33,7 @@ export class ConnectionManager {
   /**
    * Register a socket connection
    */
-  registerConnection(socketId: string, roomCode: string, isHost: boolean): void {
+  registerConnection(socketId: string, roomCode: string, isHost: boolean, role?: 'player' | 'host-control' | 'host-display'): void {
     // Check if already registered (might be reconnection or update)
     const existingState = this.socketStates.get(socketId);
     const wasDisconnected = existingState && !existingState.connected;
@@ -42,6 +43,7 @@ export class ConnectionManager {
       connected: true, // Always mark as connected when registering
       lastSeen: Date.now(),
       isHost,
+      role: role || (isHost ? 'host-control' : 'player'), // Default role based on isHost
     });
     
     // Reset reconnection attempts on successful registration
@@ -50,13 +52,13 @@ export class ConnectionManager {
     if (wasDisconnected) {
       console.log(`[ConnectionManager] Socket ${socketId.substring(0, 8)} reconnected during registration`);
     }
-    console.log(`[ConnectionManager] Registered ${isHost ? 'host' : 'player'} socket ${socketId.substring(0, 8)} to room ${roomCode}`);
+    console.log(`[ConnectionManager] Registered ${isHost ? 'host' : 'player'} socket ${socketId.substring(0, 8)} to room ${roomCode} with role ${this.socketStates.get(socketId)?.role || 'unknown'}`);
   }
 
   /**
    * Update socket-to-room mapping (for reconnection or role change)
    */
-  updateSocketRoom(socketId: string, roomCode: string, isHost: boolean): void {
+  updateSocketRoom(socketId: string, roomCode: string, isHost: boolean, role?: 'player' | 'host-control' | 'host-display'): void {
     const wasDisconnected = this.socketStates.get(socketId)?.connected === false;
     this.socketToRoom.set(socketId, roomCode);
     const state = this.socketStates.get(socketId);
@@ -64,6 +66,11 @@ export class ConnectionManager {
       state.isHost = isHost;
       state.lastSeen = Date.now();
       state.connected = true; // Always mark as connected when updating
+      if (role !== undefined) {
+        state.role = role;
+      } else if (!state.role) {
+        state.role = isHost ? 'host-control' : 'player'; // Default role if not set
+      }
       // Reset reconnection attempts on successful connection
       this.resetReconnectionAttempts(socketId);
       if (wasDisconnected) {
@@ -74,11 +81,19 @@ export class ConnectionManager {
         connected: true,
         lastSeen: Date.now(),
         isHost,
+        role: role || (isHost ? 'host-control' : 'player'),
       });
       // Reset reconnection attempts on successful connection
       this.resetReconnectionAttempts(socketId);
     }
-    console.log(`[ConnectionManager] Updated socket ${socketId.substring(0, 8)} mapping: room ${roomCode}, isHost: ${isHost}`);
+    console.log(`[ConnectionManager] Updated socket ${socketId.substring(0, 8)} mapping: room ${roomCode}, isHost: ${isHost}, role: ${this.socketStates.get(socketId)?.role || 'unknown'}`);
+  }
+
+  /**
+   * Get socket role
+   */
+  getSocketRole(socketId: string): 'player' | 'host-control' | 'host-display' | undefined {
+    return this.socketStates.get(socketId)?.role;
   }
 
   /**

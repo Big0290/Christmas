@@ -293,14 +293,14 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
     padding: 1rem;
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.25s ease-out;
   }
 
   @keyframes fadeIn {
@@ -313,60 +313,109 @@
   }
 
   .modal-content {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 3px solid #ffd700;
-    border-radius: 1rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.2);
-    max-width: 700px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    border-radius: 1.25rem;
+    box-shadow: 
+      0 20px 60px rgba(0, 0, 0, 0.7),
+      0 0 50px rgba(255, 215, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    max-width: 750px;
     width: 100%;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     overflow: hidden;
   }
 
   @keyframes slideUp {
     from {
-      transform: translateY(20px);
+      transform: translateY(30px) scale(0.96);
       opacity: 0;
     }
     to {
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
       opacity: 1;
     }
   }
 
   .modal-header {
-    padding: 1.5rem;
-    border-bottom: 2px solid rgba(255, 215, 0, 0.3);
-    background: rgba(0, 0, 0, 0.2);
+    padding: 1.75rem 1.5rem;
+    border-bottom: 2px solid rgba(255, 215, 0, 0.25);
+    background: linear-gradient(180deg, rgba(255, 215, 0, 0.12) 0%, transparent 100%);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
+  }
+
+  .modal-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.5), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%, 100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .modal-header h2 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     color: #ffd700;
     font-weight: bold;
+    text-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .modal-header h2::before {
+    content: '🎯';
+    font-size: 1.5rem;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
   }
 
   .close-btn {
-    background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.25rem;
+    width: 2.25rem;
+    height: 2.25rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
+    padding: 0;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s;
   }
 
   .close-btn:hover {
     color: white;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.2);
+    transform: rotate(90deg) scale(1.1);
   }
 
   .modal-body {
@@ -392,10 +441,10 @@
   .form-group input[type='datetime-local'],
   .form-group textarea {
     width: 100%;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.1);
+    padding: 0.875rem 1rem;
+    background: rgba(255, 255, 255, 0.08);
     border: 2px solid rgba(255, 215, 0, 0.3);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     color: white;
     font-size: 1rem;
     transition: all 0.2s;
@@ -405,8 +454,11 @@
   .form-group textarea:focus {
     outline: none;
     border-color: #ffd700;
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.1);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 
+      0 0 0 3px rgba(255, 215, 0, 0.15),
+      0 4px 12px rgba(255, 215, 0, 0.1);
+    transform: translateY(-1px);
   }
 
   .form-group input:disabled,
@@ -452,12 +504,33 @@
   }
 
   .error-message {
-    padding: 0.75rem;
-    background: rgba(196, 30, 58, 0.3);
+    padding: 1rem;
+    background: rgba(196, 30, 58, 0.25);
     border: 2px solid #c41e3a;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     color: #ffcccc;
     margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: shake 0.4s ease-out;
+  }
+
+  .error-message::before {
+    content: '⚠️';
+    font-size: 1.25rem;
+  }
+
+  @keyframes shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-5px);
+    }
+    75% {
+      transform: translateX(5px);
+    }
   }
 
   .modal-footer {
@@ -471,17 +544,17 @@
 
   .btn-primary,
   .btn-secondary {
-    padding: 0.75rem 1.5rem;
+    padding: 0.875rem 1.75rem;
     border: none;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     font-size: 1rem;
-    font-weight: bold;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-width: 100px;
+    min-width: 120px;
     justify-content: center;
   }
 
@@ -512,20 +585,7 @@
     cursor: not-allowed;
   }
 
-  .spinner {
-    width: 1rem;
-    height: 1rem;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+  /* Spinner uses global Christmas-themed style from app.css */
 
   @media (max-width: 640px) {
     .form-row {

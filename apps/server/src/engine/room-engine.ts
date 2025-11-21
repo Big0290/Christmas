@@ -1,10 +1,11 @@
 import { Server } from 'socket.io';
-import { Room, Player, GameType, isExpired } from '@christmas/core';
+import { Room, Player, GameType, GameState, isExpired } from '@christmas/core';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ConnectionManager } from './connection-manager.js';
 import { HostManager } from './host-manager.js';
 import { PlayerManager } from './player-manager.js';
 import { GameManager } from './game-manager.js';
+import { SyncEngine } from './sync-engine.js';
 import { RoomManager } from '../managers/room-manager.js';
 import type { AchievementManager } from '../managers/achievement-manager.js';
 
@@ -14,6 +15,7 @@ import type { AchievementManager } from '../managers/achievement-manager.js';
  * - HostManager: Host operations
  * - PlayerManager: Player operations
  * - GameManager: Game lifecycle
+ * - SyncEngine: State synchronization
  * - RoomManager: Room persistence
  */
 export class RoomEngine {
@@ -21,6 +23,7 @@ export class RoomEngine {
   public readonly hostManager: HostManager;
   public readonly playerManager: PlayerManager;
   public readonly gameManager: GameManager;
+  public readonly syncEngine: SyncEngine;
   public readonly roomManager: RoomManager;
 
   constructor(io: Server, achievementManager?: AchievementManager) {
@@ -33,6 +36,13 @@ export class RoomEngine {
     this.gameManager.setSocketIO(io);
     this.hostManager = new HostManager(this.roomManager);
     this.playerManager = new PlayerManager(this.roomManager, this.gameManager);
+    
+    // Create SyncEngine and initialize with dependencies
+    this.syncEngine = new SyncEngine();
+    this.syncEngine.initialize(io, this.roomManager, this.connectionManager, this.gameManager);
+    
+    // Set SyncEngine in GameManager so it can use it
+    this.gameManager.setSyncEngine(this.syncEngine);
     
     // Store achievement manager for potential future use
     if (achievementManager) {
@@ -245,10 +255,104 @@ export class RoomEngine {
   }
 
   /**
+   * Sync game state to all parties using SyncEngine
+   * This is the primary method for state synchronization - always use this instead of direct SyncEngine calls
+   */
+  syncGameState(roomCode: string, state?: any, options: any = {}): void {
+    if (!this.syncEngine) {
+      console.error(`[RoomEngine] Cannot sync game state: SyncEngine not initialized for room ${roomCode}`);
+      return;
+    }
+
+    // If state is provided, use it directly
+    if (state) {
+      this.syncEngine.syncState(roomCode, state, options);
+      return;
+    }
+
+    // Otherwise, get state from game
+    const game = this.gameManager.getGame(roomCode);
+    if (game) {
+      const gameState = game.getState();
+      
+      // Sync room.gameState with game engine's current state
+      const gameStateValue = gameState.state;
+      const room = this.roomManager.getRoom(roomCode);
+      if (room && room.gameState !== gameStateValue) {
+        room.gameState = gameStateValue;
+      }
+      
+      this.syncEngine.syncState(roomCode, gameState, options);
+    } else {
+      // If no game exists, sync LOBBY state
+      const room = this.roomManager.getRoom(roomCode);
+      if (room) {
+        const lobbyState = {
+          state: GameState.LOBBY,
+          gameType: null,
+          round: 0,
+          maxRounds: 0,
+          startedAt: 0,
+          scores: {},
+          scoreboard: [],
+        };
+        this.syncEngine.syncState(roomCode, lobbyState, options);
+      } else {
+        console.warn(`[RoomEngine] Cannot sync game state: Room ${roomCode} not found`);
+      }
+    }
+  }
+
+  /**
+   * Sync room settings to all parties using SyncEngine with ACK tracking
+   * This ensures all clients receive settings updates consistently
+   */
+  syncSettings(roomCode: string, settings: any): void {
+    if (!this.syncEngine) {
+      console.error(`[RoomEngine] Cannot sync settings: SyncEngine not initialized for room ${roomCode}`);
+      return;
+    }
+
+    this.syncEngine.syncSettings(roomCode, settings);
+  }
+
+  /**
+   * Sync player list to all parties using SyncEngine
+   * This is the primary method for player list synchronization - always use this instead of direct SyncEngine calls
+   */
+  syncPlayerList(roomCode: string, players?: Player[]): void {
+    if (!this.syncEngine) {
+      console.error(`[RoomEngine] Cannot sync player list: SyncEngine not initialized for room ${roomCode}`);
+      return;
+    }
+
+    const room = this.roomManager.getRoom(roomCode);
+    if (!room) {
+      console.warn(`[RoomEngine] Cannot sync player list: Room ${roomCode} not found`);
+      return;
+    }
+
+    // If players provided, use them; otherwise get from room
+    const playersList = players || Array.from(room.players.values());
+    
+    // Use setImmediate to ensure Socket.IO room membership is fully established
+    setImmediate(() => {
+      try {
+        this.syncEngine.syncPlayers(roomCode, playersList);
+      } catch (syncError) {
+        console.error(`[RoomEngine] ❌ Error syncing players via SyncEngine:`, syncError);
+        // SyncEngine handles fallbacks internally, so we don't need to do anything here
+      }
+    });
+  }
+
+  /**
    * Broadcast game state to all players and host
+   * @deprecated Use syncGameState() instead
    */
   broadcastGameState(roomCode: string): void {
-    this.gameManager.broadcastGameState(roomCode);
+    // Delegate to new method for backward compatibility
+    this.syncGameState(roomCode);
   }
 
   /**
