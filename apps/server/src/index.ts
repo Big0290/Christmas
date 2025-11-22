@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -10,6 +11,7 @@ import { AchievementManager } from './managers/achievement-manager.js';
 import { RoomEngine } from './engine/room-engine.js';
 import { setupSocketHandlers } from './socket/handlers.js';
 import { createSupabaseClient } from './lib/supabase.js';
+import { initializeRedis, checkRedisHealth, closeRedis } from './lib/redis.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +44,7 @@ console.log('[Server] Environment check:');
 console.log('[Server]   PUBLIC_SUPABASE_URL:', process.env.PUBLIC_SUPABASE_URL ? `found (${process.env.PUBLIC_SUPABASE_URL.substring(0, 30)}...)` : '❌ MISSING');
 console.log('[Server]   PUBLIC_SUPABASE_ANON_KEY:', process.env.PUBLIC_SUPABASE_ANON_KEY ? `found (${process.env.PUBLIC_SUPABASE_ANON_KEY.substring(0, 30)}...)` : '❌ MISSING');
 console.log('[Server]   SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'found' : '❌ MISSING');
+console.log('[Server]   REDIS_URL:', process.env.REDIS_URL ? `found (${process.env.REDIS_URL.replace(/:[^:@]+@/, ':****@').substring(0, 50)}...)` : '❌ NOT SET (using in-memory adapter)');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0'; // 0.0.0.0 exposes to all network interfaces
@@ -56,8 +59,14 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+app.get('/health', async (req, res) => {
+  const redisHealth = await checkRedisHealth();
+  res.json({ 
+    status: 'ok', 
+    timestamp: Date.now(),
+    redis: redisHealth ? 'connected' : 'disconnected',
+    adapter: redisAdapterInitialized ? 'redis' : 'memory'
+  });
 });
 
 // Config endpoint - serves environment variables to the client
@@ -225,8 +234,12 @@ if (process.env.NODE_ENV === 'production') {
 // HTTP server
 const httpServer = createServer(app);
 
-// Socket.IO server
-const io = new Server(httpServer, {
+// Initialize Redis and Socket.IO server
+let redisAdapterInitialized = false;
+let io: Server;
+
+// Socket.IO server configuration
+const socketIOConfig: any = {
   cors: {
     origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN,
     methods: ['GET', 'POST'],
@@ -237,52 +250,96 @@ const io = new Server(httpServer, {
   // Increase max message size to allow image uploads (5MB base64 = ~6.7MB encoded)
   maxHttpBufferSize: 10 * 1024 * 1024, // 10MB to handle 5MB files in base64
   // Allow auth token in handshake
-  allowRequest: async (req, callback) => {
+  allowRequest: async (req: any, callback: (err: Error | null, allow: boolean) => void): Promise<void> => {
     // Allow all connections - we'll verify auth per-event
     callback(null, true);
   },
-});
+};
 
-// Initialize managers
-const achievementManager = new AchievementManager();
-const supabase = createSupabaseClient();
-achievementManager.setSupabaseClient(supabase);
-
-// Initialize room engine (it will initialize RoomManager internally)
-const roomEngine = new RoomEngine(io, achievementManager);
-roomEngine.setSupabaseClient(supabase);
-
-// Restore active rooms from database on startup
-roomEngine.restoreActiveRooms().then((count) => {
-  if (count > 0) {
-    console.log(`[Startup] Restored ${count} active room(s) from database`);
+// Initialize Redis adapter if REDIS_URL is set, then create Socket.IO server
+(async () => {
+  if (process.env.REDIS_URL) {
+    try {
+      console.log('[Socket.IO] Initializing Redis adapter...');
+      const redisClients = await initializeRedis();
+      if (redisClients) {
+        const adapter = createAdapter(redisClients.pubClient, redisClients.subClient);
+        socketIOConfig.adapter = adapter;
+        redisAdapterInitialized = true;
+        console.log('[Socket.IO] Redis adapter configured successfully');
+      } else {
+        console.log('[Socket.IO] Redis initialization failed, falling back to in-memory adapter');
+      }
+    } catch (error) {
+      console.error('[Socket.IO] Failed to create Redis adapter:', error);
+      console.log('[Socket.IO] Falling back to in-memory adapter');
+    }
+  } else {
+    console.log('[Socket.IO] Using in-memory adapter (no Redis configured)');
   }
-}).catch((error) => {
-  console.error('[Startup] Failed to restore rooms:', error);
-});
 
-// Setup Socket.IO handlers
-setupSocketHandlers(io, roomEngine, supabase, achievementManager);
+  // Create Socket.IO server after Redis initialization (if configured)
+  io = new Server(httpServer, socketIOConfig);
+  
+  // Continue with server initialization
+  initializeServer();
+})();
 
-// Cleanup expired rooms every 5 minutes
-setInterval(() => {
-  roomEngine.cleanupExpiredRooms();
-  console.log(`[Cleanup] Removed expired rooms. Active rooms: ${roomEngine.getActiveRoomCount()}`);
-}, 5 * 60 * 1000);
+// Server initialization function (called after Socket.IO is ready)
+function initializeServer() {
 
-// Start server
-httpServer.listen(PORT, HOST, () => {
-  console.log(`🎄 Christmas Party Games Server`);
-  console.log(`   Server running on http://${HOST}:${PORT}`);
-  console.log(`   Socket.IO ready for connections`);
-  console.log(`   CORS origin: ${CORS_ORIGIN}`);
-});
+  // Initialize managers
+  const achievementManager = new AchievementManager();
+  const supabase = createSupabaseClient();
+  achievementManager.setSupabaseClient(supabase);
+
+  // Initialize room engine (it will initialize RoomManager internally)
+  const roomEngine = new RoomEngine(io, achievementManager);
+  roomEngine.setSupabaseClient(supabase);
+
+  // Restore active rooms from database on startup
+  roomEngine.restoreActiveRooms().then((count) => {
+    if (count > 0) {
+      console.log(`[Startup] Restored ${count} active room(s) from database`);
+    }
+  }).catch((error) => {
+    console.error('[Startup] Failed to restore rooms:', error);
+  });
+
+  // Setup Socket.IO handlers
+  setupSocketHandlers(io, roomEngine, supabase, achievementManager);
+
+  // Cleanup expired rooms every 5 minutes
+  setInterval(() => {
+    roomEngine.cleanupExpiredRooms();
+    console.log(`[Cleanup] Removed expired rooms. Active rooms: ${roomEngine.getActiveRoomCount()}`);
+  }, 5 * 60 * 1000);
+
+  // Start server
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`🎄 Christmas Party Games Server`);
+    console.log(`   Server running on http://${HOST}:${PORT}`);
+    console.log(`   Socket.IO ready for connections`);
+    console.log(`   CORS origin: ${CORS_ORIGIN}`);
+    console.log(`   Redis adapter: ${redisAdapterInitialized ? 'enabled' : 'disabled (in-memory)'}`);
+  });
+}
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, closing server...');
-  httpServer.close(() => {
+  httpServer.close(async () => {
     console.log('Server closed');
+    await closeRedis();
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, closing server...');
+  httpServer.close(async () => {
+    console.log('Server closed');
+    await closeRedis();
     process.exit(0);
   });
 });

@@ -492,55 +492,26 @@
 
       // Listen for pause/resume events and game state updates
       // Note: The socket store (socket.ts) should also listen to this event and update gameState store
-      // But we also update it here as a backup to ensure the store is always updated
+      // Note: game_state_update is handled by socket.ts listener which normalizes state
+      // We only need to handle host-specific logic here, not update the store
+      // This prevents double updates and potential infinite loops
       $socket.on('game_state_update', (data: any) => {
-        console.log('[Host] ✅ Game state update received:', {
+        console.log('[Host] ✅ Game state update received (host-specific handling):', {
           state: data?.state,
           gameType: data?.gameType,
           round: data?.round,
-          hasQuestion: !!data?.currentQuestion,
-          hasItem: !!data?.currentItem,
-          hasPrompt: !!data?.currentPrompt,
-          hasEmojis: !!data?.availableEmojis,
-          socketId: $socket?.id,
         });
 
-        // Update the store directly to ensure it's always synced
-        // This is a backup in case the socket.ts listener doesn't fire
-        if (data && typeof data === 'object' && data.state) {
-          gameState.set(data);
-
-          // Verify the store was updated
-          const updatedState = $gameState;
-          console.log(
-            '[Host] ✅ Store updated, current state:',
-            updatedState?.state,
-            'gameType:',
-            updatedState?.gameType
-          );
-        } else {
-          console.warn('[Host] ⚠️ Invalid game_state_update data received:', data);
-        }
-
-        // Handle host-specific state (pause/resume)
-        if (data?.state === 'paused' || data?.state === GameState.PAUSED) {
-          isPaused = true;
-        } else if (data?.state === 'playing' || data?.state === GameState.PLAYING) {
-          isPaused = false;
-        }
-
-        // Log state changes for debugging
-        if (data && typeof data === 'object' && data.state) {
-          const previousState = $gameState?.state;
-          if (!$gameState || $gameState.state !== data.state) {
-            console.log(`[Host] 🔄 State changed from ${previousState} to ${data.state}`);
-            // Force reactivity update by triggering a reactive statement
-            // This ensures the UI updates immediately when state changes
-            if (data.state === GameState.STARTING || data.state === 'starting') {
-              console.log('[Host] 🎮 Game starting! UI should update now.');
-            }
+        // Handle host-specific state (pause/resume) - use normalized state from store
+        // Wait for store to update (it's handled by socket.ts listener)
+        setTimeout(() => {
+          const storeState = $gameState?.state;
+          if (storeState === GameState.PAUSED) {
+            isPaused = true;
+          } else if (storeState === GameState.PLAYING || storeState === GameState.STARTING) {
+            isPaused = false;
           }
-        }
+        }, 0);
       });
 
       // Request game state if we don't receive one within 2 seconds after reconnection
@@ -765,16 +736,22 @@
   $: maxRounds = $gameState?.maxRounds || 0;
   $: startedAt = $gameState?.startedAt || 0;
 
-  // Reactive logging for debugging
+  // Reactive logging for debugging (throttled to prevent excessive logging)
+  let lastLogTime = 0;
+  const LOG_THROTTLE_MS = 1000; // Only log once per second
   $: if ($gameState && import.meta.env.DEV) {
-    console.log('[Host] $gameState reactive update:', {
-      state: $gameState.state,
-      gameType: $gameState.gameType,
-      round: $gameState.round,
-      hasQuestion: !!$gameState.currentQuestion,
-      questionText: $gameState.currentQuestion?.question || 'N/A',
-      answersCount: $gameState.currentQuestion?.answers?.length || 0,
-    });
+    const now = Date.now();
+    if (now - lastLogTime > LOG_THROTTLE_MS) {
+      console.log('[Host] $gameState reactive update:', {
+        state: $gameState.state,
+        gameType: $gameState.gameType,
+        round: $gameState.round,
+        hasQuestion: !!$gameState.currentQuestion,
+        questionText: $gameState.currentQuestion?.question || 'N/A',
+        answersCount: $gameState.currentQuestion?.answers?.length || 0,
+      });
+      lastLogTime = now;
+    }
   }
   $: isGameActive =
     currentState === GameState.PLAYING ||

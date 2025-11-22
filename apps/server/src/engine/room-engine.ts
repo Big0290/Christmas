@@ -6,6 +6,7 @@ import { HostManager } from './host-manager.js';
 import { PlayerManager } from './player-manager.js';
 import { GameManager } from './game-manager.js';
 import { SyncEngine } from './sync-engine.js';
+import { IntentManager } from './intent-manager.js';
 import { RoomManager } from '../managers/room-manager.js';
 import type { AchievementManager } from '../managers/achievement-manager.js';
 
@@ -24,6 +25,7 @@ export class RoomEngine {
   public readonly playerManager: PlayerManager;
   public readonly gameManager: GameManager;
   public readonly syncEngine: SyncEngine;
+  public readonly intentManager: IntentManager;
   public readonly roomManager: RoomManager;
 
   constructor(io: Server, achievementManager?: AchievementManager) {
@@ -37,12 +39,15 @@ export class RoomEngine {
     this.hostManager = new HostManager(this.roomManager);
     this.playerManager = new PlayerManager(this.roomManager, this.gameManager);
     
-    // Create SyncEngine and initialize with dependencies
+    // Create SyncEngine first (constructor initializes ReplayBuffer, SnapshotManager, etc.)
     this.syncEngine = new SyncEngine();
     this.syncEngine.initialize(io, this.roomManager, this.connectionManager, this.gameManager);
     
     // Set SyncEngine in GameManager so it can use it
     this.gameManager.setSyncEngine(this.syncEngine);
+    
+    // Create IntentManager (with SyncEngine reference for replay buffer)
+    this.intentManager = new IntentManager(this.roomManager, this.gameManager, this.syncEngine);
     
     // Store achievement manager for potential future use
     if (achievementManager) {
@@ -242,9 +247,32 @@ export class RoomEngine {
 
   /**
    * Handle player action in a game
+   * @deprecated Use submitIntent() instead for intent-based actions
    */
   handlePlayerAction(roomCode: string, playerId: string, action: string, data: any): void {
     this.gameManager.handlePlayerAction(roomCode, playerId, action, data);
+  }
+
+  /**
+   * Submit an intent for processing
+   * This is the authoritative way to handle player actions
+   */
+  submitIntent(intent: import('@christmas/core').Intent): string {
+    return this.intentManager.submitIntent(intent);
+  }
+
+  /**
+   * Process an intent (called by host controller)
+   */
+  async processIntent(intentId: string, roomCode: string): Promise<import('@christmas/core').IntentResult> {
+    return this.intentManager.processIntent(intentId, roomCode);
+  }
+
+  /**
+   * Get pending intents for a room
+   */
+  getPendingIntents(roomCode: string): import('@christmas/core').Intent[] {
+    return this.intentManager.getPendingIntents(roomCode);
   }
 
   /**
@@ -471,10 +499,41 @@ export class RoomEngine {
   }
 
   /**
-   * Cleanup expired rooms
+   * Cleanup expired rooms and optimize memory
    */
   cleanupExpiredRooms(): void {
     this.roomManager.cleanupExpiredRooms();
+    
+    // Also cleanup sync engine data for expired rooms
+    const rooms = this.roomManager.getAllRooms();
+    const activeRoomCodes = new Set(rooms.map(r => r.code));
+    
+    // Cleanup sync data for rooms that no longer exist
+    // Note: SyncEngine cleanupRoom is called when rooms are destroyed,
+    // but this ensures we catch any orphaned data
+    this.syncEngine.cleanupOldData(activeRoomCodes);
+    
+    // Cleanup intent manager data for expired rooms
+    this.intentManager.cleanupExpiredRooms(activeRoomCodes);
+  }
+
+  /**
+   * Optimize memory by cleaning up old data
+   */
+  optimizeMemory(): void {
+    // Cleanup expired rooms
+    this.cleanupExpiredRooms();
+    
+    // Cleanup old replay buffers (keep only recent events)
+    this.syncEngine.getReplayBuffer().cleanupOldEvents(3600000); // 1 hour TTL
+    
+    // Cleanup old snapshots (keep only latest)
+    this.syncEngine.getSnapshotManager().cleanupOldSnapshots(3600000); // 1 hour TTL
+    
+    // Cleanup old intent data
+    this.intentManager.cleanupOldIntents(3600000); // 1 hour TTL
+    
+    console.log('[RoomEngine] Memory optimization completed');
   }
 
   /**

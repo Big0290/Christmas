@@ -11,6 +11,7 @@ primary_region = 'sjc'
   # Build args will be passed from Fly.io secrets
   # Use: fly secrets set PUBLIC_SUPABASE_URL=... PUBLIC_SUPABASE_ANON_KEY=...
   # Then rebuild with: fly deploy --build-arg PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL --build-arg PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
+  # Redis URL should be set via: fly secrets set REDIS_URL=rediss://...
 
 [env]
   HOST = '0.0.0.0'
@@ -22,7 +23,7 @@ primary_region = 'sjc'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2
   processes = ['app']
 
 [[services]]

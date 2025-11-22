@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import {
   Room,
   Player,
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   TriviaQuestion,
@@ -29,7 +29,8 @@ import type { SyncEngine } from './sync-engine.js';
  * - Game-to-room lifecycle synchronization
  */
 export class GameManager {
-  private games: Map<string, BaseGameEngine> = new Map();
+  // All games now extend PluginGameEngine directly
+  private games: Map<string, PluginGameEngine> = new Map();
   private sessionLeaderboards: Map<string, Map<string, number>> = new Map();
   private lastGameState: Map<string, GameState> = new Map();
   private lastSoundEvent: Map<string, { sound: string; state: GameState; timestamp: number }> = new Map();
@@ -63,7 +64,7 @@ export class GameManager {
       | NaughtyOrNiceSettings
       | EmojiCarolSettings
       | BingoSettings
-  ): Promise<BaseGameEngine | null> {
+  ): Promise<PluginGameEngine | null> {
     const room = this.roomManager.getRoom(roomCode);
     if (!room) return null;
 
@@ -252,6 +253,7 @@ export class GameManager {
     const game = GameFactory.createGame(
       gameType,
       room.players,
+      roomCode,
       customQuestions,
       customItems,
       customPrompts,
@@ -266,6 +268,16 @@ export class GameManager {
 
     this.games.set(roomCode, game);
     room.currentGame = gameType;
+    
+    // Set Socket.IO server for PluginGameEngine
+    if (this.io && 'setSocketIO' in game && typeof (game as any).setSocketIO === 'function') {
+      (game as any).setSocketIO(this.io);
+    }
+    
+    // Set room reference for PluginGameEngine
+    if ('setRoom' in game && typeof (game as any).setRoom === 'function') {
+      (game as any).setRoom(room);
+    }
     
     // Start the game engine - this sets internal state to STARTING and transitions to PLAYING after 3 seconds
     game.start();
@@ -283,18 +295,13 @@ export class GameManager {
       });
     }
     
-    // Keep room.gameState in sync with game engine state after transition to PLAYING
-    // This ensures reconnections get the correct state
-    setTimeout(() => {
-      const currentGame = this.games.get(roomCode);
-      if (currentGame && currentGame === game) {
-        room.gameState = game.getState().state;
-        console.log(`[GameManager] Synced room.gameState to ${room.gameState} for room ${roomCode}`);
-      }
-    }, 3500); // After game transitions to PLAYING and onPlaying() completes
-
-    // Broadcast initial state
+    // Broadcast initial STARTING state
+    // This syncs to all clients (players, host-control, host-display) via SyncEngine
     this.broadcastGameState(roomCode);
+    
+    // NOTE: The PLAYING state sync after transition is handled by host-handlers.ts
+    // which waits for onPlaying() to complete (3.5 seconds) to ensure game-specific data is loaded.
+    // We don't sync here to avoid double sync and ensure we sync after game data is ready.
 
     return game;
   }
@@ -302,7 +309,7 @@ export class GameManager {
   /**
    * Get game for a room
    */
-  getGame(roomCode: string): BaseGameEngine | undefined {
+  getGame(roomCode: string): PluginGameEngine | undefined {
     return this.games.get(roomCode);
   }
 

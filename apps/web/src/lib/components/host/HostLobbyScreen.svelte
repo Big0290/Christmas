@@ -98,7 +98,10 @@
     <button
       type="button"
       class="tab-button {activeTab === 'guessing' ? 'active' : ''}"
-      on:click={() => (activeTab = 'guessing')}
+      on:click|stopPropagation={() => {
+        console.log('[HostLobbyScreen] Guessing tab clicked');
+        activeTab = 'guessing';
+      }}
     >
       🎯 {guessingTabText}
     </button>

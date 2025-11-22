@@ -5,7 +5,56 @@ import { sanitizePlayerName, GameType, GameState, isExpired, RateLimiter, Room }
 import type { RoomEngine } from '../engine/room-engine.js';
 import type { AchievementManager } from '../managers/achievement-manager.js';
 
-const rateLimiter = new RateLimiter(20, 1000); // 20 requests per second
+const rateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 1000 }); // 20 requests per second
+
+// Track processed host action IDs for idempotency: Map<actionId, { roomCode: string; timestamp: number }>
+const processedHostActions: Map<string, { roomCode: string; timestamp: number }> = new Map();
+const HOST_ACTION_TTL_MS = 60000; // 1 minute TTL for action IDs
+
+/**
+ * Generate unique host action ID
+ */
+function generateHostActionId(): string {
+  return `host_action_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
+/**
+ * Check if host action ID was already processed
+ */
+function isHostActionProcessed(actionId: string): boolean {
+  const record = processedHostActions.get(actionId);
+  if (!record) {
+    return false;
+  }
+
+  // Check TTL
+  if (Date.now() - record.timestamp > HOST_ACTION_TTL_MS) {
+    processedHostActions.delete(actionId);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Mark host action as processed
+ */
+function markHostActionProcessed(actionId: string, roomCode: string): void {
+  processedHostActions.set(actionId, {
+    roomCode,
+    timestamp: Date.now(),
+  });
+
+  // Cleanup old actions periodically
+  if (processedHostActions.size > 1000) {
+    const now = Date.now();
+    for (const [id, record] of processedHostActions) {
+      if (now - record.timestamp > HOST_ACTION_TTL_MS) {
+        processedHostActions.delete(id);
+      }
+    }
+  }
+}
 
 /**
  * Sets up host-specific socket event handlers
@@ -428,12 +477,11 @@ export function setupHostHandlers(
           // Include theme settings for persistence
           theme: {
             snowEffect: theme.snowEffect ?? true,
-            backgroundMusic: theme.backgroundMusic ?? theme.soundEnabled ?? true,
+            soundEnabled: theme.soundEnabled ?? true,
             sparkles: theme.sparkles ?? true,
             icicles: theme.icicles ?? false,
             frostPattern: theme.frostPattern ?? true,
             colorScheme: theme.colorScheme ?? 'mixed',
-            language: theme.language ?? 'en',
           },
         });
 
@@ -800,14 +848,25 @@ export function setupHostHandlers(
   // GAME MANAGEMENT (HOST ONLY)
   // ========================================================================
 
-  socket.on('start_game', async (gameType: GameType, settings?: any, callback?: (response: { success: boolean; error?: string }) => void) => {
-    console.log(`[Host] start_game received from socket ${socket.id.substring(0, 8)} for game type ${gameType}`);
+  socket.on('start_game', async (gameType: GameType, settings?: any, callback?: (response: { success: boolean; error?: string; actionId?: string; duplicate?: boolean }) => void) => {
+    // Extract actionId from settings if provided (for idempotency)
+    const actionId = settings?.actionId || generateHostActionId();
+    const isDuplicate = isHostActionProcessed(actionId);
+    
+    console.log(`[Host] start_game received from socket ${socket.id.substring(0, 8)} for game type ${gameType}, actionId=${actionId.substring(0, 16)}${isDuplicate ? ' (DUPLICATE)' : ''}`);
+    
+    if (isDuplicate) {
+      const errorMsg = 'This action was already processed';
+      console.log(`[Host] Duplicate start_game action detected: ${actionId.substring(0, 16)}`);
+      if (callback) callback({ success: true, error: errorMsg, actionId, duplicate: true });
+      return;
+    }
     
     if (!checkRateLimit()) {
       const errorMsg = 'Rate limit exceeded. Please wait before trying again.';
       console.log(`[Host] Rate limit exceeded for start_game from socket ${socket.id.substring(0, 8)}`);
       socket.emit('error', errorMsg);
-      if (callback) callback({ success: false, error: errorMsg });
+      if (callback) callback({ success: false, error: errorMsg, actionId });
       return;
     }
 
@@ -878,14 +937,13 @@ export function setupHostHandlers(
       // Emit game_started event
       io.to(room.code).emit('game_started', gameType);
 
-      // Sync initial state immediately using RoomEngine (STARTING state)
-      // This ensures display and all parties get the initial state
-      roomEngine.syncGameState(room.code, gameState, { force: true });
-      console.log(`[Host] Synced initial game state (${gameState.state}) to all parties for room ${room.code}`);
+      // NOTE: Initial state sync is handled by GameManager.broadcastGameState() after game.start()
+      // which is called in game-manager.ts startGame(). We don't need to sync here to avoid double sync.
 
       // CRITICAL: Game will transition from STARTING to PLAYING after 3 seconds
       // onPlaying() will load the first question/item, so we need to sync again after that
       // Set a timeout to sync state again after onPlaying() completes (around 3.5 seconds)
+      // This ensures all clients get the PLAYING state with game-specific data (questions, items, etc.)
       setTimeout(() => {
         const currentGame = roomEngine.getGame(room.code);
         if (currentGame && currentGame === game) {
@@ -899,8 +957,11 @@ export function setupHostHandlers(
         }
       }, 3500); // After game transitions to PLAYING and onPlaying() completes
 
+      // Mark action as processed
+      markHostActionProcessed(actionId, room.code);
+      
       console.log(`[Host] Successfully started ${gameType} in room ${room.code}`);
-      if (callback) callback({ success: true });
+      if (callback) callback({ success: true, actionId });
     } catch (error: any) {
       const errorMsg = error?.message || 'Failed to start game';
       console.error(`[Host] Error starting game in room ${room.code}:`, error);
@@ -909,14 +970,34 @@ export function setupHostHandlers(
     }
   });
 
-  socket.on('end_game', async (callback?: (response: { success: boolean; error?: string }) => void) => {
-    console.log(`[Host] end_game received from socket ${socket.id.substring(0, 8)}`);
+  socket.on('end_game', async (actionIdOrCallback?: string | ((response: { success: boolean; error?: string; actionId?: string; duplicate?: boolean }) => void), callback?: (response: { success: boolean; error?: string; actionId?: string; duplicate?: boolean }) => void) => {
+    // Handle both signatures: (actionId, callback) or (callback)
+    let actionId: string;
+    let actualCallback: ((response: { success: boolean; error?: string; actionId?: string; duplicate?: boolean }) => void) | undefined;
+    
+    if (typeof actionIdOrCallback === 'string') {
+      actionId = actionIdOrCallback;
+      actualCallback = callback;
+    } else {
+      actionId = generateHostActionId();
+      actualCallback = actionIdOrCallback;
+    }
+    
+    const isDuplicate = isHostActionProcessed(actionId);
+    console.log(`[Host] end_game received from socket ${socket.id.substring(0, 8)}, actionId=${actionId.substring(0, 16)}${isDuplicate ? ' (DUPLICATE)' : ''}`);
+    
+    if (isDuplicate) {
+      const errorMsg = 'This action was already processed';
+      console.log(`[Host] Duplicate end_game action detected: ${actionId.substring(0, 16)}`);
+      if (actualCallback) actualCallback({ success: true, error: errorMsg, actionId, duplicate: true });
+      return;
+    }
     
     if (!checkRateLimit()) {
       const errorMsg = 'Rate limit exceeded. Please wait before trying again.';
       console.log(`[Host] Rate limit exceeded for end_game from socket ${socket.id.substring(0, 8)}`);
       socket.emit('error', errorMsg);
-      if (callback) callback({ success: false, error: errorMsg });
+      if (actualCallback) actualCallback({ success: false, error: errorMsg, actionId });
       return;
     }
 
@@ -1012,8 +1093,11 @@ export function setupHostHandlers(
         roomEngine.syncEngine.cleanupRoom(room.code);
       }
 
+      // Mark action as processed
+      markHostActionProcessed(actionId, room.code);
+      
       console.log(`[Host] Successfully ended game in room ${room.code}`);
-      if (callback) callback({ success: true });
+      if (actualCallback) actualCallback({ success: true, actionId });
     } catch (error: any) {
       const errorMsg = error?.message || 'Failed to end game';
       console.error(`[Host] Error ending game in room ${room.code}:`, error);
@@ -1022,7 +1106,15 @@ export function setupHostHandlers(
     }
   });
 
-  socket.on('pause_game', () => {
+  socket.on('pause_game', (actionId?: string) => {
+    const actualActionId = actionId || generateHostActionId();
+    const isDuplicate = isHostActionProcessed(actualActionId);
+    
+    if (isDuplicate) {
+      console.log(`[Host] Duplicate pause_game action detected: ${actualActionId.substring(0, 16)}`);
+      return;
+    }
+    
     if (!checkRateLimit()) return;
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
@@ -1038,11 +1130,20 @@ export function setupHostHandlers(
     const room = roomInfo.room;
 
     roomEngine.pauseGame(room.code);
+    markHostActionProcessed(actualActionId, room.code);
     // SyncEngine will handle state sync via broadcastGameState
     broadcastGameState(room.code);
   });
 
-  socket.on('resume_game', () => {
+  socket.on('resume_game', (actionId?: string) => {
+    const actualActionId = actionId || generateHostActionId();
+    const isDuplicate = isHostActionProcessed(actualActionId);
+    
+    if (isDuplicate) {
+      console.log(`[Host] Duplicate resume_game action detected: ${actualActionId.substring(0, 16)}`);
+      return;
+    }
+    
     if (!checkRateLimit()) return;
 
     const roomInfo = roomEngine.getRoomBySocketId(socket.id);
@@ -1058,6 +1159,7 @@ export function setupHostHandlers(
     const room = roomInfo.room;
 
     roomEngine.resumeGame(room.code);
+    markHostActionProcessed(actualActionId, room.code);
     // SyncEngine will handle state sync via broadcastGameState
     broadcastGameState(room.code);
   });

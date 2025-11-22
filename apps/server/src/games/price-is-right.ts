@@ -1,10 +1,12 @@
 import {
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   PriceIsRightGameState,
   PriceItem,
   Player,
+  Room,
+  RenderDescriptor,
   shuffleArray,
   calculateSpeedBonus,
   PriceIsRightSettings,
@@ -194,7 +196,7 @@ const DEFAULT_ITEMS: PriceItem[] = [
   },
 ];
 
-export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
+export class PriceIsRightGame extends PluginGameEngine<PriceIsRightGameState> {
   private items: PriceItem[] = [];
   private scoringMode: 'closest_without_over' | 'closest_overall' = 'closest_without_over';
   private timePerRound: number = 30000; // 30 seconds
@@ -202,10 +204,11 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
 
   constructor(
     players: Map<string, Player>,
+    roomCode: string,
     customItems?: PriceItem[],
     settings?: PriceIsRightSettings
   ) {
-    super(GameType.PRICE_IS_RIGHT, players);
+    super(GameType.PRICE_IS_RIGHT, players, roomCode);
 
     // Use provided settings or defaults
     this.settings = settings || {
@@ -246,13 +249,21 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
       this.state.maxRounds = Math.min(this.items.length, 1);
     }
     
-    console.log(`[PriceIsRightGame] Initialized with ${this.items.length} items, ${this.state.maxRounds} rounds`);
-
     // Set scoring mode
     this.scoringMode = this.settings.scoringMode;
 
     // Set time limit (convert seconds to milliseconds)
     this.timePerRound = this.settings.timeLimit * 1000;
+    
+    console.log(`[PriceIsRightGame] Settings applied:`, {
+      roundCount: this.settings.roundCount,
+      timeLimit: this.settings.timeLimit,
+      maxRounds: this.state.maxRounds,
+      timePerRoundMs: this.timePerRound,
+      scoringMode: this.scoringMode,
+      itemSelection: this.settings.itemSelection,
+      selectedCategories: this.settings.selectedCategories
+    });
   }
 
   protected createInitialState(): PriceIsRightGameState {
@@ -380,7 +391,7 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
     }, 5000);
   }
 
-  handlePlayerAction(playerId: string, action: string, data: any): void {
+  protected handlePlayerActionImpl(playerId: string, action: string, data: any): void {
     if (
       action === 'guess' &&
       this.state.state === GameState.PLAYING &&
@@ -436,6 +447,33 @@ export class PriceIsRightGame extends BaseGameEngine<PriceIsRightGameState> {
       currentItem: translatedItem,
       hasGuessed: this.state.guesses[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
+    };
+  }
+
+  // PluginGameEngine interface implementation
+  init(roomState: Room): void {
+    console.log(`[PriceIsRightGame] Initialized for room ${roomState.code}`);
+  }
+
+  getRenderDescriptor(): RenderDescriptor {
+    return {
+      layout: 'grid',
+      components: [
+        {
+          type: 'item-display',
+          position: { x: 0, y: 0, width: 100, height: 60 },
+          props: {},
+        },
+        {
+          type: 'guess-input',
+          position: { x: 0, y: 60, width: 100, height: 40 },
+          props: {},
+        },
+      ],
+      config: {
+        gridColumns: 1,
+        gridRows: 2,
+      },
     };
   }
 }

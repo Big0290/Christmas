@@ -51,6 +51,8 @@ export interface Room {
   gameState: GameState;
   players: Map<string, Player>;
   settings: GlobalSettings;
+  version: number; // Monotonically increasing version number for state mutations
+  lastStateMutation: number; // Timestamp of last state mutation
 }
 
 // ============================================================================
@@ -265,6 +267,42 @@ export interface GuessingChallengeForm {
 }
 
 // ============================================================================
+// INTENT SYSTEM
+// ============================================================================
+
+export type IntentStatus = 'pending' | 'approved' | 'rejected' | 'processed';
+
+export interface Intent {
+  id: string; // Unique intent ID
+  type: string; // Intent type (e.g., 'trivia_answer', 'emoji_pick', etc.)
+  playerId: string; // Player who submitted the intent
+  roomCode: string; // Room code
+  action: string; // Action name
+  data: any; // Action data
+  timestamp: number; // When intent was created
+  version?: number; // Room version when intent was submitted
+  status: IntentStatus; // Current status
+}
+
+export interface IntentResult {
+  success: boolean;
+  intentId: string;
+  eventId?: string; // ID of resulting event if successful
+  error?: string; // Error message if failed
+  version?: number; // Room version after processing
+}
+
+export interface GameEvent {
+  id: string; // Unique event ID for deduplication
+  type: string; // Event type
+  roomCode: string;
+  timestamp: number;
+  version: number; // Room version after event
+  data: any; // Event data
+  intentId?: string; // Related intent ID if applicable
+}
+
+// ============================================================================
 // SOCKET EVENTS
 // ============================================================================
 
@@ -297,6 +335,10 @@ export interface ServerToClientEvents {
   
   // Errors
   error: (message: string) => void;
+  
+  // Intent system
+  intent_result: (result: IntentResult) => void;
+  intent_rejected: (intentId: string, reason: string) => void;
   
   // Game-specific
   trivia_question: (question: TriviaQuestion, round: number) => void;
@@ -340,12 +382,15 @@ export interface ClientToServerEvents {
   // Settings
   update_settings: (gameType: GameType, settings: any) => void;
   
-  // Game actions
+  // Game actions (legacy - will be replaced by intent system)
   trivia_answer: (answerIndex: number) => void;
   emoji_pick: (emoji: string) => void;
   vote: (choice: 'naughty' | 'nice') => void;
   price_guess: (guess: number) => void;
   bingo_mark: (row: number, col: number) => void;
+  
+  // Intent system
+  intent: (intent: Intent, callback?: (result: IntentResult) => void) => void;
   
   // Jukebox control (host only)
   jukebox_control: (roomCode: string, action: 'play' | 'pause' | 'next' | 'previous' | 'select' | 'shuffle' | 'repeat' | 'volume' | 'seek', data?: any) => void;

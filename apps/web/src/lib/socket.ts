@@ -259,6 +259,7 @@ function registerSocketListeners(socketInstance: TypedSocket) {
       state: state?.state,
       gameType: state?.gameType,
       round: state?.round,
+      maxRounds: state?.maxRounds,
       hasQuestion: !!state?.currentQuestion,
       hasItem: !!state?.currentItem,
       hasPrompt: !!state?.currentPrompt,
@@ -277,17 +278,20 @@ function registerSocketListeners(socketInstance: TypedSocket) {
       });
     }
     // Normalize state and gameType to enum values before storing
+    // IMPORTANT: Preserve round and maxRounds from server state
     const normalizedState = {
       ...state,
       state: normalizeGameState(state?.state) ?? state?.state,
-      gameType: normalizeGameType(state?.gameType) ?? state?.gameType
+      gameType: normalizeGameType(state?.gameType) ?? state?.gameType,
+      round: state?.round ?? 0,
+      maxRounds: state?.maxRounds ?? 0
     };
     // Update the store
-    console.log('[Socket] Updating gameState store with normalized state:', normalizedState?.state, 'hasQuestion:', !!state?.currentQuestion);
+    console.log('[Socket] Updating gameState store with normalized state:', normalizedState?.state, 'round:', normalizedState?.round, 'maxRounds:', normalizedState?.maxRounds, 'hasQuestion:', !!state?.currentQuestion);
     gameState.set(normalizedState);
     // Verify the store was updated by checking it immediately
     const updatedState = get(gameState);
-    console.log('[Socket] ✅ GameState store updated, verified currentQuestion exists:', !!updatedState?.currentQuestion);
+    console.log('[Socket] ✅ GameState store updated, verified round:', updatedState?.round, 'maxRounds:', updatedState?.maxRounds, 'currentQuestion exists:', !!updatedState?.currentQuestion);
     
     // Track version and detect gaps
     if (state?.version !== undefined && state?.version !== null) {
@@ -323,6 +327,7 @@ function registerSocketListeners(socketInstance: TypedSocket) {
       state: state?.state,
       gameType: state?.gameType,
       round: state?.round,
+      maxRounds: state?.maxRounds,
       hasQuestion: !!state?.currentQuestion,
       hasItem: !!state?.currentItem,
       hasPrompt: !!state?.currentPrompt,
@@ -332,13 +337,16 @@ function registerSocketListeners(socketInstance: TypedSocket) {
       version: state?.version
     });
     // Normalize state and gameType to enum values before storing
+    // IMPORTANT: Preserve round and maxRounds from server state
     const normalizedState = {
       ...state,
       state: normalizeGameState(state?.state) ?? state?.state,
-      gameType: normalizeGameType(state?.gameType) ?? state?.gameType
+      gameType: normalizeGameType(state?.gameType) ?? state?.gameType,
+      round: state?.round ?? 0,
+      maxRounds: state?.maxRounds ?? 0
     };
     // Update the store (same as game_state_update for consistency)
-    console.log('[Socket] 📺 Updating gameState store with display_sync_state:', normalizedState?.state, 'hasQuestion:', !!state?.currentQuestion);
+    console.log('[Socket] 📺 Updating gameState store with display_sync_state:', normalizedState?.state, 'round:', normalizedState?.round, 'maxRounds:', normalizedState?.maxRounds, 'hasQuestion:', !!state?.currentQuestion);
     gameState.set(normalizedState);
     // Verify the store was updated
     const updatedState = get(gameState);

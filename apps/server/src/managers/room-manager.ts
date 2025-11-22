@@ -44,6 +44,8 @@ export class RoomManager {
       gameState: GameState.LOBBY,
       players: new Map(), // Empty player list - host is separate
       settings,
+      version: 0, // Initialize version at 0
+      lastStateMutation: now, // Initialize with creation time
     };
     
     // Save room to database if available (host token managed by HostManager)
@@ -144,6 +146,8 @@ export class RoomManager {
         gameState,
         players: new Map(), // Player list is not persisted, starts empty
         settings,
+        version: 0, // Reset version on restore (will increment as state changes)
+        lastStateMutation: new Date(data.last_accessed_at || data.created_at).getTime(),
       };
 
       return { room, hostToken: data.host_token || undefined };
@@ -230,6 +234,8 @@ export class RoomManager {
             gameState: GameState.LOBBY, // Always start in LOBBY after restart
             players: new Map(), // Player list starts empty
             settings,
+            version: 0, // Reset version on restore (will increment as state changes)
+            lastStateMutation: new Date(roomData.last_accessed_at || roomData.created_at).getTime(),
           };
 
           // Restore room with token from database
@@ -339,6 +345,13 @@ export class RoomManager {
 
   getActiveRoomCount(): number {
     return this.rooms.size;
+  }
+
+  /**
+   * Get all active rooms
+   */
+  getAllRooms(): Room[] {
+    return Array.from(this.rooms.values());
   }
 
   getTotalPlayerCount(): number {

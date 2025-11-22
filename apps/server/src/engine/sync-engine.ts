@@ -1,8 +1,12 @@
 import { Server, Socket } from 'socket.io';
-import { GameState, GameType, Room, Player } from '@christmas/core';
+import { GameState, GameType, Room, Player, GameEvent } from '@christmas/core';
 import type { RoomManager } from '../managers/room-manager.js';
 import type { ConnectionManager } from './connection-manager.js';
 import type { GameManager } from './game-manager.js';
+import { ReplayBuffer } from './replay-buffer.js';
+import { SnapshotManager } from './snapshot-manager.js';
+import { DeltaEngine } from './delta-engine.js';
+import { EventDeduplicator } from './event-deduplicator.js';
 
 export type ClientRole = 'player' | 'host-control' | 'host-display';
 
@@ -52,6 +56,21 @@ export class SyncEngine {
   
   // Track last sound event per room (for debouncing)
   private lastSoundEvent: Map<string, { sound: string; state: GameState; timestamp: number }> = new Map();
+  
+  // Replay buffer for events
+  private replayBuffer: ReplayBuffer;
+  
+  // Snapshot manager for full state snapshots
+  private snapshotManager: SnapshotManager;
+  
+  // Delta engine for delta-based updates
+  private deltaEngine: DeltaEngine;
+  
+  // Event deduplicator
+  private eventDeduplicator: EventDeduplicator;
+  
+  // Track previous state per room for delta calculation
+  private previousStates: Map<string, any> = new Map();
 
   // ACK tracking data structures
   // Track which sockets need to ACK each version: Map<roomCode, Map<version, Set<socketId>>>
@@ -95,6 +114,21 @@ export class SyncEngine {
     lastKeepAlive: Map<string, number>; // socketId -> timestamp
   }> = new Map();
 
+  constructor() {
+    // Initialize components
+    this.replayBuffer = new ReplayBuffer(100); // Store last 100 events
+    this.snapshotManager = new SnapshotManager(10, true, 10); // Snapshot every 10 versions, compressed, max 10 snapshots
+    this.deltaEngine = new DeltaEngine();
+    this.eventDeduplicator = new EventDeduplicator(3600000); // 1 hour TTL
+    
+    // Start periodic cleanup
+    this.eventDeduplicator.startPeriodicCleanup(300000); // Every 5 minutes
+    setInterval(() => {
+      this.replayBuffer.cleanupOldEvents(3600000); // Cleanup events older than 1 hour
+      this.snapshotManager.cleanupOldSnapshots(3600000); // Cleanup snapshots older than 1 hour
+    }, 300000); // Every 5 minutes
+  }
+
   /**
    * Initialize SyncEngine with required dependencies
    */
@@ -108,7 +142,7 @@ export class SyncEngine {
     this.roomManager = roomManager;
     this.connectionManager = connectionManager;
     this.gameManager = gameManager;
-    console.log('[SyncEngine] Initialized');
+    console.log('[SyncEngine] Initialized with ReplayBuffer, SnapshotManager, DeltaEngine, and EventDeduplicator');
   }
 
   /**
@@ -130,16 +164,52 @@ export class SyncEngine {
       return;
     }
 
-    // Increment version for this room
-    const version = (this.roomVersions.get(roomCode) || 0) + 1;
+    // Increment version for this room (use room.version if available, otherwise use internal tracking)
+    const currentVersion = room.version || (this.roomVersions.get(roomCode) || 0);
+    const version = currentVersion + 1;
     this.roomVersions.set(roomCode, version);
 
-    // Prepare synced state with versioning
-    const syncedState: SyncedState = { ...state };
+    // Update room version
+    room.version = version;
+    room.lastStateMutation = Date.now();
+
+    // Calculate delta if previous state exists and delta is enabled
+    const previousState = this.previousStates.get(roomCode);
+    const useDelta = options.metadata?.useDelta !== false && previousState && state.state === GameState.PLAYING;
+    
+    let syncedState: SyncedState;
+    if (useDelta) {
+      // Calculate delta
+      const delta = this.deltaEngine.calculateDelta(previousState, state);
+      
+      if (!this.deltaEngine.isEmpty(delta)) {
+        // Use delta update
+        syncedState = {
+          ...delta,
+          version,
+          timestamp: Date.now(),
+          _isDelta: true,
+        } as SyncedState;
+        console.log(`[SyncEngine] Using delta update for room ${roomCode} (size: ${this.deltaEngine.getDeltaSize(delta)} bytes)`);
+      } else {
+        // Delta is empty, use full state
+        syncedState = { ...state };
     if (options.includeVersion !== false) {
       syncedState.version = version;
       syncedState.timestamp = Date.now();
     }
+      }
+    } else {
+      // Use full state
+      syncedState = { ...state };
+      if (options.includeVersion !== false) {
+        syncedState.version = version;
+        syncedState.timestamp = Date.now();
+      }
+    }
+
+    // Store previous state for next delta calculation
+    this.previousStates.set(roomCode, { ...state });
 
     // Add metadata if provided
     if (options.metadata) {
@@ -149,11 +219,20 @@ export class SyncEngine {
     // Detect state transitions for sound events and state events
     this.handleStateTransitions(roomCode, state.state, state);
 
-    // Store state snapshot for resync
+    // Store state snapshot for resync (legacy)
     if (!this.stateSnapshots.has(roomCode)) {
       this.stateSnapshots.set(roomCode, new Map());
     }
     this.stateSnapshots.get(roomCode)!.set(version, { ...syncedState });
+
+    // Create snapshot if needed (periodic or critical transition)
+    const shouldSnapshot = this.snapshotManager.shouldCreateSnapshot(roomCode, version) ||
+                          this.snapshotManager.shouldCreateSnapshotForTransition(roomCode, state.state);
+    if (shouldSnapshot) {
+      this.snapshotManager.createSnapshot(roomCode, room, state).catch(err => {
+        console.error(`[SyncEngine] Failed to create snapshot:`, err);
+      });
+    }
 
     // Record expected ACKs before emitting (non-blocking)
     this.recordExpectedAcks(roomCode, version, options);
@@ -163,7 +242,7 @@ export class SyncEngine {
     this.syncToHost(roomCode, syncedState, options);
     this.syncToDisplay(roomCode, syncedState, options);
 
-    console.log(`[SyncEngine] Synced state v${version} to room ${roomCode}, state: ${state.state}`);
+    console.log(`[SyncEngine] Synced state v${version} to room ${roomCode}, state: ${state.state}${useDelta ? ' (delta)' : ' (full)'}`);
   }
 
   /**
@@ -402,7 +481,15 @@ export class SyncEngine {
     }
 
     if (displayCount > 0) {
-      console.log(`[SyncEngine] Synced to ${displayCount} display socket(s) in room ${roomCode}, state: ${state.state}, scoreboard: ${state.scoreboard?.length || 0} entries`);
+      // Get scoreboard from game if available
+      let scoreboardLength = 0;
+      if (this.gameManager) {
+        const game = this.gameManager.getGame(roomCode);
+        if (game) {
+          scoreboardLength = game.getScoreboard()?.length || 0;
+        }
+      }
+      console.log(`[SyncEngine] Synced to ${displayCount} display socket(s) in room ${roomCode}, state: ${state.state}, scoreboard: ${scoreboardLength} entries`);
     }
   }
 
@@ -1324,7 +1411,7 @@ export class SyncEngine {
         }, roomCode);
       } else if (newState === GameState.ROUND_END) {
         // Round ended
-        const scoreboard = gameState?.scoreboard || [];
+        const scoreboard = game?.getScoreboard() || [];
         this.emitStateEvent('round_ended', {
           round: round,
           maxRounds: maxRounds,
@@ -1521,6 +1608,139 @@ export class SyncEngine {
   }
 
   /**
+   * Send snapshot to a socket (for late joiners)
+   */
+  async sendSnapshot(roomCode: string, socketId: string): Promise<boolean> {
+    const snapshot = await this.snapshotManager.getLatestSnapshot(roomCode);
+    if (!snapshot) {
+      return false;
+    }
+
+    const socket = this.io?.sockets.sockets.get(socketId);
+    if (!socket) {
+      return false;
+    }
+
+    // Decompress if needed
+    let snapshotData = snapshot.data;
+    if (snapshot.compressed && Buffer.isBuffer(snapshotData)) {
+      try {
+        const { gunzip } = await import('zlib');
+        const { promisify } = await import('util');
+        const gunzipAsync = promisify(gunzip);
+        const decompressed = await gunzipAsync(snapshotData);
+        snapshotData = JSON.parse(decompressed.toString('utf-8'));
+      } catch (error) {
+        console.error(`[SyncEngine] Failed to decompress snapshot:`, error);
+        return false;
+      }
+    }
+
+    socket.emit('state_snapshot', {
+      roomCode,
+      version: snapshot.version,
+      timestamp: snapshot.timestamp,
+      state: snapshotData,
+    });
+
+    console.log(`[SyncEngine] Sent snapshot v${snapshot.version} to socket ${socketId.substring(0, 8)}`);
+    return true;
+  }
+
+  /**
+   * Send replay events to a socket (for reconnecting clients)
+   */
+  sendReplay(
+    roomCode: string,
+    socketId: string,
+    fromVersion?: number,
+    fromTimestamp?: number
+  ): void {
+    const socket = this.io?.sockets.sockets.get(socketId);
+    if (!socket) {
+      return;
+    }
+
+    let events: GameEvent[];
+    if (fromVersion !== undefined) {
+      events = this.replayBuffer.getEventsSince(roomCode, fromVersion);
+    } else if (fromTimestamp !== undefined) {
+      events = this.replayBuffer.getEventsSinceTimestamp(roomCode, fromTimestamp);
+    } else {
+      // Get all events
+      events = this.replayBuffer.getEvents(roomCode);
+    }
+
+    if (events.length === 0) {
+      console.log(`[SyncEngine] No replay events for socket ${socketId.substring(0, 8)}`);
+      return;
+    }
+
+    socket.emit('replay_response', {
+      type: 'replay_response',
+      roomCode,
+      events,
+    });
+
+    console.log(`[SyncEngine] Sent ${events.length} replay event(s) to socket ${socketId.substring(0, 8)}`);
+  }
+
+  /**
+   * Add event to replay buffer
+   */
+  addEventToReplayBuffer(event: GameEvent): void {
+    // Check for deduplication
+    if (this.eventDeduplicator.isProcessed(event.id, event.roomCode)) {
+      console.warn(`[SyncEngine] Event ${event.id} already processed, skipping replay buffer`);
+      return;
+    }
+
+    this.replayBuffer.addEvent(event);
+    this.eventDeduplicator.markProcessed(event);
+  }
+
+  /**
+   * Handle replay request from client
+   */
+  handleReplayRequest(
+    roomCode: string,
+    socketId: string,
+    fromVersion?: number,
+    fromTimestamp?: number,
+    toVersion?: number,
+    toTimestamp?: number
+  ): void {
+    const socket = this.io?.sockets.sockets.get(socketId);
+    if (!socket) {
+      return;
+    }
+
+    let events: GameEvent[];
+    if (fromVersion !== undefined && toVersion !== undefined) {
+      events = this.replayBuffer.getEventsBetween(roomCode, fromVersion, toVersion);
+    } else if (fromVersion !== undefined) {
+      events = this.replayBuffer.getEventsSince(roomCode, fromVersion);
+    } else if (fromTimestamp !== undefined) {
+      events = this.replayBuffer.getEventsSinceTimestamp(roomCode, fromTimestamp);
+    } else {
+      events = this.replayBuffer.getEvents(roomCode);
+    }
+
+    // Get snapshot if available
+    this.snapshotManager.getLatestSnapshot(roomCode).then(snapshot => {
+      socket.emit('replay_response', {
+        type: 'replay_response',
+        roomCode,
+        events,
+        snapshot: snapshot ? snapshot.data : undefined,
+        snapshotVersion: snapshot?.version,
+      });
+
+      console.log(`[SyncEngine] Sent replay response with ${events.length} event(s) to socket ${socketId.substring(0, 8)}`);
+    });
+  }
+
+  /**
    * Clean up room data when room is destroyed
    */
   cleanupRoom(roomCode: string): void {
@@ -1536,9 +1756,15 @@ export class SyncEngine {
     this.settingsVersions.delete(roomCode);
     this.settingsSnapshots.delete(roomCode);
     this.ackMetrics.delete(roomCode);
+    this.previousStates.delete(roomCode);
     
     // Clean up keep-alive metrics
     this.keepAliveMetrics.delete(roomCode);
+    
+    // Clean up replay buffer and snapshots
+    this.replayBuffer.clear(roomCode);
+    this.snapshotManager.clearSnapshots(roomCode);
+    this.eventDeduplicator.clearRoom(roomCode);
     
     // Clean up socket versions for sockets in this room
     if (this.io && this.roomManager) {
@@ -1552,6 +1778,46 @@ export class SyncEngine {
     }
     
     console.log(`[SyncEngine] Cleaned up sync data for room ${roomCode}`);
+  }
+
+  /**
+   * Get replay buffer instance (for external access)
+   */
+  getReplayBuffer(): ReplayBuffer {
+    return this.replayBuffer;
+  }
+
+  /**
+   * Get snapshot manager instance (for external access)
+   */
+  getSnapshotManager(): SnapshotManager {
+    return this.snapshotManager;
+  }
+
+  /**
+   * Get delta engine instance (for external access)
+   */
+  getDeltaEngine(): DeltaEngine {
+    return this.deltaEngine;
+  }
+
+  /**
+   * Get event deduplicator instance (for external access)
+   */
+  getEventDeduplicator(): EventDeduplicator {
+    return this.eventDeduplicator;
+  }
+
+  /**
+   * Cleanup old data for rooms that no longer exist
+   */
+  cleanupOldData(activeRoomCodes: Set<string>): void {
+    // Cleanup data for rooms that no longer exist
+    for (const roomCode of this.roomVersions.keys()) {
+      if (!activeRoomCodes.has(roomCode)) {
+        this.cleanupRoom(roomCode);
+      }
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import {
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   BingoGameState,
@@ -7,6 +7,8 @@ import {
   BingoCard,
   Player,
   BingoSettings,
+  Room,
+  RenderDescriptor,
   shuffleArray,
   calculateSpeedBonus,
 } from '@christmas/core';
@@ -54,13 +56,13 @@ function generateBingoItems(): BingoItem[] {
 
 const DEFAULT_BINGO_ITEMS: BingoItem[] = generateBingoItems();
 
-export class BingoGame extends BaseGameEngine<BingoGameState> {
+export class BingoGame extends PluginGameEngine<BingoGameState> {
   private settings: BingoSettings;
   private availableItems: BingoItem[] = [...DEFAULT_BINGO_ITEMS];
   private callTimer: NodeJS.Timeout | null = null;
 
-  constructor(players: Map<string, Player>, settings?: BingoSettings) {
-    super(GameType.BINGO, players);
+  constructor(players: Map<string, Player>, roomCode: string, settings?: BingoSettings) {
+    super(GameType.BINGO, players, roomCode);
 
     this.settings = settings || {
       roundCount: 5,
@@ -70,11 +72,19 @@ export class BingoGame extends BaseGameEngine<BingoGameState> {
       speedBonusMultiplier: 1.5,
     };
 
-    console.log(`[BingoGame] Created with ${players.size} players, settings:`, this.settings);
-
     // Update state with actual settings (since createInitialState runs before this.settings is set)
     this.state.maxRounds = this.settings.roundCount;
     this.state.callInterval = this.settings.callIntervalSeconds * 1000;
+    
+    console.log(`[BingoGame] Settings applied:`, {
+      roundCount: this.settings.roundCount,
+      maxRounds: this.state.maxRounds,
+      callIntervalSeconds: this.settings.callIntervalSeconds,
+      callIntervalMs: this.state.callInterval,
+      itemsPerCall: this.settings.itemsPerCall,
+      pointsPerLine: this.settings.pointsPerLine,
+      speedBonusMultiplier: this.settings.speedBonusMultiplier
+    });
   }
 
   protected createInitialState(): BingoGameState {
@@ -344,7 +354,7 @@ export class BingoGame extends BaseGameEngine<BingoGameState> {
     return completed;
   }
 
-  handlePlayerAction(playerId: string, action: string, data: any): void {
+  protected handlePlayerActionImpl(playerId: string, action: string, data: any): void {
     if (action !== 'mark' || this.state.state !== GameState.PLAYING) {
       return;
     }
@@ -484,6 +494,33 @@ export class BingoGame extends BaseGameEngine<BingoGameState> {
       completedLines: this.state.completedLines[playerId] || [],
       hasWon: this.state.winners.includes(playerId),
       scoreboard: this.getScoreboard(),
+    };
+  }
+
+  // PluginGameEngine interface implementation
+  init(roomState: Room): void {
+    console.log(`[BingoGame] Initialized for room ${roomState.code}`);
+  }
+
+  getRenderDescriptor(): RenderDescriptor {
+    return {
+      layout: 'grid',
+      components: [
+        {
+          type: 'bingo-card',
+          position: { x: 0, y: 0, width: 100, height: 80 },
+          props: {},
+        },
+        {
+          type: 'called-items',
+          position: { x: 0, y: 80, width: 100, height: 20 },
+          props: {},
+        },
+      ],
+      config: {
+        gridColumns: 1,
+        gridRows: 2,
+      },
     };
   }
 }

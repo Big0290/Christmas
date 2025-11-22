@@ -1,10 +1,12 @@
 import {
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   NaughtyOrNiceGameState,
   NaughtyPrompt,
   Player,
+  Room,
+  RenderDescriptor,
   shuffleArray,
   calculateSpeedBonus,
   NaughtyOrNiceSettings,
@@ -154,17 +156,18 @@ const DEFAULT_PROMPTS: NaughtyPrompt[] = [
   },
 ];
 
-export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
+export class NaughtyOrNiceGame extends PluginGameEngine<NaughtyOrNiceGameState> {
   private prompts: NaughtyPrompt[] = [];
   private timePerRound: number = 15000; // 15 seconds
   private settings: NaughtyOrNiceSettings;
 
   constructor(
     players: Map<string, Player>,
+    roomCode: string,
     customPrompts?: NaughtyPrompt[],
     settings?: NaughtyOrNiceSettings
   ) {
-    super(GameType.NAUGHTY_OR_NICE, players);
+    super(GameType.NAUGHTY_OR_NICE, players, roomCode);
 
     // Use provided settings or defaults
     this.settings = settings || {
@@ -218,6 +221,16 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
       baseTime = Math.max(5, baseTime * 0.8); // Decrease by 20% for fast reveal
     }
     this.timePerRound = baseTime * 1000;
+    
+    console.log(`[NaughtyOrNiceGame] Settings applied:`, {
+      promptCount: this.settings.promptCount,
+      timePerRound: this.settings.timePerRound,
+      maxRounds: this.state.maxRounds,
+      timePerRoundMs: this.timePerRound,
+      revealSpeed: this.settings.revealSpeed,
+      contentFilter: this.settings.contentFilter,
+      voteMode: this.settings.voteMode
+    });
   }
 
   protected createInitialState(): NaughtyOrNiceGameState {
@@ -316,7 +329,7 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
     }, 5000);
   }
 
-  handlePlayerAction(playerId: string, action: string, data: any): void {
+  protected handlePlayerActionImpl(playerId: string, action: string, data: any): void {
     if (action === 'vote' && this.state.state === GameState.PLAYING && !this.state.votingClosed) {
       if (!this.state.votes[playerId]) {
         this.state.votes[playerId] = data.choice;
@@ -362,6 +375,33 @@ export class NaughtyOrNiceGame extends BaseGameEngine<NaughtyOrNiceGameState> {
       currentPrompt: translatedPrompt,
       hasVoted: this.state.votes[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
+    };
+  }
+
+  // PluginGameEngine interface implementation
+  init(roomState: Room): void {
+    console.log(`[NaughtyOrNiceGame] Initialized for room ${roomState.code}`);
+  }
+
+  getRenderDescriptor(): RenderDescriptor {
+    return {
+      layout: 'grid',
+      components: [
+        {
+          type: 'prompt-display',
+          position: { x: 0, y: 0, width: 100, height: 60 },
+          props: {},
+        },
+        {
+          type: 'vote-buttons',
+          position: { x: 0, y: 60, width: 100, height: 40 },
+          props: {},
+        },
+      ],
+      config: {
+        gridColumns: 1,
+        gridRows: 2,
+      },
     };
   }
 }

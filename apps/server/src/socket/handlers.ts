@@ -73,7 +73,7 @@ export function setupSocketHandlers(
     setupPlayerHandlers(io, socket, roomEngine, supabase, achievementManager);
     
     // Setup guessing handlers (now uses RoomEngine)
-    setupGuessingHandlers(socket, roomEngine, supabase);
+    setupGuessingHandlers(io, socket, roomEngine, supabase);
 
     // Handle state ACKs from clients
     socket.on('state_ack', (data: { version: number; messageType?: 'state' | 'player_list' | 'settings'; timestamp?: number }) => {

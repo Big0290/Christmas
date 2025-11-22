@@ -70,6 +70,12 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 PORT=3000
 SOCKET_IO_CORS_ORIGIN=http://localhost:5173
 
+# Redis (optional - for horizontal scaling)
+# Leave empty for single-instance deployment
+# Format: rediss://default:<password>@<host>:<port> (Upstash Redis)
+# Format: redis://localhost:6379 (local Redis)
+REDIS_URL=
+
 # Game Settings
 MAX_PLAYERS_PER_ROOM=50
 ROOM_CODE_LENGTH=4
@@ -287,9 +293,12 @@ PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 PUBLIC_SUPABASE_ANON_KEY=your-key
 SUPABASE_SERVICE_ROLE_KEY=your-key
 SOCKET_IO_CORS_ORIGIN=https://your-domain.com
+REDIS_URL=rediss://default:<password>@<host>:<port>
 MAX_PLAYERS_PER_ROOM=50
 ADMIN_PASSWORD=strong-password
 ```
+
+**Redis URL:** Required for horizontal scaling. Get from Fly.io Redis instance or leave empty for single-instance deployment.
 
 ---
 
@@ -344,9 +353,49 @@ Edit global settings or modify:
 
 ### Scaling
 
-- Horizontal: Deploy multiple server instances
-- Use Redis adapter for Socket.IO clustering
-- Supabase handles database scaling
+- **Horizontal Scaling**: Deploy multiple server instances on Fly.io
+- **Redis Pub/Sub**: Socket.IO clustering via Redis adapter for cross-instance communication
+- **Database**: Supabase handles database scaling automatically
+
+#### Redis Pub/Sub Setup (for Horizontal Scaling)
+
+Redis enables Socket.IO clustering, allowing multiple server instances to share events and game state.
+
+**Quick Setup:**
+
+```bash
+# Run the setup script
+./scripts/setup-fly-redis.sh
+
+# Or manually:
+fly redis create <app-name>-redis
+fly secrets set REDIS_URL=$(fly redis status <app-name>-redis | grep "Connection URL" | awk '{print $NF}')
+fly scale count 2  # Scale to 2+ instances
+```
+
+**How it works:**
+
+1. **Single Instance (No Redis)**: Works out of the box, uses in-memory Socket.IO adapter
+2. **Multiple Instances (With Redis)**: Socket.IO events are shared via Redis Pub/Sub
+   - Players can connect to any instance
+   - Game state broadcasts reach all instances
+   - Room events are synchronized across instances
+
+**Verification:**
+
+```bash
+# Check Redis connection status
+curl https://your-app.fly.dev/health
+# Response includes: "redis": "connected" or "disconnected"
+
+# Check server logs
+fly logs
+# Look for: "[Socket.IO] Redis adapter configured"
+```
+
+**Local Development:**
+
+Redis is optional for local development. The server automatically falls back to in-memory adapter if `REDIS_URL` is not set.
 
 ---
 

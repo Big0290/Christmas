@@ -7,6 +7,7 @@
   import SubmissionsTable from '$lib/components/guessing/SubmissionsTable.svelte';
   import QRCodeDisplay from '$lib/components/guessing/QRCodeDisplay.svelte';
   import GuessingRevealModal from '$lib/components/guessing/GuessingRevealModal.svelte';
+  import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
   import { browser } from '$app/environment';
 
   export let roomCode: string;
@@ -25,44 +26,128 @@
   let revealChallengeData: GuessingChallenge | null = null;
   let revealSubmissions: GuessingSubmission[] = [];
   let activeTab: 'running' | 'revealed' = 'running';
+  let refreshInterval: ReturnType<typeof setInterval> | null = null;
+  let socketCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
-    loadChallenges();
+    console.log('[HostGuessingDashboard] Component mounted, loading challenges...');
+    
+    // Only load if socket is available
+    if ($socket) {
+      loadChallenges();
+    } else {
+      console.warn('[HostGuessingDashboard] Socket not available on mount, waiting...');
+      // Wait for socket to be available (max 5 seconds)
+      let attempts = 0;
+      socketCheckInterval = setInterval(() => {
+        attempts++;
+        if ($socket) {
+          console.log('[HostGuessingDashboard] Socket available, loading challenges');
+          if (socketCheckInterval) {
+            clearInterval(socketCheckInterval);
+            socketCheckInterval = null;
+          }
+          loadChallenges();
+        } else if (attempts >= 50) {
+          // Stop checking after 5 seconds (50 * 100ms)
+          console.warn('[HostGuessingDashboard] Socket not available after 5 seconds, giving up');
+          if (socketCheckInterval) {
+            clearInterval(socketCheckInterval);
+            socketCheckInterval = null;
+          }
+          error = 'Socket connection not available. Please refresh the page.';
+        }
+      }, 100);
+    }
 
     // Refresh challenges periodically (every 30 seconds)
-    const refreshInterval = setInterval(() => {
-      loadChallenges();
+    refreshInterval = setInterval(() => {
+      if ($socket && !loading) {
+        console.log('[HostGuessingDashboard] Periodic refresh triggered');
+        loadChallenges();
+      }
     }, 30000);
 
     // Cleanup on destroy
     return () => {
-      clearInterval(refreshInterval);
+      console.log('[HostGuessingDashboard] Component unmounting, cleaning up intervals');
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+      }
+      if (socketCheckInterval) {
+        clearInterval(socketCheckInterval);
+        socketCheckInterval = null;
+      }
     };
+  });
+  
+  onDestroy(() => {
+    console.log('[HostGuessingDashboard] Component destroyed, cleaning up');
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+    if (socketCheckInterval) {
+      clearInterval(socketCheckInterval);
+      socketCheckInterval = null;
+    }
   });
 
   function loadChallenges() {
-    if (!$socket || loading) return;
+    if (!$socket || loading) {
+      console.log('[HostGuessingDashboard] loadChallenges skipped:', { hasSocket: !!$socket, loading });
+      return;
+    }
+    console.log('[HostGuessingDashboard] loadChallenges called for room:', roomCode);
     loading = true;
     error = '';
 
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    
+    // Add timeout to prevent infinite loading
+    timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('[HostGuessingDashboard] loadChallenges timeout - no response received');
+        loading = false;
+        error = 'Request timed out. Please try again.';
+        timeoutId = null;
+      }
+    }, 10000); // 10 second timeout
+    
     $socket.emit('get_guessing_challenges', roomCode, (response: any) => {
+      // Clear timeout since we got a response
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
+      console.log('[HostGuessingDashboard] get_guessing_challenges response:', response);
       loading = false;
-      if (response.success) {
+      if (response && response.success) {
         challenges = response.challenges || [];
+        console.log('[HostGuessingDashboard] Loaded challenges:', challenges.length);
         
         // Check for auto-reveal
         checkAutoReveal();
       } else {
-        error = response.error || t('guessing.dashboard.errors.loadFailed');
+        error = response?.error || t('guessing.dashboard.errors.loadFailed');
+        console.error('[HostGuessingDashboard] Failed to load challenges:', error);
       }
     });
   }
 
   function checkAutoReveal() {
-    if (!$socket) return;
+    if (!$socket) {
+      console.log('[HostGuessingDashboard] checkAutoReveal skipped: no socket');
+      return;
+    }
+    console.log('[HostGuessingDashboard] checkAutoReveal called');
     // Check if any challenges should be auto-revealed
     $socket.emit('check_auto_reveal', roomCode, (response: any) => {
-      if (response.success && response.revealed && response.revealed.length > 0) {
+      console.log('[HostGuessingDashboard] check_auto_reveal response:', response);
+      if (response && response.success && response.revealed && response.revealed.length > 0) {
+        console.log('[HostGuessingDashboard] Auto-revealed challenges, reloading...');
         // Reload challenges if any were auto-revealed
         loadChallenges();
       }
@@ -162,14 +247,9 @@
       // Now reveal the challenge
       $socket.emit('reveal_guessing_challenge', challengeId, roomCode, (response: any) => {
         if (response.success) {
-          // Find the challenge object
-          const challenge = challenges.find(c => c.id === challengeId);
-          if (challenge) {
-            // Open the reveal modal with challenge and submissions
-            revealChallengeData = challenge;
-            revealSubmissions = submissionsResponse.submissions || [];
-            revealModalOpen = true;
-          }
+          // Don't open the reveal modal on controller - it will be shown on display screen
+          // The server will emit challenge_revealed event to host-display sockets
+          console.log('[HostGuessingDashboard] Challenge revealed, display screen will show results');
           
           loadChallenges();
           revealConfirm = null;

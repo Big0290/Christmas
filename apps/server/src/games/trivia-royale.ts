@@ -1,14 +1,16 @@
 import {
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   TriviaGameState,
   TriviaQuestion,
   Player,
+  Room,
   shuffleArray,
   calculateSpeedBonus,
   calculateAccuracyScore,
   TriviaRoyaleSettings,
+  RenderDescriptor,
 } from '@christmas/core';
 import { translateQuestion } from '../utils/translations.js';
 
@@ -201,7 +203,7 @@ const DEFAULT_QUESTIONS: TriviaQuestion[] = [
   },
 ];
 
-export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
+export class TriviaRoyaleGame extends PluginGameEngine<TriviaGameState> {
   private questions: TriviaQuestion[] = [];
   private timePerQuestion: number = 15000; // 15 seconds
   private speedBonusMultiplier: number = 1.5;
@@ -209,10 +211,11 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
 
   constructor(
     players: Map<string, Player>,
+    roomCode: string,
     customQuestions?: TriviaQuestion[],
     settings?: TriviaRoyaleSettings
   ) {
-    super(GameType.TRIVIA_ROYALE, players);
+    super(GameType.TRIVIA_ROYALE, players, roomCode);
 
     // Use provided settings or defaults
     this.settings = settings || {
@@ -243,6 +246,16 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
 
     // Set speed bonus multiplier
     this.speedBonusMultiplier = this.settings.speedBonusMultiplier;
+    
+    console.log(`[TriviaRoyaleGame] Settings applied:`, {
+      questionCount: this.settings.questionCount,
+      timePerQuestion: this.settings.timePerQuestion,
+      maxRounds: this.state.maxRounds,
+      timePerQuestionMs: this.timePerQuestion,
+      speedBonusMultiplier: this.speedBonusMultiplier,
+      difficulty: this.settings.difficulty,
+      scoringStrategy: this.settings.scoringStrategy
+    });
   }
 
   protected createInitialState(): TriviaGameState {
@@ -391,7 +404,8 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
     }, 8000); // Extended to 8 seconds to show reveal
   }
 
-  handlePlayerAction(playerId: string, action: string, data: any): void {
+  // Implement PluginGameEngine abstract method
+  protected handlePlayerActionImpl(playerId: string, action: string, data: any): void {
     if (action === 'answer' && this.state.state === GameState.PLAYING) {
       if (this.state.answers[playerId] === undefined) {
         this.state.answers[playerId] = data.answerIndex;
@@ -444,6 +458,36 @@ export class TriviaRoyaleGame extends BaseGameEngine<TriviaGameState> {
       playersByAnswer: this.state.playersByAnswer,
       showReveal: this.state.showReveal,
       revealStartTime: this.state.revealStartTime,
+    };
+  }
+
+  // ========================================================================
+  // GamePlugin interface implementation
+  // ========================================================================
+
+  init(roomState: Room): void {
+    console.log(`[TriviaRoyaleGame] Initialized for room ${roomState.code}`);
+  }
+
+  getRenderDescriptor(): RenderDescriptor {
+    return {
+      layout: 'grid',
+      components: [
+        {
+          type: 'question-display',
+          position: { x: 0, y: 0, width: 100, height: 60 },
+          props: {},
+        },
+        {
+          type: 'answer-options',
+          position: { x: 0, y: 60, width: 100, height: 40 },
+          props: {},
+        },
+      ],
+      config: {
+        gridColumns: 1,
+        gridRows: 2,
+      },
     };
   }
 }

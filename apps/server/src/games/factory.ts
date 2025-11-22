@@ -1,7 +1,7 @@
 import {
   GameType,
   Player,
-  BaseGameEngine,
+  PluginGameEngine,
   TriviaQuestion,
   PriceItem,
   NaughtyPrompt,
@@ -18,7 +18,50 @@ import { PriceIsRightGame } from './price-is-right.js';
 import { BingoGame } from './bingo.js';
 
 export class GameFactory {
+  /**
+   * Create a game instance.
+   * All games now extend PluginGameEngine directly, providing FSM and plugin support.
+   */
   static createGame(
+    gameType: GameType,
+    players: Map<string, Player>,
+    roomCode: string,
+    customQuestions?: TriviaQuestion[],
+    customItems?: PriceItem[],
+    customPrompts?: NaughtyPrompt[],
+    settings?:
+      | TriviaRoyaleSettings
+      | PriceIsRightSettings
+      | NaughtyOrNiceSettings
+      | EmojiCarolSettings
+      | BingoSettings
+  ): PluginGameEngine | null {
+    switch (gameType) {
+      case GameType.TRIVIA_ROYALE:
+        return new TriviaRoyaleGame(players, roomCode, customQuestions, settings as TriviaRoyaleSettings);
+      
+      case GameType.BINGO:
+        return new BingoGame(players, roomCode, settings as BingoSettings);
+      
+      case GameType.PRICE_IS_RIGHT:
+        return new PriceIsRightGame(players, roomCode, customItems, settings as PriceIsRightSettings);
+      
+      case GameType.NAUGHTY_OR_NICE:
+        return new NaughtyOrNiceGame(players, roomCode, customPrompts, settings as NaughtyOrNiceSettings);
+      
+      case GameType.EMOJI_CAROL:
+        return new EmojiCarolGame(players, roomCode, settings as EmojiCarolSettings);
+      
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Create game without roomCode (legacy support - uses empty string)
+   * @deprecated Use createGame with roomCode instead
+   */
+  static createGameLegacy(
     gameType: GameType,
     players: Map<string, Player>,
     customQuestions?: TriviaQuestion[],
@@ -30,25 +73,7 @@ export class GameFactory {
       | NaughtyOrNiceSettings
       | EmojiCarolSettings
       | BingoSettings
-  ): BaseGameEngine | null {
-    switch (gameType) {
-      case GameType.TRIVIA_ROYALE:
-        return new TriviaRoyaleGame(players, customQuestions, settings as TriviaRoyaleSettings);
-
-      case GameType.EMOJI_CAROL:
-        return new EmojiCarolGame(players, settings as EmojiCarolSettings);
-
-      case GameType.NAUGHTY_OR_NICE:
-        return new NaughtyOrNiceGame(players, customPrompts, settings as NaughtyOrNiceSettings);
-
-      case GameType.PRICE_IS_RIGHT:
-        return new PriceIsRightGame(players, customItems, settings as PriceIsRightSettings);
-
-      case GameType.BINGO:
-        return new BingoGame(players, settings as BingoSettings);
-
-      default:
-        return null;
-    }
+  ): PluginGameEngine | null {
+    return this.createGame(gameType, players, '', customQuestions, customItems, customPrompts, settings);
   }
 }

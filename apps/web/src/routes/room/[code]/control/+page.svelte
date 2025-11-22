@@ -186,8 +186,38 @@
     const maxX = window.innerWidth - previewWidth;
     const maxY = window.innerHeight - previewHeight;
     
-    previewX = Math.max(0, Math.min(newX, maxX));
-    previewY = Math.max(0, Math.min(newY, maxY));
+    // Prevent preview from overlapping control toggle button area
+    // Toggle button is at: top: calc(clamp(60px, 8vh, 70px) + 1rem), right: 1rem, size: 48px
+    const headerHeight = Math.max(60, Math.min(window.innerHeight * 0.08, 70));
+    const toggleTop = headerHeight + 16; // 1rem = 16px
+    const toggleRight = 16; // 1rem = 16px
+    const toggleSize = 48;
+    const toggleBottom = toggleTop + toggleSize;
+    const toggleLeft = window.innerWidth - toggleRight - toggleSize;
+    
+    // Add padding to prevent overlap
+    const padding = 10;
+    const minX = 0;
+    const minY = 0;
+    const maxXConstrained = Math.min(maxX, toggleLeft - previewWidth - padding);
+    const maxYConstrained = Math.min(maxY, toggleTop - previewHeight - padding);
+    
+    // If preview would overlap toggle area, constrain it
+    let constrainedX = newX;
+    let constrainedY = newY;
+    
+    if (newX + previewWidth + padding > toggleLeft && newX < toggleLeft + toggleSize + padding) {
+      // Would overlap horizontally - constrain to left of toggle
+      constrainedX = Math.min(newX, toggleLeft - previewWidth - padding);
+    }
+    
+    if (newY + previewHeight + padding > toggleTop && newY < toggleBottom + padding) {
+      // Would overlap vertically - constrain above toggle
+      constrainedY = Math.min(newY, toggleTop - previewHeight - padding);
+    }
+    
+    previewX = Math.max(minX, Math.min(constrainedX, maxX));
+    previewY = Math.max(minY, Math.min(constrainedY, maxY));
   }
 
   function handleDragEnd() {
@@ -689,38 +719,75 @@
   $: maxRounds = $gameState?.maxRounds ?? 0;
 
   $: {
+    // Sync isPaused with currentState
     if (currentState === GameState.PAUSED) {
       isPaused = true;
-    } else if (currentState === GameState.PLAYING) {
+    } else if (currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END) {
       isPaused = false;
     }
+    console.log('[Control] State updated:', {
+      currentState,
+      isPaused,
+      gameType: currentGameType
+    });
   }
 
-  // Quick controls state
+  // Quick controls state - show buttons based on game state, not socket connection
+  // Socket check happens in the handler, not in visibility condition
   $: isGameActive = currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END;
   $: canPause = isGameActive && !isPaused;
-  $: canResume = isPaused;
-  $: showQuickControls = isGameActive || isPaused;
+  $: canResume = isPaused || currentState === GameState.PAUSED;
+  $: showQuickControls = isGameActive || isPaused || currentState === GameState.PAUSED;
+  
+  // Debug reactive state
+  $: {
+    console.log('[Control] Quick controls state:', {
+      isGameActive,
+      isPaused,
+      currentState,
+      canPause,
+      canResume,
+      showQuickControls,
+      round,
+      maxRounds,
+      hasSocket: !!$socket,
+      connected: $connected,
+      gameStateRound: $gameState?.round
+    });
+  }
 
   function quickPauseGame() {
-    if (!$socket || !canPause) return;
+    console.log('[Control] quickPauseGame called, socket:', !!$socket, 'canPause:', canPause);
+    if (!$socket || !canPause) {
+      console.warn('[Control] Cannot pause: socket=', !!$socket, 'canPause=', canPause);
+      return;
+    }
+    console.log('[Control] Emitting pause_game event');
     $socket.emit('pause_game');
     playSound('click');
   }
 
   function quickResumeGame() {
-    if (!$socket || !canResume) return;
+    console.log('[Control] quickResumeGame called, socket:', !!$socket, 'canResume:', canResume);
+    if (!$socket || !canResume) {
+      console.warn('[Control] Cannot resume: socket=', !!$socket, 'canResume=', canResume);
+      return;
+    }
+    console.log('[Control] Emitting resume_game event');
     $socket.emit('resume_game');
     playSound('click');
   }
 
   function quickEndGame() {
+    console.log('[Control] quickEndGame called, socket:', !!$socket);
     if (!$socket) {
       alert(t('host.errors.noConnection') || 'Not connected to server');
       return;
     }
     showConfirmation(t('host.confirmEndGame') || 'Are you sure you want to end the game?', () => {
+      console.log('[Control] Confirmed end game, emitting end_game event');
       ($socket as any).emit('end_game', (response: any) => {
+        console.log('[Control] end_game response:', response);
         if (response && response.success) {
           playSoundOnce('gameEnd', 1000);
         } else {
@@ -802,19 +869,19 @@
     <HostHeader {roomCode} {isPaused} {round} {maxRounds} onReconnect={handleManualReconnect} />
 
     <!-- Quick Controls Bar (Always Visible) -->
-    {#if showQuickControls}
+    {#if showQuickControls || isGameActive || isPaused || currentState === GameState.PAUSED}
       <div class="quick-controls-bar">
         {#if canPause}
-          <button on:click={quickPauseGame} class="quick-control-btn pause-btn" title={t('host.pause') || 'Pause Game'}>
+          <button on:click|stopPropagation={quickPauseGame} class="quick-control-btn pause-btn" title={t('host.pause') || 'Pause Game'} type="button">
             ⏸️ {t('host.pause') || 'Pause'}
           </button>
         {:else if canResume}
-          <button on:click={quickResumeGame} class="quick-control-btn resume-btn" title={t('host.resume') || 'Resume Game'}>
+          <button on:click|stopPropagation={quickResumeGame} class="quick-control-btn resume-btn" title={t('host.resume') || 'Resume Game'} type="button">
             ▶️ {t('host.resume') || 'Resume'}
           </button>
         {/if}
-        {#if isGameActive}
-          <button on:click={quickEndGame} class="quick-control-btn stop-btn" title={t('host.endGame') || 'End Game'}>
+        {#if isGameActive || currentState === GameState.PAUSED || currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END}
+          <button on:click|stopPropagation={quickEndGame} class="quick-control-btn stop-btn" title={t('host.endGame') || 'End Game'} type="button">
             ⏹️ {t('host.endGame') || 'Stop'}
           </button>
         {/if}
@@ -1095,6 +1162,7 @@
     display: flex;
     flex-direction: column;
     user-select: none;
+    pointer-events: auto;
   }
 
   .live-preview.dragging {
@@ -1166,6 +1234,7 @@
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 215, 0, 0.3);
     backdrop-filter: blur(10px);
+    pointer-events: auto !important;
   }
 
   .quick-control-btn {
@@ -1180,6 +1249,9 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 1;
   }
 
   .pause-btn {

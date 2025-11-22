@@ -1,22 +1,24 @@
 import {
-  BaseGameEngine,
+  PluginGameEngine,
   GameType,
   GameState,
   EmojiCarolGameState,
   Player,
+  Room,
+  RenderDescriptor,
   calculateSpeedBonus,
   EmojiCarolSettings,
 } from '@christmas/core';
 
 const DEFAULT_EMOJIS = ['🎅', '🎄', '⛄', '🎁', '🔔', '⭐', '🕯️', '🦌', '🤶', '🧝', '🎿', '⛷️'];
 
-export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
+export class EmojiCarolGame extends PluginGameEngine<EmojiCarolGameState> {
   private timePerRound: number = 15000; // 15 seconds
   private settings: EmojiCarolSettings;
   private uniquePickBonus: number = 5;
 
-  constructor(players: Map<string, Player>, settings?: EmojiCarolSettings) {
-    super(GameType.EMOJI_CAROL, players);
+  constructor(players: Map<string, Player>, roomCode: string, settings?: EmojiCarolSettings) {
+    super(GameType.EMOJI_CAROL, players, roomCode);
 
     // Use provided settings or defaults
     this.settings = settings || {
@@ -35,6 +37,14 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
 
     // Update maxRounds based on settings (createInitialState is called before settings are set)
     this.state.maxRounds = this.settings.roundCount;
+    
+    console.log(`[EmojiCarolGame] Settings applied:`, {
+      roundCount: this.settings.roundCount,
+      timePerRound: this.settings.timePerRound,
+      maxRounds: this.state.maxRounds,
+      timePerRoundMs: this.timePerRound,
+      uniquePickBonus: this.uniquePickBonus
+    });
   }
 
   protected createInitialState(): EmojiCarolGameState {
@@ -147,7 +157,7 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
     }, 5000);
   }
 
-  handlePlayerAction(playerId: string, action: string, data: any): void {
+  protected handlePlayerActionImpl(playerId: string, action: string, data: any): void {
     if (action === 'pick' && this.state.state === GameState.PLAYING) {
       if (!this.state.playerPicks[playerId]) {
         this.state.playerPicks[playerId] = data.emoji;
@@ -183,6 +193,28 @@ export class EmojiCarolGame extends BaseGameEngine<EmojiCarolGameState> {
       ...this.state,
       hasPicked: this.state.playerPicks[playerId] !== undefined,
       scoreboard: this.getScoreboard(),
+    };
+  }
+
+  // PluginGameEngine interface implementation
+  init(roomState: Room): void {
+    console.log(`[EmojiCarolGame] Initialized for room ${roomState.code}`);
+  }
+
+  getRenderDescriptor(): RenderDescriptor {
+    return {
+      layout: 'grid',
+      components: [
+        {
+          type: 'emoji-selector',
+          position: { x: 0, y: 0, width: 100, height: 100 },
+          props: {},
+        },
+      ],
+      config: {
+        gridColumns: 1,
+        gridRows: 1,
+      },
     };
   }
 }

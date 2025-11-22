@@ -1,4 +1,4 @@
-import { Socket } from 'socket.io';
+import { Socket, Server } from 'socket.io';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { RoomManager } from '../managers/room-manager.js';
 import type { RoomEngine } from '../engine/room-engine.js';
@@ -27,6 +27,7 @@ async function sha256(data: string): Promise<string> {
  * Setup guessing game socket event handlers
  */
 export function setupGuessingHandlers(
+  io: Server,
   socket: Socket,
   roomEngine: RoomEngine,
   supabase: SupabaseClient | null
@@ -52,8 +53,9 @@ export function setupGuessingHandlers(
           return;
         }
 
+        // Verify socket is in the correct room
         const roomInfo = roomEngine.getRoomBySocketId(socket.id);
-        if (!roomInfo || roomInfo.room.hostId !== socket.id) {
+        if (!roomInfo || roomInfo.room.code !== roomCode.toUpperCase()) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
         }
@@ -241,8 +243,9 @@ export function setupGuessingHandlers(
           return;
         }
 
+        // Verify socket is in the correct room
         const roomInfo = roomEngine.getRoomBySocketId(socket.id);
-        if (!roomInfo || roomInfo.room.hostId !== socket.id) {
+        if (!roomInfo || roomInfo.room.code !== roomCode.toUpperCase()) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
         }
@@ -338,8 +341,9 @@ export function setupGuessingHandlers(
           return;
         }
 
+        // Verify socket is in the correct room
         const roomInfo = roomEngine.getRoomBySocketId(socket.id);
-        if (!roomInfo || roomInfo.room.hostId !== socket.id) {
+        if (!roomInfo || roomInfo.room.code !== roomCode.toUpperCase()) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
         }
@@ -464,8 +468,9 @@ export function setupGuessingHandlers(
           return;
         }
 
+        // Verify socket is in the correct room
         const roomInfo = roomEngine.getRoomBySocketId(socket.id);
-        if (!roomInfo || roomInfo.room.hostId !== socket.id) {
+        if (!roomInfo || roomInfo.room.code !== roomCode.toUpperCase()) {
           callback({ success: false, error: 'You must be the host of this room' });
           return;
         }
@@ -489,6 +494,89 @@ export function setupGuessingHandlers(
           callback({ success: false, error: error.message || 'Failed to reveal challenge' });
           return;
         }
+
+        // Get submissions for this challenge to send to display screen
+        const { data: submissionsData, error: submissionsError } = await supabase
+          .from('guessing_submissions')
+          .select('*')
+          .eq('challenge_id', challengeId)
+          .eq('room_code', roomCode.toUpperCase())
+          .order('difference', { ascending: true })
+          .order('submitted_at', { ascending: true });
+
+        const submissions = submissionsData || [];
+
+        // Emit reveal event to host-display sockets in the room
+        // Use setImmediate to ensure Socket.IO room membership is fully established
+        const normalizedRoomCode = roomCode.toUpperCase();
+        const revealData = {
+          challenge: data,
+          submissions: submissions
+        };
+        
+        setImmediate(() => {
+          try {
+            const socketsInRoom = io.sockets.adapter.rooms.get(normalizedRoomCode);
+            console.log(`[Guessing Game] 🔍 Looking for host-display sockets in room ${normalizedRoomCode}, found ${socketsInRoom?.size || 0} socket(s) in room`);
+            
+            let hostDisplayCount = 0;
+            const hostDisplaySockets: string[] = [];
+            
+            if (socketsInRoom && socketsInRoom.size > 0) {
+              for (const socketId of socketsInRoom) {
+                try {
+                  const targetSocket = io.sockets.sockets.get(socketId);
+                  if (targetSocket && targetSocket.connected) {
+                    const role = (targetSocket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socketId);
+                    console.log(`[Guessing Game] 🔍 Socket ${socketId.substring(0, 8)} in room ${normalizedRoomCode} has role: ${role || 'undefined'}`);
+                    if (role === 'host-display') {
+                      hostDisplayCount++;
+                      hostDisplaySockets.push(socketId);
+                      console.log(`[Guessing Game] ✅ Found host-display socket ${socketId.substring(0, 8)}, will emit challenge_revealed`);
+                    }
+                  } else {
+                    console.log(`[Guessing Game] ⚠️ Socket ${socketId.substring(0, 8)} found in room but not connected or not found`);
+                  }
+                } catch (socketError) {
+                  console.error(`[Guessing Game] Error checking socket ${socketId.substring(0, 8)}:`, socketError);
+                }
+              }
+            } else {
+              console.warn(`[Guessing Game] ⚠️ No sockets found in room ${normalizedRoomCode} at all`);
+            }
+            
+            // Emit to identified host-display sockets
+            if (hostDisplaySockets.length > 0) {
+              for (const socketId of hostDisplaySockets) {
+                try {
+                  const targetSocket = io.sockets.sockets.get(socketId);
+                  if (targetSocket && targetSocket.connected) {
+                    console.log(`[Guessing Game] 📤 Emitting challenge_revealed to host-display socket ${socketId.substring(0, 8)}`);
+                    targetSocket.emit('challenge_revealed', revealData);
+                    console.log(`[Guessing Game] ✅ Successfully emitted challenge_revealed to ${socketId.substring(0, 8)}`);
+                  }
+                } catch (emitError) {
+                  console.error(`[Guessing Game] Error emitting to socket ${socketId.substring(0, 8)}:`, emitError);
+                }
+              }
+              console.log(`[Guessing Game] ✅ Emitted challenge_revealed to ${hostDisplayCount} host-display socket(s)`);
+            } else {
+              console.warn(`[Guessing Game] ⚠️ No host-display sockets found in room ${normalizedRoomCode}, emitting to entire room as fallback`);
+              // Fallback: emit to entire room (display screen will handle it, controller will ignore)
+              io.to(normalizedRoomCode).emit('challenge_revealed', revealData);
+              console.log(`[Guessing Game] 🔄 Fallback: Emitted challenge_revealed to entire room ${normalizedRoomCode}`);
+            }
+          } catch (error) {
+            console.error('[Guessing Game] Error in setImmediate reveal handler:', error);
+            // Fallback: emit to entire room on error
+            try {
+              io.to(normalizedRoomCode).emit('challenge_revealed', revealData);
+              console.log(`[Guessing Game] 🔄 Error fallback: Emitted challenge_revealed to entire room ${normalizedRoomCode}`);
+            } catch (fallbackError) {
+              console.error('[Guessing Game] Error in fallback emit:', fallbackError);
+            }
+          }
+        });
 
         console.log(`[Guessing Game] Revealed challenge ${challengeId} in room ${roomCode}`);
         callback({ success: true, challenge: data });
@@ -628,6 +716,87 @@ export function setupGuessingHandlers(
         console.error('[Guessing Game] Error auto-revealing challenges:', updateError);
         callback({ success: false, error: updateError.message || 'Failed to auto-reveal' });
         return;
+      }
+
+      // Emit challenge_revealed events for each auto-revealed challenge
+      if (revealedChallenges && revealedChallenges.length > 0) {
+        const normalizedRoomCode = roomCode.toUpperCase();
+        
+        // Use setImmediate to ensure Socket.IO room membership is fully established
+        setImmediate(async () => {
+          try {
+            const socketsInRoom = io.sockets.adapter.rooms.get(normalizedRoomCode);
+            console.log(`[Guessing Game] 🔍 Auto-reveal: Looking for host-display sockets in room ${normalizedRoomCode}, found ${socketsInRoom?.size || 0} socket(s)`);
+            
+            for (const challenge of revealedChallenges) {
+              try {
+                // Get submissions for this challenge
+                const { data: submissionsData } = await supabase
+                  .from('guessing_submissions')
+                  .select('*')
+                  .eq('challenge_id', challenge.id)
+                  .eq('room_code', normalizedRoomCode)
+                  .order('difference', { ascending: true })
+                  .order('submitted_at', { ascending: true });
+
+                const submissions = submissionsData || [];
+                let hostDisplayCount = 0;
+                const hostDisplaySockets: string[] = [];
+
+                // Emit to host-display sockets
+                if (socketsInRoom && socketsInRoom.size > 0) {
+                  for (const socketId of socketsInRoom) {
+                    try {
+                      const targetSocket = io.sockets.sockets.get(socketId);
+                      if (targetSocket && targetSocket.connected) {
+                        const role = (targetSocket.data as any)?.role || roomEngine.connectionManager.getSocketRole(socketId);
+                        console.log(`[Guessing Game] 🔍 Auto-reveal: Socket ${socketId.substring(0, 8)} has role: ${role || 'undefined'}`);
+                        if (role === 'host-display') {
+                          hostDisplayCount++;
+                          hostDisplaySockets.push(socketId);
+                          console.log(`[Guessing Game] ✅ Auto-reveal: Found host-display socket ${socketId.substring(0, 8)}`);
+                        }
+                      }
+                    } catch (socketError) {
+                      console.error(`[Guessing Game] Auto-reveal: Error checking socket ${socketId.substring(0, 8)}:`, socketError);
+                    }
+                  }
+                }
+                
+                // Emit to identified sockets
+                if (hostDisplaySockets.length > 0) {
+                  for (const socketId of hostDisplaySockets) {
+                    try {
+                      const targetSocket = io.sockets.sockets.get(socketId);
+                      if (targetSocket && targetSocket.connected) {
+                        console.log(`[Guessing Game] 📤 Auto-reveal: Emitting challenge_revealed to host-display socket ${socketId.substring(0, 8)}`);
+                        targetSocket.emit('challenge_revealed', {
+                          challenge: challenge,
+                          submissions: submissions
+                        });
+                        console.log(`[Guessing Game] ✅ Auto-reveal: Successfully emitted to ${socketId.substring(0, 8)}`);
+                      }
+                    } catch (emitError) {
+                      console.error(`[Guessing Game] Auto-reveal: Error emitting to socket ${socketId.substring(0, 8)}:`, emitError);
+                    }
+                  }
+                  console.log(`[Guessing Game] ✅ Auto-reveal: Emitted challenge_revealed to ${hostDisplayCount} host-display socket(s)`);
+                } else {
+                  console.warn(`[Guessing Game] ⚠️ Auto-reveal: No host-display sockets found, emitting to entire room as fallback`);
+                  io.to(normalizedRoomCode).emit('challenge_revealed', {
+                    challenge: challenge,
+                    submissions: submissions
+                  });
+                  console.log(`[Guessing Game] 🔄 Auto-reveal: Fallback emitted to entire room ${normalizedRoomCode}`);
+                }
+              } catch (challengeError) {
+                console.error(`[Guessing Game] Auto-reveal: Error processing challenge ${challenge.id}:`, challengeError);
+              }
+            }
+          } catch (error) {
+            console.error('[Guessing Game] Auto-reveal: Error in setImmediate handler:', error);
+          }
+        });
       }
 
       console.log(`[Guessing Game] Auto-revealed ${revealedChallenges?.length || 0} challenges in room ${roomCode}`);

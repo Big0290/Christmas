@@ -27,8 +27,24 @@
   export let showConfirmation: (message: string, action: () => void) => void;
 
   $: isGameActive = currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END;
+  // Show buttons based on game state, not socket connection (socket check in handler)
   $: canPause = isGameActive && !isPaused;
-  $: canResume = isPaused;
+  $: canResume = isPaused || currentState === GameState.PAUSED;
+  
+  // Debug reactive state
+  $: {
+    console.log('[HostControlPanel] Button state:', {
+      isGameActive,
+      isPaused,
+      currentState,
+      canPause,
+      canResume,
+      round,
+      maxRounds,
+      hasSocket: !!$socket,
+      socketConnected: ($socket as any)?.connected
+    });
+  }
 
   // Make translations reactive by subscribing to language changes
   // Include $language in each reactive statement so Svelte knows to re-run when language changes
@@ -133,16 +149,21 @@
   let loadingSettings = false;
 
   function toggleControlPanel() {
+    console.log('[HostControlPanel] toggleControlPanel called, current state:', controlPanelOpen);
     controlPanelOpen = !controlPanelOpen;
+    console.log('[HostControlPanel] toggleControlPanel new state:', controlPanelOpen);
   }
 
   function endGame() {
+    console.log('[HostControlPanel] endGame called, socket:', !!$socket);
     if (!$socket) {
       alert(t('host.errors.noConnection') || 'Not connected to server');
       return;
     }
     showConfirmation(t('host.confirmEndGame'), () => {
+      console.log('[HostControlPanel] Confirmed end game, emitting end_game event');
       ($socket as any).emit('end_game', (response: any) => {
+        console.log('[HostControlPanel] end_game response:', response);
         if (response && response.success) {
           playSoundOnce('gameEnd', 1000);
           setTimeout(() => {
@@ -159,14 +180,24 @@
   }
 
   function pauseGame() {
-    if (!$socket || !canPause) return;
+    console.log('[HostControlPanel] pauseGame called, socket:', !!$socket, 'canPause:', canPause);
+    if (!$socket || !canPause) {
+      console.warn('[HostControlPanel] Cannot pause: socket=', !!$socket, 'canPause=', canPause);
+      return;
+    }
+    console.log('[HostControlPanel] Emitting pause_game event');
     $socket.emit('pause_game');
     isPaused = true;
     playSound('click');
   }
 
   function resumeGame() {
-    if (!$socket || !canResume) return;
+    console.log('[HostControlPanel] resumeGame called, socket:', !!$socket, 'canResume:', canResume);
+    if (!$socket || !canResume) {
+      console.warn('[HostControlPanel] Cannot resume: socket=', !!$socket, 'canResume=', canResume);
+      return;
+    }
+    console.log('[HostControlPanel] Emitting resume_game event');
     $socket.emit('resume_game');
     isPaused = false;
     playSound('click');
@@ -794,11 +825,12 @@
 
 <!-- Control Panel Toggle Button (Hamburger Menu) -->
 <button
-  on:click={toggleControlPanel}
+  on:click|stopPropagation={toggleControlPanel}
   class="control-toggle"
   class:open={controlPanelOpen}
   title={controlPanelOpen ? 'Close Control Panel' : 'Open Control Panel'}
   aria-label={controlPanelOpen ? 'Close menu' : 'Open menu'}
+  type="button"
 >
   <span class="hamburger">
     <span class="hamburger-line"></span>
@@ -811,7 +843,7 @@
 <div class="control-panel" class:open={controlPanelOpen}>
   <div class="panel-header">
     <h2>{controlPanelText}</h2>
-    <button on:click={toggleControlPanel} class="close-btn">✕</button>
+    <button on:click|stopPropagation={toggleControlPanel} class="close-btn" type="button">✕</button>
   </div>
 
   <div class="panel-content">
@@ -819,33 +851,33 @@
     <div class="panel-section game-controls-section">
       <h3>🎮 {gameControlsText}</h3>
       <div class="button-group">
-        {#if isGameActive}
-          <button on:click={endGame} class="btn-danger btn-large">
+        {#if isGameActive || currentState === GameState.PLAYING || currentState === GameState.STARTING || currentState === GameState.ROUND_END}
+          <button on:click|stopPropagation={endGame} class="btn-danger btn-large" type="button">
             ⏹️ {endGameText}
           </button>
           {#if canPause}
-            <button on:click={pauseGame} class="btn-secondary btn-large">
+            <button on:click|stopPropagation={pauseGame} class="btn-secondary btn-large" type="button">
               ⏸️ {pauseText}
             </button>
-          {:else if canResume}
-            <button on:click={resumeGame} class="btn-primary btn-large">
+          {:else if canResume || currentState === GameState.PAUSED}
+            <button on:click|stopPropagation={resumeGame} class="btn-primary btn-large" type="button">
               ▶️ {resumeText}
             </button>
           {/if}
         {:else if currentState === GameState.PAUSED}
-          <button on:click={resumeGame} class="btn-primary btn-large">
+          <button on:click|stopPropagation={resumeGame} class="btn-primary btn-large" type="button">
             ▶️ {resumeText}
           </button>
-          <button on:click={endGame} class="btn-danger btn-large">
+          <button on:click|stopPropagation={endGame} class="btn-danger btn-large" type="button">
             ⏹️ {endGameText}
           </button>
         {/if}
         {#if currentState === GameState.GAME_END}
-          <button on:click={startNewGame} class="btn-primary btn-large">
+          <button on:click|stopPropagation={startNewGame} class="btn-primary btn-large" type="button">
             🚀 {startNewGameText}
           </button>
         {/if}
-        <button on:click={returnToLobby} class="btn-secondary">
+        <button on:click|stopPropagation={returnToLobby} class="btn-secondary" type="button">
           🏠 {returnToLobbyText}
         </button>
       </div>
@@ -1120,6 +1152,14 @@
     justify-content: center;
     transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: auto !important;
+    /* Ensure button is always on top and clickable */
+    position: fixed !important;
+    z-index: 1001 !important;
+  }
+  
+  .control-toggle:active {
+    transform: scale(0.95);
   }
 
   .control-toggle:hover {
@@ -1172,6 +1212,7 @@
     transition: transform 0.3s ease-in-out;
     overflow-y: auto;
     overflow-x: hidden;
+    pointer-events: auto !important;
   }
 
   .control-panel.open {
@@ -1202,10 +1243,17 @@
     padding: 0.5rem;
     line-height: 1;
     transition: transform 0.2s;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 1;
   }
 
   .close-btn:hover {
     transform: rotate(90deg);
+  }
+  
+  .close-btn:active {
+    transform: rotate(90deg) scale(0.9);
   }
 
   .panel-content {
@@ -1245,6 +1293,9 @@
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 1;
   }
 
   .btn-large {

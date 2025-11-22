@@ -6,13 +6,16 @@
   import { get } from 'svelte/store';
   import { socket, connectSocket, gameState, players, connected } from '$lib/socket';
   import { GameState, GameType } from '@christmas/core';
+  import { normalizeGameState, normalizeGameType } from '$lib/utils/game-state';
   import HostGameDisplay from '$lib/components/host/HostGameDisplay.svelte';
   import HostBottomScorebar from '$lib/components/host/HostBottomScorebar.svelte';
   import HostLeaderboardDisplay from '$lib/components/host/HostLeaderboardDisplay.svelte';
   import HostLobbyDisplay from '$lib/components/host/HostLobbyDisplay.svelte';
+  import GuessingRevealModal from '$lib/components/guessing/GuessingRevealModal.svelte';
   import { t, language } from '$lib/i18n';
   import ChristmasLoading from '$lib/components/ChristmasLoading.svelte';
   import { loadRoomTheme, applyRoomTheme, roomTheme, currentRoomCode } from '$lib/theme';
+  import type { GuessingChallenge, GuessingSubmission } from '@christmas/core';
 
   const roomCode = ($page.params.code || '').toUpperCase();
   const role = $page.url.searchParams.get('role');
@@ -67,6 +70,11 @@
   let gameEndedGameType: GameType | null = null;
   let joinUrl = '';
   let origin = '';
+  
+  // Guessing challenge reveal modal state
+  let revealModalOpen = false;
+  let revealChallengeData: GuessingChallenge | null = null;
+  let revealSubmissions: GuessingSubmission[] = [];
 
   onMount(() => {
     // Skip if invalid role or missing sessionStorage mode (already handled above)
@@ -227,6 +235,13 @@
             if (response && response.success) {
               console.log('[Display] ✅ Successfully reconnected as host-display', response);
               
+              // Ensure challenge_revealed listener is still registered after reconnect
+              // (it should be, but verify it's not lost during reconnect)
+              if ($socket) {
+                console.log('[Display] 🔵 Verifying challenge_revealed listener is still registered after reconnect');
+                // The listener should already be set up earlier, but we can verify
+              }
+              
               // Load theme settings for persistence - reconnect response should have theme
               if (response.theme) {
                 console.log('[Display] Applying theme from reconnect response:', response.theme);
@@ -283,6 +298,28 @@
       // NOTE: room_update events are handled by socket.ts (line 422-450)
       // which updates the players store. We don't need a duplicate listener here.
       // The $players store will automatically update when socket.ts receives room_update.
+
+      // Set up challenge_revealed listener FIRST, before reconnect
+      // This ensures we don't miss any reveal events that happen during reconnect
+      console.log('[Display] 🔵 Setting up challenge_revealed listener (early)');
+      ($socket as any).on('challenge_revealed', (data: { challenge: GuessingChallenge; submissions: GuessingSubmission[] }) => {
+        console.log('[Display] 🎯 challenge_revealed event received:', {
+          hasChallenge: !!data?.challenge,
+          hasSubmissions: !!data?.submissions,
+          submissionsCount: data?.submissions?.length || 0,
+          challengeTitle: data?.challenge?.title,
+          fullData: data
+        });
+        if (data && data.challenge) {
+          revealChallengeData = data.challenge;
+          revealSubmissions = data.submissions || [];
+          revealModalOpen = true;
+          console.log('[Display] 🎯 ✅ Opening reveal modal on display screen with challenge:', data.challenge.title, 'submissions:', revealSubmissions.length);
+        } else {
+          console.warn('[Display] ⚠️ challenge_revealed event received but data is invalid:', data);
+        }
+      });
+      console.log('[Display] ✅ challenge_revealed listener registered (early)');
 
       waitForConnection();
 
@@ -347,10 +384,21 @@
               };
             });
           } else {
-            // CRITICAL: Use set() to completely replace state with new data
+            // CRITICAL: Normalize state and gameType before setting
+            // This ensures enum values are used instead of strings
+            const normalizedData = {
+              ...data,
+              state: normalizeGameState(data.state) ?? data.state,
+              gameType: normalizeGameType(data.gameType) ?? data.gameType
+            };
+            // Use set() to completely replace state with new data
             // This ensures game-specific data from display_sync_state overwrites any minimal state from game_started
-            gameState.set(data);
-            console.log('[Display] ✅ Updated gameState store with display_sync_state (complete state replacement)');
+            gameState.set(normalizedData);
+            console.log('[Display] ✅ Updated gameState store with display_sync_state (complete state replacement, normalized):', {
+              state: normalizedData.state,
+              gameType: normalizedData.gameType,
+              hasQuestion: !!normalizedData.currentQuestion
+            });
             
             // Verify the update worked
             const updatedState = get(gameState);
@@ -399,9 +447,18 @@
               };
             });
           } else {
+            // Normalize state and gameType before setting
+            const normalizedData = {
+              ...data,
+              state: normalizeGameState(data.state) ?? data.state,
+              gameType: normalizeGameType(data.gameType) ?? data.gameType
+            };
             // Update gameState store with all data (including game-specific fields)
-            gameState.set(data);
-            console.log('[Display] ✅ Updated gameState store with game_state_update (fallback)');
+            gameState.set(normalizedData);
+            console.log('[Display] ✅ Updated gameState store with game_state_update (fallback, normalized):', {
+              state: normalizedData.state,
+              gameType: normalizedData.gameType
+            });
             
             // Clear game_ended data when state changes away from GAME_END
             if (data.state !== GameState.GAME_END) {
@@ -551,6 +608,9 @@
         });
       });
 
+      // Note: challenge_revealed listener is set up earlier (before waitForConnection)
+      // to ensure we don't miss events during reconnect
+
       // Note: room_update listener is set up earlier, before reconnect
     };
 
@@ -589,10 +649,13 @@
   onDestroy(() => {
     listenersSetup = false;
     if ($socket) {
+      console.log('[Display] 🔴 Cleaning up socket listeners');
       ($socket as any).off('display_sync_state');
       $socket.off('game_state_update');
       $socket.off('game_ended');
       $socket.off('game_started');
+      ($socket as any).off('challenge_revealed');
+      console.log('[Display] ✅ Socket listeners cleaned up');
       // NOTE: room_update listener is handled by socket.ts, no need to clean up here
     }
     if (connectionTimeout) clearTimeout(connectionTimeout);
@@ -601,6 +664,12 @@
       connectionSubscription = null;
     }
   });
+
+  function handleRevealModalClose() {
+    revealModalOpen = false;
+    revealChallengeData = null;
+    revealSubmissions = [];
+  }
 
   // Always use $gameState as source of truth for synchronization
   $: currentState = $gameState?.state;
@@ -730,6 +799,15 @@
       {/if}
     {/if}
   </div>
+{/if}
+
+{#if revealModalOpen && revealChallengeData}
+  <GuessingRevealModal
+    open={revealModalOpen}
+    challenge={revealChallengeData}
+    submissions={revealSubmissions}
+    on:close={handleRevealModalClose}
+  />
 {/if}
 
 <style>

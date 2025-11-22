@@ -1,10 +1,14 @@
 import { Server, Socket } from 'socket.io';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { sanitizePlayerName, GameState, RateLimiter } from '@christmas/core';
+import { sanitizePlayerName, GameState, RateLimiter, Intent, IntentResult } from '@christmas/core';
 import type { RoomEngine } from '../engine/room-engine.js';
 import type { AchievementManager } from '../managers/achievement-manager.js';
+import { MessageValidator } from '../engine/message-validator.js';
+import { RoleValidator } from '../engine/role-validator.js';
 
-const rateLimiter = new RateLimiter(20, 1000); // 20 requests per second
+const rateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 1000 }); // 20 requests per second
+const messageValidator = new MessageValidator();
+const roleValidator = new RoleValidator();
 
 /**
  * Sets up player-specific socket event handlers
@@ -35,11 +39,25 @@ export function setupPlayerHandlers(
       return handler(...args);
     });
   };
-  const checkRateLimit = (): boolean => {
-    if (!rateLimiter.isAllowed(socket.id)) {
+  const checkRateLimit = (actionType?: string): boolean => {
+    const roomInfo = roomEngine.connectionManager.getRoomInfoBySocketId(socket.id);
+    const roomCode = roomInfo?.roomCode;
+    
+    if (!rateLimiter.isAllowedForClient(socket.id, actionType)) {
       socket.emit('error', 'Rate limit exceeded');
       return false;
     }
+    
+    if (roomCode && !rateLimiter.isAllowedForRoom(roomCode, actionType)) {
+      socket.emit('error', 'Room rate limit exceeded');
+      return false;
+    }
+    
+    if (actionType && !rateLimiter.isAllowedForAction(actionType, socket.id, roomCode)) {
+      socket.emit('error', 'Action rate limit exceeded');
+      return false;
+    }
+    
     return true;
   };
 
@@ -47,14 +65,81 @@ export function setupPlayerHandlers(
     roomEngine.broadcastGameState(roomCode);
   };
 
-  const handleGameAction = (action: string, data: any): void => {
-    if (!checkRateLimit()) return;
+  /**
+   * Submit an intent for processing (new intent-based system)
+   */
+  const submitIntent = (action: string, data: any, callback?: (result: IntentResult) => void): void => {
+    if (!checkRateLimit(action)) return;
 
     const roomInfo = roomEngine.connectionManager.getRoomInfoBySocketId(socket.id);
-    if (!roomInfo || roomInfo.isHost) return; // Only players can perform game actions, not hosts
+    if (!roomInfo || roomInfo.isHost) {
+      socket.emit('error', 'Only players can submit game intents');
+      if (callback) callback({ success: false, intentId: '', error: 'Invalid role' });
+      return;
+    }
 
-    roomEngine.handlePlayerAction(roomInfo.roomCode, socket.id, action, data);
-    broadcastGameState(roomInfo.roomCode);
+    // Validate role
+    const roleValidation = roleValidator.validateRoleAndAction('player', action);
+    if (!roleValidation.valid) {
+      socket.emit('error', roleValidation.error);
+      if (callback) callback({ success: false, intentId: '', error: roleValidation.error });
+      return;
+    }
+
+    // Create intent
+    const intent: Intent = {
+      id: `intent_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      type: `game_${action}`,
+      playerId: socket.id,
+      roomCode: roomInfo.roomCode,
+      action,
+      data,
+      timestamp: Date.now(),
+      status: 'pending',
+    };
+
+    // Validate intent message
+    const validation = messageValidator.validateIntent(intent);
+    if (!validation.valid) {
+      socket.emit('error', validation.error || 'Invalid intent');
+      if (callback) callback({ success: false, intentId: intent.id, error: validation.error });
+      return;
+    }
+
+    // Submit intent
+    const intentId = roomEngine.submitIntent(intent);
+    
+    // Process intent immediately (host controller approval is automatic for now)
+    // In future, this could queue for host approval
+    roomEngine.processIntent(intentId, roomInfo.roomCode).then((result: IntentResult) => {
+      // Send result to client
+      socket.emit('intent_result', result);
+      
+      if (callback) {
+        callback(result);
+      }
+
+      // Broadcast game state if successful
+      if (result.success) {
+        broadcastGameState(roomInfo.roomCode);
+      }
+    }).catch((error: any) => {
+      const errorResult: IntentResult = {
+        success: false,
+        intentId,
+        error: error.message || 'Failed to process intent',
+      };
+      socket.emit('intent_result', errorResult);
+      if (callback) callback(errorResult);
+    });
+  };
+
+  /**
+   * Handle game action (legacy support - converts to intent)
+   * @deprecated Use intent system directly
+   */
+  const handleGameAction = (action: string, data: any): void => {
+    submitIntent(action, data);
   };
   // ========================================================================
   // ROOM JOINING
@@ -538,11 +623,82 @@ export function setupPlayerHandlers(
   );
 
   // ========================================================================
-  // GAME ACTIONS (PLAYER ONLY)
+  // INTENT SYSTEM (NEW)
+  // ========================================================================
+
+  socket.on('intent', (intentData: any, callback?: (result: IntentResult) => void) => {
+    // Validate intent message
+    const validation = messageValidator.validateIntent(intentData);
+    if (!validation.valid) {
+      socket.emit('error', validation.error || 'Invalid intent message');
+      if (callback) {
+        callback({ success: false, intentId: intentData.id || '', error: validation.error });
+      }
+      return;
+    }
+
+    const intent = validation.data!;
+
+    // Check rate limit
+    if (!checkRateLimit(intent.action)) {
+      if (callback) {
+        callback({ success: false, intentId: intent.id, error: 'Rate limit exceeded' });
+      }
+      return;
+    }
+
+    // Validate role
+    const roleValidation = roleValidator.validateRoleAndAction('player', intent.action);
+    if (!roleValidation.valid) {
+      socket.emit('error', roleValidation.error);
+      if (callback) {
+        callback({ success: false, intentId: intent.id, error: roleValidation.error });
+      }
+      return;
+    }
+
+    // Ensure intent has correct playerId and roomCode
+    const roomInfo = roomEngine.connectionManager.getRoomInfoBySocketId(socket.id);
+    if (!roomInfo || roomInfo.isHost) {
+      socket.emit('error', 'Only players can submit game intents');
+      if (callback) {
+        callback({ success: false, intentId: intent.id, error: 'Invalid role' });
+      }
+      return;
+    }
+
+    intent.playerId = socket.id;
+    intent.roomCode = roomInfo.roomCode;
+
+    // Submit intent
+    const intentId = roomEngine.submitIntent(intent);
+    
+    // Process intent immediately
+    roomEngine.processIntent(intentId, roomInfo.roomCode).then((result: IntentResult) => {
+      socket.emit('intent_result', result);
+      if (callback) {
+        callback(result);
+      }
+      if (result.success) {
+        broadcastGameState(roomInfo.roomCode);
+      }
+    }).catch((error: any) => {
+      const errorResult: IntentResult = {
+        success: false,
+        intentId,
+        error: error.message || 'Failed to process intent',
+      };
+      socket.emit('intent_result', errorResult);
+      if (callback) callback(errorResult);
+    });
+  });
+
+  // ========================================================================
+  // GAME ACTIONS (PLAYER ONLY) - Legacy support, converts to intents
   // ========================================================================
 
   socket.on('trivia_answer', (answerIndex: number) => {
-    handleGameAction('answer', { answerIndex });
+    submitIntent('answer', { answerIndex });
   });
 
   // Throttle gift_move events
@@ -550,8 +706,6 @@ export function setupPlayerHandlers(
   const MOVE_THROTTLE_MS = 50;
 
   socket.on('gift_move', (direction: { x: number; y: number }) => {
-    if (!checkRateLimit()) return;
-
     const now = Date.now();
     const lastMove = lastMoveTime.get(socket.id) || 0;
     if (now - lastMove < MOVE_THROTTLE_MS) {
@@ -559,27 +713,27 @@ export function setupPlayerHandlers(
     }
     lastMoveTime.set(socket.id, now);
 
-    handleGameAction('move', direction);
+    submitIntent('move', direction);
   });
 
   socket.on('workshop_upgrade', (upgradeId: string) => {
-    handleGameAction('upgrade', { upgradeId });
+    submitIntent('upgrade', { upgradeId });
   });
 
   socket.on('emoji_pick', (emoji: string) => {
-    handleGameAction('pick', { emoji });
+    submitIntent('pick', { emoji });
   });
 
   socket.on('vote', (choice: 'naughty' | 'nice') => {
-    handleGameAction('vote', { choice });
+    submitIntent('vote', { choice });
   });
 
   socket.on('price_guess', (guess: number) => {
-    handleGameAction('guess', { guess });
+    submitIntent('guess', { guess });
   });
 
   socket.on('bingo_mark', (row: number, col: number) => {
-    handleGameAction('mark', { row, col });
+    submitIntent('mark', { row, col });
   });
 
   // ========================================================================
